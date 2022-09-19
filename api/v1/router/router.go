@@ -1,8 +1,6 @@
 package router
 
 import (
-	"log"
-	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/middleware"
@@ -55,19 +53,11 @@ func Initialize(db *driver.DB) *chi.Mux {
 	router.Use(middleware.Timeout(30 * time.Second))
 	router.Post("/users/login", h.Login)
 	router.Post("/users/logout", h.Logout)
+	router.Post("/users/signup", h.Signup)
 	router.Route("/v1", func(r chi.Router) {
-		r.Get("/test", h.ClosureHandlerExample())
+		r.Get("/collections", h.CollectionGetAll)
 		//r.Mount("/metrics", nil)        //for monitoring agents such as prometheus
 	})
 
 	return router
-}
-
-func ServeRouter(db *driver.DB) {
-	r := Initialize(db)
-
-	err := http.ListenAndServe(":8080", r)
-	if err != nil {
-		log.Fatal("Error serving router")
-	}
 }

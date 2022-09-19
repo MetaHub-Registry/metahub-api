@@ -5,14 +5,17 @@ import (
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/sirupsen/logrus"
+	"github.com/metahub-registry/metahub-api/internal/data"
 )
 
 func (h Handlers) Login(w http.ResponseWriter, r *http.Request) {
+	logrus.Info("Login")
 	type credentials struct {
 		UserName string `json:"username"`
 		Password string `json:"password"`
 	}
-
 	var creds credentials
 	var payload jsonResponse
 
@@ -95,4 +98,39 @@ func (h Handlers) Logout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_ = h.writeJSON(w, http.StatusOK, payload)
+}
+
+func (h Handlers) Signup(w http.ResponseWriter, r *http.Request) {
+	logrus.Debug("Signup")
+	type signupUser struct {
+		UserName string `json:"username"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+
+	// read the request body
+	var newUser signupUser
+	err := h.readJSON(w, r, &newUser)
+	if err != nil {
+		h.errorJSON(w, errors.New("invalid json"))
+		return
+	}
+	u := data.User{
+		UserName:  newUser.UserName,
+		Email:     newUser.Email,
+		Password:  newUser.Password,
+		Active:    0,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	// insert user into DB
+	_, err = h.models.User.Insert(u)
+	if err != nil {
+		h.errorJSON(w, err)
+		return
+	}
+
+	// send activation email
+
 }
