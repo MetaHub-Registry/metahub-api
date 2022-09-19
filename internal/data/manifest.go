@@ -12,9 +12,11 @@ import (
 
 type Manifest struct {
 	ID           int64                     `json:"id"`
+	ImageName    string                    `json:"image_name"`
 	PlatformSpec manifestlist.PlatformSpec `json:"platform_spec"`
 	Upstream     Upstream                  `json:"upstream"`
 	Config       Config                    `json:"config"`
+	Profile      Profile                   `json:"profile"`
 }
 
 func NewManifestFromKeys(keys map[string]interface{}) (mani Manifest, err error) {
@@ -25,6 +27,21 @@ func NewManifestFromKeys(keys map[string]interface{}) (mani Manifest, err error)
 		err = fmt.Errorf("no key 'maniId' in keys: %v", keys)
 		return
 	}
+	// Profile
+	prof := Profile{}
+	if id, ok := keys["profileId"]; ok {
+		prof.ID = id.(int64)
+	} else {
+		err = fmt.Errorf("no key 'profileId' in keys: %v", keys)
+		return
+	}
+	if name, ok := keys["profileName"]; ok {
+		prof.Name = name.(string)
+	} else {
+		err = fmt.Errorf("no key 'profileName' in keys: %v", keys)
+		return
+	}
+	mani.Profile = prof
 	up := Upstream{}
 	if upId, ok := keys["upId"]; ok {
 		up.ID = upId.(int64)
@@ -50,6 +67,7 @@ func NewManifestFromKeys(keys map[string]interface{}) (mani Manifest, err error)
 		err = fmt.Errorf("no key 'tag' in keys: %v", keys)
 		return
 	}
+	mani.ImageName = fmt.Sprintf("%s/%s:%s", up.Reg, up.Repo, up.Tag)
 	mani.Upstream = up
 	// Platform
 	plat := manifestlist.PlatformSpec{}
@@ -88,9 +106,10 @@ func (m *Manifest) GetByCollectionId(colId int64) (manis []Manifest, err error) 
 	defer session.Close()
 	q := `MATCH (c:Collection)-[:UPSTREAM]->(m:Manifest) WHERE id(c) = %d`
 	q += ` MATCH (m)-[:UPSTREAM]->(u:Upstream)`
-	q += ` MATCH (m)-[:IS]->(p:Platform)`
+	q += ` MATCH (m)-[:IS]->(p:Platform)<-[:USES]-(f:Filter)<-[:USES]-(prf:Profile)`
 	q += ` RETURN id(m) AS maniId,id(u) AS upId, u.reg AS reg, u.repo AS repo, u.tag AS tag, `
-	q += ` id(p) AS platId, p.os AS os, p.arch AS arch, p.variant AS variant, p.features AS features`
+	q += ` id(p) AS platId, p.os AS os, p.arch AS arch, p.variant AS variant, p.features AS features,`
+	q += ` id(prf) AS profileId, prf.name AS profileName`
 
 	query := fmt.Sprintf(q, colId)
 	input := map[string]interface{}{}
@@ -100,7 +119,7 @@ func (m *Manifest) GetByCollectionId(colId int64) (manis []Manifest, err error) 
 	}
 	for result.Next() {
 		record := result.Record()
-		k, _ := utils.NeoGetKeys(record, []string{"maniId", "upId", "reg", "repo", "tag", "platId", "os", "arch", "variant", "features"})
+		k, _ := utils.NeoGetKeys(record, []string{"maniId", "upId", "reg", "repo", "tag", "platId", "os", "arch", "variant", "features", "profileId", "profileName"})
 		mani, err := NewManifestFromKeys(k)
 		if err != nil {
 			logrus.Fatal(err)

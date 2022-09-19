@@ -20,9 +20,11 @@ func (h Handlers) CollectionGetAll(w http.ResponseWriter, r *http.Request) {
 			h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
 			return
 		}
+		col.ManifestCount = len(manis)
 		for _, mani := range manis {
 			key := fmt.Sprintf("%s/%s:%s", mani.Upstream.Reg, mani.Upstream.Repo, mani.Upstream.Tag)
 			col.Manifests[key] = mani
+
 		}
 		cols[idx] = col
 	}

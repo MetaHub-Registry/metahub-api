@@ -10,15 +10,17 @@ import (
 )
 
 type Collection struct {
-	ID        int64               `json:"id"`
-	Repo      string              `json:"repo"`
-	Tag       string              `json:"tag"`
-	Manifests map[string]Manifest `json:"manifests"`
+	ID            int64               `json:"id"`
+	Repo          string              `json:"repo"`
+	Tag           string              `json:"tag"`
+	Manifests     map[string]Manifest `json:"manifests"`
+	ManifestCount int                 `json:"manifest_count"`
 }
 
 func NewCollectionFromKeys(keys map[string]interface{}) (col Collection, err error) {
 	col = Collection{
-		Manifests: make(map[string]Manifest),
+		Manifests:     make(map[string]Manifest),
+		ManifestCount: 0,
 	}
 	if id, ok := keys["id"]; ok {
 		col.ID = id.(int64)
