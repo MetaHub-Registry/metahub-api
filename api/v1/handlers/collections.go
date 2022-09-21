@@ -7,6 +7,7 @@ import (
 
 	"github.com/StudioSol/set"
 	"github.com/sirupsen/logrus"
+	"github.com/metahub-registry/metahub-api/internal/utils"
 )
 
 type Next struct {
@@ -19,22 +20,35 @@ type Next struct {
 
 func (h Handlers) CollectionGetOne(w http.ResponseWriter, r *http.Request) {
 	type Payload struct {
-		Repo string `json:"repo"`
-		Tag  string `json:"tag"`
+		ColID int64 `json:"collection_id"`
 	}
 	pl := Payload{}
 	err := h.readJSON(w, r, &pl)
+	breadCrumbs := []utils.BreadCrumb{}
 	if err != nil {
 		logrus.Errorf("CollectionGetOne (body: %v, payload:%v): %v", r.Body, pl, err)
 		h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
 		return
 	}
-	col, err := h.models.Collection.GetCollectionByRepoTag(pl.Repo, pl.Tag)
+	col, err := h.models.Collection.GetCollectionByID(pl.ColID)
 	if err != nil {
 		h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
 		return
 	}
-	manis, err := h.models.Manifest.GetByCollectionId(col.ID)
+	// Create Breadcrumbs for the collection
+	reps := set.NewLinkedHashSetString()
+	for _, r := range strings.Split(col.Repo, "/") {
+		if !reps.InArray(r) {
+			reps.Add(r)
+			bc := utils.BreadCrumb{
+				Crumb:  r,
+				Active: 1,
+				Link:   fmt.Sprintf("/collections/%s", strings.Join(reps.AsSlice(), "/")),
+			}
+			breadCrumbs = append(breadCrumbs, bc)
+		}
+	}
+	manis, err := h.models.Manifest.GetByCollectionId(pl.ColID)
 	if err != nil {
 		h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
 		return
@@ -43,11 +57,10 @@ func (h Handlers) CollectionGetOne(w http.ResponseWriter, r *http.Request) {
 		key := fmt.Sprintf("%s/%s:%s", mani.Upstream.Reg, mani.Upstream.Repo, mani.Upstream.Tag)
 		col.Manifests[key] = mani
 	}
-	reps := strings.Split(pl.Repo, "/")
-	reps = append(reps, pl.Tag)
 	payload := envelope{
-		"repos":      reps,
-		"collection": col,
+		"repos":        reps,
+		"bread_crumbs": breadCrumbs,
+		"collection":   col,
 	}
 	_ = h.writeJSON(w, http.StatusOK, payload)
 }
@@ -71,14 +84,9 @@ func (h Handlers) CollectionGetAll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slugEnd := 0
-	reps := set.NewLinkedHashSetString()
 	next := map[string]Next{}
-	type BreadCrumb struct {
-		Crumb  string `json:"crumb"`
-		Active int    `json:"active"`
-		Link   string `json:"link"`
-	}
-	breadCrumbs := []BreadCrumb{}
+	reps := set.NewLinkedHashSetString()
+	breadCrumbs := []utils.BreadCrumb{}
 	for _, col := range cols {
 		colSlug := strings.Split(col.Repo, "/")
 		switch {
@@ -119,7 +127,7 @@ func (h Handlers) CollectionGetAll(w http.ResponseWriter, r *http.Request) {
 			if i+1 <= len(repoSlug) && r == repoSlug[i] {
 				if !reps.InArray(r) {
 					reps.Add(r)
-					bc := BreadCrumb{
+					bc := utils.BreadCrumb{
 						Crumb:  r,
 						Active: 1,
 						Link:   fmt.Sprintf("/collections/%s", strings.Join(reps.AsSlice(), "/")),

@@ -70,12 +70,12 @@ func (c *Collection) GetAll() (cols []Collection, err error) {
 	return
 }
 
-func (c *Collection) GetCollectionByRepoTag(repo, tag string) (col Collection, err error) {
+func (c *Collection) GetCollectionByID(colID int64) (col Collection, err error) {
 	logrus.Info("GetCollectionByRepoTag")
 	session := neoDriver.NewSession(neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer session.Close()
-	q := `MATCH (n:Collection)-[r:UPSTREAM]->() WHERE n.repo = "%s" AND n.tag = "%s" RETURN id(n) AS id, n.repo AS repo, n.tag AS tag, count(r) AS manifest_count`
-	query := fmt.Sprintf(q, repo, tag)
+	q := `MATCH (n:Collection)-[r:UPSTREAM]->() WHERE id(n) = %d RETURN id(n) AS id, n.repo AS repo, n.tag AS tag, count(r) AS manifest_count`
+	query := fmt.Sprintf(q, colID)
 	input := map[string]interface{}{}
 	result, err := session.Run(query, input)
 	if err != nil {
