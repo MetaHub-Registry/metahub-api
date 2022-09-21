@@ -66,7 +66,6 @@ func (h Handlers) CollectionGetOne(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h Handlers) CollectionGetAll(w http.ResponseWriter, r *http.Request) {
-	logrus.Info("CollectionGetAll")
 	type Payload struct {
 		Repo string `json:"repo"`
 	}
@@ -91,7 +90,6 @@ func (h Handlers) CollectionGetAll(w http.ResponseWriter, r *http.Request) {
 		colSlug := strings.Split(col.Repo, "/")
 		switch {
 		case len(repoSlug) == len(colSlug):
-			logrus.Infof("We ARE at the end of the collection search: \ncolSlug: %v\nrepoSlug: %v", colSlug, repoSlug)
 			// Add Tags to next with the complete n
 			next[col.Tag] = Next{
 				Repo:      col.Repo,
@@ -102,7 +100,6 @@ func (h Handlers) CollectionGetAll(w http.ResponseWriter, r *http.Request) {
 			}
 			slugEnd = 1
 		case len(repoSlug) < len(colSlug):
-			logrus.Infof("We ARE NOT at the end of the collection search: \ncolSlug: %v\nrepoSlug: %v", colSlug, repoSlug)
 			n := strings.TrimPrefix(col.Repo, pl.Repo)
 			n = strings.TrimPrefix(n, "/")
 			n = strings.Split(n, "/")[0]
