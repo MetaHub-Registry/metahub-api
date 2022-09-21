@@ -12,6 +12,7 @@ import (
 	_ "github.com/jackc/pgx/v4/stdlib"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
+	"github.com/metahub-registry/metahub-api/pkg/config"
 )
 
 // IMPORTANT -- change the values below to ones that work for your system. The only value you should have to
@@ -19,8 +20,8 @@ import (
 var (
 	host     = "localhost"
 	user     = "postgres"
-	password = "secret"
-	dbName   = "vueapi_test"
+	password = "password"
+	dbName   = "metahub"
 	port     = "5433"
 	dsn      = "host=%s port=%s user=%s password=%s dbname=%s sslmode=disable timezone=UTC connect_timeout=5"
 )
@@ -74,8 +75,11 @@ func TestMain(m *testing.M) {
 	}
 
 	// get our models
-	models = New(testDB)
-
+	ncfg := config.NeoConfig{}
+	models, err = New(testDB, ncfg)
+	if err != nil {
+		log.Fatalf("could not create models: %v", err)
+	}
 	err = createTables(testDB)
 	if err != nil {
 		log.Fatalf("could not create tables: %v", err)
