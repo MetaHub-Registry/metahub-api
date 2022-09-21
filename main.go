@@ -10,15 +10,26 @@ import (
 
 func main() {
 	app := &cli.App{
-		Flags: []cli.Flag{
-			&cli.StringFlag{Name: "db-host", Value: "localhost", Usage: "DB host"},
-			&cli.StringFlag{Name: "db-user", Value: "postgres", Usage: "DB user"},
-			&cli.StringFlag{Name: "db-port", Value: "5432", Usage: "DB port"},
-			&cli.StringFlag{Name: "db-pass", Value: "", Usage: "DB password"},
-			&cli.StringFlag{Name: "db-name", Value: "metahub", Usage: "DB database name"},
-			&cli.IntFlag{Name: "port", Value: 8080, Usage: "Port to listen on"},
+		Name: "metahub-api",
+		Commands: []*cli.Command{
+			{
+				Name:   "serve",
+				Usage:  "Serves the API",
+				Action: cmd.ServeApi,
+				Flags: []cli.Flag{
+					&cli.StringFlag{Name: "db-host", Value: "localhost", Usage: "DB host"},
+					&cli.StringFlag{Name: "db-user", Value: "postgres", Usage: "DB user"},
+					&cli.StringFlag{Name: "db-port", Value: "5432", Usage: "DB port"},
+					&cli.StringFlag{Name: "db-pass", Value: "", Usage: "DB password"},
+					&cli.StringFlag{Name: "db-name", Value: "metahub", Usage: "DB database name"},
+					&cli.IntFlag{Name: "port", Value: 8080, Usage: "Port to listen on"},
+				},
+			}, {
+				Name:   "version",
+				Usage:  "Prints the version",
+				Action: cmd.Version,
+			},
 		},
-		Action: cmd.ServeApi,
 	}
 
 	if err := app.Run(os.Args); err != nil {

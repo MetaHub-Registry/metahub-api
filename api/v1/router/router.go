@@ -51,9 +51,6 @@ func Initialize(db *driver.DB) *chi.Mux {
 
 	//Sets context for all requests
 	router.Use(middleware.Timeout(30 * time.Second))
-	router.Post("/users/login", h.Login)
-	router.Post("/users/logout", h.Logout)
-	router.Post("/users/signup", h.Signup)
 	router.Route("/v1", func(r chi.Router) {
 		r.Post("/collections", h.CollectionGetAll)
 		r.Post("/collection", h.CollectionGetOne)
