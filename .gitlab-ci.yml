@@ -25,8 +25,8 @@ test:
 container:ecr:
   image: docker:20.10.17
   stage: build
-  #services:
-  #  - docker:20.10.17-dind
+  services:
+    - docker:20.10.17-dind
   variables:
     DOCKER_BUILDKIT: 1
     DOCKER_REGISTRY: 193198941246.dkr.ecr.eu-west-1.amazonaws.com/qnib-golang
