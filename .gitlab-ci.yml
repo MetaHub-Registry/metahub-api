@@ -31,6 +31,7 @@ container:ecr:
     DOCKER_BUILDKIT: 1
     DOCKER_REGISTRY: 193198941246.dkr.ecr.eu-west-1.amazonaws.com/qnib-golang
     IMAGE_NAME: $DOCKER_REGISTRY/$CI_PROJECT_NAME:$CI_COMMIT_TAG
+    AWS_REGION: eu-west-1
   only:
     - tags
   before_script:
