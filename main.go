@@ -23,6 +23,10 @@ func main() {
 					&cli.StringFlag{Name: "db-pass", EnvVars: []string{"DB_PASS"}, Value: "", Usage: "DB password"},
 					&cli.StringFlag{Name: "db-name", EnvVars: []string{"DB_NAME"}, Value: "metahub", Usage: "DB database name"},
 					&cli.IntFlag{Name: "port", EnvVars: []string{"API_PORT"}, Value: 8080, Usage: "Port to listen on"},
+					&cli.StringFlag{Name: "neo-name", EnvVars: []string{"NEO_NAME"}, Value: "neo4j", Usage: "NEO4J database name"},
+					&cli.StringFlag{Name: "neo-user", EnvVars: []string{"NEO_USER"}, Value: "neo4j", Usage: "NEO4J username"},
+					&cli.StringFlag{Name: "neo-pass", EnvVars: []string{"NEO_PASS"}, Value: "test", Usage: "NEO4J password"},
+					&cli.StringFlag{Name: "neo-url", EnvVars: []string{"NEO_URL"}, Value: "bolt://localhost:7687", Usage: "NEO4J bolt url"},
 				},
 			}, {
 				Name:   "version",
