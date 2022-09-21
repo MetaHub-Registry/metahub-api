@@ -7,6 +7,6 @@ import (
 )
 
 func Version(cCtx *cli.Context) error {
-	fmt.Println("v0.1.1")
+	fmt.Println("v0.1.2")
 	return nil
 }
