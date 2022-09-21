@@ -1,7 +1,23 @@
 version: '3'
 
 services:
-
+  metahub-api:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      DB_HOST: postgres
+      DB_PASS: password
+      NEO_URL: bolt://neo4j:7687
+  neo4j:
+    image: neo4j:4.4.9
+    ports:
+      - 7474:7474
+      - 7687:7687
+    environment:
+      NEO4J_AUTH: neo4j/test
+    volumes:
+     - neo4j:/data
   #  start Postgres, and ensure that data is stored to a mounted volume
   postgres:
     image: 'postgres:14.0'
@@ -31,3 +47,6 @@ services:
     environment:
       PGADMIN_DEFAULT_EMAIL: 'user@example.com'
       PGADMIN_DEFAULT_PASSWORD: 'password'
+
+volumes:
+  neo4j:
