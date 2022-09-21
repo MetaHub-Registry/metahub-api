@@ -5,13 +5,13 @@ ENV=dev
 ## build: Build binary
 build:
 	@echo "Building back end..."
-	go build -o ${BINARY_NAME} ./cmd/server/
+	go build -o ${BINARY_NAME}
 	@echo "Binary built!"
 
 ## run: builds and runs the application
 run: build
 	@echo "Starting back end..."
-	@env DSN=${DSN} ENV=${ENV} ./${BINARY_NAME} &
+	@env DSN=${DSN} ENV=${ENV} ./${BINARY_NAME} --db-pass=password &
 	@echo "Back end started!"
 
 ## clean: runs go clean and deletes binaries
