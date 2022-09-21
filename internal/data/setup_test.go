@@ -2,7 +2,6 @@ package data
 
 import (
 	"database/sql"
-	"fmt"
 	"log"
 	"os"
 	"testing"
@@ -11,8 +10,6 @@ import (
 	_ "github.com/jackc/pgx/v4"
 	_ "github.com/jackc/pgx/v4/stdlib"
 	"github.com/ory/dockertest/v3"
-	"github.com/ory/dockertest/v3/docker"
-	"github.com/metahub-registry/metahub-api/pkg/config"
 )
 
 // IMPORTANT -- change the values below to ones that work for your system. The only value you should have to
@@ -32,7 +29,7 @@ var resource *dockertest.Resource
 var pool *dockertest.Pool
 
 func TestMain(m *testing.M) {
-	p, err := dockertest.NewPool("")
+	/*p, err := dockertest.NewPool("")
 	if err != nil {
 		log.Fatalf("could not connect to docker: %s", err)
 	}
@@ -75,7 +72,9 @@ func TestMain(m *testing.M) {
 	}
 
 	// get our models
-	ncfg := config.NeoConfig{}
+	ncfg := config.NeoConfig{
+		URL: "bolt://localhost:7687",
+	}
 	models, err = New(testDB, ncfg)
 	if err != nil {
 		log.Fatalf("could not create models: %v", err)
@@ -89,15 +88,15 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		log.Fatalf("could not create tables: %v", err)
 	}
+	*/
 	log.Println("Test database setup complete")
 
 	code := m.Run()
 
 	log.Println("Test database test complete")
-	if err := pool.Purge(resource); err != nil {
-		log.Fatalf("could not purge resource: %s", err)
-	}
-
+	//if err := pool.Purge(resource); err != nil {
+	//	log.Fatalf("could not purge resource: %s", err)
+	//}
 	os.Exit(code)
 }
 

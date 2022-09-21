@@ -71,7 +71,6 @@ func (c *Collection) GetAll() (cols []Collection, err error) {
 }
 
 func (c *Collection) GetCollectionByID(colID int64) (col Collection, err error) {
-	logrus.Info("GetCollectionByRepoTag")
 	session := neoDriver.NewSession(neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer session.Close()
 	q := `MATCH (n:Collection)-[r:UPSTREAM]->() WHERE id(n) = %d RETURN id(n) AS id, n.repo AS repo, n.tag AS tag, count(r) AS manifest_count`
@@ -93,7 +92,6 @@ func (c *Collection) GetCollectionByID(colID int64) (col Collection, err error) 
 }
 
 func (c *Collection) GetCollectionByRepo(repo string) (cols []Collection, err error) {
-	logrus.Info("GetCollectionByRepo")
 	session := neoDriver.NewSession(neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer session.Close()
 	query := `MATCH (n:Collection)-[r:UPSTREAM]->() RETURN id(n) AS id, n.repo AS repo, n.tag AS tag, count(r) AS manifest_count`
