@@ -55,7 +55,7 @@ func Initialize(db *driver.DB) *chi.Mux {
 	router.Post("/users/logout", h.Logout)
 	router.Post("/users/signup", h.Signup)
 	router.Route("/v1", func(r chi.Router) {
-		r.Get("/collections", h.CollectionGetAll)
+		r.Post("/collections", h.CollectionGetAll)
 		//r.Mount("/metrics", nil)        //for monitoring agents such as prometheus
 	})
 

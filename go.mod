@@ -3,6 +3,7 @@ module github.com/metahub-registry/metahub-api
 go 1.19
 
 require (
+	github.com/StudioSol/set v1.0.0
 	github.com/docker/distribution v2.8.1+incompatible
 	github.com/go-chi/chi v1.5.4
 	github.com/go-chi/chi/v5 v5.0.7
@@ -10,7 +11,6 @@ require (
 	github.com/go-chi/render v1.0.2
 	github.com/jackc/pgconn v1.13.0
 	github.com/jackc/pgx/v4 v4.17.2
-	github.com/neo4j/neo4j-go-driver v1.8.3
 	github.com/neo4j/neo4j-go-driver/v4 v4.4.4
 	github.com/ory/dockertest/v3 v3.9.1
 	github.com/sirupsen/logrus v1.8.1
