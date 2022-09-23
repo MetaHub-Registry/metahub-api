@@ -11,6 +11,7 @@ require (
 	github.com/go-chi/render v1.0.2
 	github.com/jackc/pgconn v1.13.0
 	github.com/jackc/pgx/v4 v4.17.2
+	github.com/mattn/go-sqlite3 v1.14.15
 	github.com/neo4j/neo4j-go-driver/v4 v4.4.4
 	github.com/ory/dockertest/v3 v3.9.1
 	github.com/sirupsen/logrus v1.8.1
@@ -19,7 +20,6 @@ require (
 	go.opentelemetry.io/otel/exporters/jaeger v1.10.0
 	go.opentelemetry.io/otel/sdk v1.10.0
 	go.opentelemetry.io/otel/trace v1.10.0
-	golang.org/x/crypto v0.0.0-20220829220503-c86fa9a7ed90
 )
 
 require (
@@ -57,6 +57,7 @@ require (
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect
 	github.com/xeipuuv/gojsonschema v1.2.0 // indirect
 	github.com/xrash/smetrics v0.0.0-20201216005158-039620a65673 // indirect
+	golang.org/x/crypto v0.0.0-20220829220503-c86fa9a7ed90 // indirect
 	golang.org/x/net v0.0.0-20220520000938-2e3eb7b945c2 // indirect
 	golang.org/x/sys v0.0.0-20220520151302-bc2c85ada10a // indirect
 	golang.org/x/text v0.3.7 // indirect

@@ -8,7 +8,7 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/go-chi/render"
 	"github.com/metahub-registry/metahub-api/api/v1/handlers"
-	"github.com/metahub-registry/metahub-api/pkg/config"
+	"github.com/metahub-registry/metahub-api/internal/driver"
 )
 
 const (
@@ -20,7 +20,7 @@ const (
 //var tracer oteltrace.Tracer
 
 // func Initialize(ncfg config.NeoConfig, db *driver.DB) *chi.Mux {
-func Initialize(ncfg config.NeoConfig) *chi.Mux {
+func Initialize(db *driver.DB) *chi.Mux {
 	/*var err error
 	tracer, err = utils.NewTracer(serviceName, os.Getenv(envKeyJaegerEndpointURL))
 	if err != nil {
@@ -28,7 +28,7 @@ func Initialize(ncfg config.NeoConfig) *chi.Mux {
 	}
 	*/
 	// Handlers
-	h := handlers.NewHandlers("dev", ncfg)
+	h := handlers.NewHandlers("dev", db.SQL)
 	// define router
 	router := chi.NewRouter()
 

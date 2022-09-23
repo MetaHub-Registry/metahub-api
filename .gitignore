@@ -2,3 +2,4 @@ db-data/**
 mh-api
 
 coverage.txt
+**.sqlite3

@@ -76,6 +76,7 @@ func (h Handlers) CollectionGetAll(w http.ResponseWriter, r *http.Request) {
 		h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
 		return
 	}
+	logrus.Infof("CollectionGetAll: %s", pl.Repo)
 	repoSlug := strings.Split(pl.Repo, "/")
 	cols, err := h.models.Collection.GetCollectionByRepo(pl.Repo)
 	if err != nil {
