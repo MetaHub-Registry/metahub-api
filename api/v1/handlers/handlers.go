@@ -1,17 +1,18 @@
 package handlers
 
 import (
-	"github.com/metahub-registry/metahub-api/internal/data"
-	"github.com/metahub-registry/metahub-api/pkg/config"
+	"database/sql"
+
+	"github.com/metahub-registry/metahub-api/internal/sqlite"
 )
 
 type Handlers struct {
 	environment string
-	models      data.Models
+	models      sqlite.Models
 }
 
-func NewHandlers(env string, ncfg config.NeoConfig) Handlers {
-	models, err := data.New(ncfg)
+func NewHandlers(env string, db *sql.DB) Handlers {
+	models, err := sqlite.New(db)
 	if err != nil {
 		panic(err)
 	}
