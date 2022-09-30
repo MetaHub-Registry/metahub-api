@@ -39,41 +39,17 @@ func New(dbPool *sql.DB) (m Models, err error) {
 		Manifest:   Manifest{},
 		Collection: Collection{},
 	}
-	m.createTables()
+	m.createViews()
 	return
 }
 
-func (m Models) createTables() {
-	logrus.Info(">> Create tables")
-	var err error
-	err = m.Profile.createTable()
-	if err != nil {
-		logrus.Errorf("while Profile.createTable: %v", err)
+func (m Models) createViews() (err error) {
+	logrus.Debug(">> Create views")
+	if err = m.Collection.CreateViews(); err != nil {
+		return
 	}
-	err = m.Filter.createTable()
-	if err != nil {
-		logrus.Errorf("while Filter.createTable: %v", err)
+	if err = m.Manifest.CreateViews(); err != nil {
+		return
 	}
-	err = m.Platform.createTable()
-	if err != nil {
-		logrus.Errorf("while Platform.createTable: %v", err)
-	}
-	err = m.Config.createTable()
-	if err != nil {
-		logrus.Errorf("while Config.createTable: %v", err)
-	}
-	err = m.Upstream.createTable()
-	if err != nil {
-		logrus.Errorf("while Upstream.createTable: %v", err)
-	}
-	err = m.Manifest.createTable()
-	if err != nil {
-		logrus.Errorf("while Manifest.createTable: %v", err)
-	}
-	err = m.Collection.createTable()
-	if err != nil {
-		logrus.Errorf("while Collection.createTable: %v", err)
-	}
-	logrus.Info(">> Create tables done")
-
+	return
 }

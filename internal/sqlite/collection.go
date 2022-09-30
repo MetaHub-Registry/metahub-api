@@ -1,7 +1,6 @@
 package sqlite
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/sirupsen/logrus"
@@ -30,227 +29,8 @@ type colRes struct {
 	Profile  string `json:"profile"`
 }
 
-func (c Collection) createCollectionTable() (err error) {
-	tableName := "collection"
-	q := fmt.Sprintf(`PRAGMA table_info(%s)`, tableName)
-	rows, err := db.Query(q)
-	if err != nil {
-		logrus.Fatal(err)
-	}
-	defer rows.Close()
-	if rows.Next() {
-		logrus.Infof("Table '%s' already exists!", tableName)
-		return
-	}
-	s := `CREATE TABLE IF NOT EXISTS %s (
-		    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-        "repo" TEXT,
-		"tag" int 
-		);`
-	stmt := fmt.Sprintf(s, tableName)
-	query, err := db.Prepare(stmt)
-	if err != nil {
-		logrus.Fatal(err)
-	}
-	_, err = query.Exec()
-	if err != nil {
-		logrus.Fatal(err)
-	}
-	logrus.Infof("Table '%s' created successfully!", tableName)
-	return
-}
-
-func (c Collection) createCollectionManifestTable() (err error) {
-	tableName := "col_manifest"
-	q := fmt.Sprintf(`PRAGMA table_info(%s)`, tableName)
-	rows, err := db.Query(q)
-	if err != nil {
-		logrus.Fatal(err)
-	}
-	defer rows.Close()
-	if rows.Next() {
-		logrus.Infof("Table '%s' already exists!", tableName)
-		return
-	}
-	s := `CREATE TABLE IF NOT EXISTS %s (
-		id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-        "collection_id" INT,
-		"manifest_id" INT,
-		FOREIGN KEY (collection_id)
-			REFERENCES collection (id)
-		FOREIGN KEY (manifest_id)
-			REFERENCES manifest (id) 
-		);`
-	stmt := fmt.Sprintf(s, tableName)
-	query, err := db.Prepare(stmt)
-	if err != nil {
-		logrus.Fatal(err)
-	}
-	_, err = query.Exec()
-	if err != nil {
-		logrus.Fatal(err)
-	}
-	logrus.Infof("Table '%s' created successfully!", tableName)
-	c.bootstrapCollectionData()
-	return
-}
-
-func (c Collection) bootstrapCollectionData() (err error) {
-	ctx, cancel := context.WithTimeout(context.Background(), dbTimeout)
-	_ = ctx
-	defer cancel()
-	type manifest struct {
-		imageName string
-	}
-	type input struct {
-		colRepo string
-		colTag  string
-		mani    []manifest
-	}
-
-	inputs := []input{
-		{
-			"gromacs/tmpi", "2021.5", []manifest{
-				{"quay.io/cqnib/gromacs/gcc-7.3.1/2021.5/tmpi:skylake_avx512"},
-				{"quay.io/cqnib/gromacs/gcc-7.3.1/2021.5/tmpi:graviton2"},
-				{"quay.io/cqnib/gromacs-2021.5_gcc-7.3.1:x86_64_v4"},
-				{"quay.io/cqnib/gromacs-2021.5_gcc-7.3.1:aarch64"},
-			},
-		}, {
-			"qnib/featuretest", "latest", []manifest{
-				{"quay.io/cqnib/plain-featuretest:generic"},
-				{"quay.io/cqnib/plain-featuretest:arch-cascadelake"},
-				{"quay.io/cqnib/plain-featuretest:arch-skylake"},
-				{"quay.io/cqnib/plain-featuretest:arch-skylake_avx512"},
-				{"quay.io/cqnib/plain-featuretest:arch-zen"},
-				{"quay.io/cqnib/plain-featuretest:arch-zen2"},
-				{"quay.io/cqnib/plain-featuretest:arch-zen3"},
-				{"quay.io/cqnib/plain-featuretest:cpu-broadwell"},
-				{"registry.gitlab.com/qnib-pub-containers/qnib/plain-featuretest:20220715-arm64-generic"},
-				{"registry.gitlab.com/qnib-pub-containers/qnib/plain-featuretest:20220715-arm64-graviton2"},
-				{"registry.gitlab.com/qnib-pub-containers/qnib/plain-featuretest:20220715-arm_v6-generic"},
-				{"registry.gitlab.com/qnib-pub-containers/qnib/plain-featuretest:20220715-arm_v7-generic"},
-				{"registry.gitlab.com/qnib-pub-containers/qnib/plain-featuretest:20220715-riscv64-generic"},
-			},
-		}, {
-			"biocontainers/blast", "2.12.0--hf3cf87c_4", []manifest{
-				{"quay.io/biocontainers/blast:2.12.0--hf3cf87c_4"},
-			},
-		}, {
-			"biocontainers/blast", "2.13.0", []manifest{
-				{"quay.io/biocontainers/blast:2.13.0--hf3cf87c_0"},
-				{"registry.gitlab.com/qnib-pub-containers/biocontainers/blast:2-13-0-arm64"},
-			},
-		}, {
-			"biocontainers/blast", "2.13.0--hf3cf87c_0", []manifest{
-				{"quay.io/biocontainers/blast:2.13.0--hf3cf87c_0"},
-				{"registry.gitlab.com/qnib-pub-containers/biocontainers/blast:2-13-0-arm64"},
-			},
-		}, {
-			"gromacs/mpich", "2021.5", []manifest{
-				{"quay.io/cqnib/gromacs-2021.5_gcc-7.3.1:x86_64_v4"},
-				{"quay.io/cqnib/gromacs-2021.5_gcc-11.3.0:zen3"},
-				{"quay.io/cqnib/gromacs-2021.5_gcc-7.3.1:aarch64"},
-			},
-		},
-	}
-	cntCol := 0
-	cntColMani := 0
-	for _, i := range inputs {
-		var colID int
-		q := fmt.Sprintf(`
-		INSERT INTO 
-			collection(repo,tag) 
-		VALUES
-			("%s","%s")
-		RETURNING id;
-		`, i.colRepo, i.colTag)
-		rows, err := db.Query(q)
-		if err != nil {
-			logrus.Error(err)
-			continue
-		}
-		if err != nil {
-			logrus.Error(err)
-			continue
-		}
-		if rows.Next() {
-			err = rows.Scan(&colID)
-			if err != nil {
-				logrus.Error(err)
-				continue
-			}
-			rows.Close()
-			cntCol++
-		}
-		for _, m := range i.mani {
-			var maniID int
-			q = fmt.Sprintf(`SELECT id FROM manifest WHERE image_name="%s"`, m.imageName)
-			rows, err := db.Query(q)
-			if err != nil {
-				logrus.Error(err)
-				continue
-			}
-			if err != nil {
-				logrus.Error(err)
-				continue
-			}
-			if rows.Next() {
-				err = rows.Scan(&maniID)
-				if err != nil {
-					logrus.Error(err)
-					continue
-				}
-				rows.Close()
-			}
-			stmt := fmt.Sprintf(`INSERT INTO col_manifest(collection_id, manifest_id) VALUES (%d, %d)`, colID, maniID)
-			query, err := db.Prepare(stmt)
-			if err != nil {
-				logrus.Error(err)
-			}
-			res, err := query.Exec()
-			if err != nil {
-				logrus.Error(err)
-			}
-			rCnt, _ := res.RowsAffected()
-			cntColMani += int(rCnt)
-		}
-	}
-	logrus.Infof("Inserted %d rows into table 'col_manifest' and %d rows in 'collection'", cntColMani, cntCol)
-	return
-}
-
-func (c Collection) createTable() (err error) {
-	err = c.createCollectionTable()
-	if err != nil {
-		return
-	}
-	err = c.createCollectionManifestTable()
-	if err != nil {
-		return
-	}
-	return
-}
-
 func (c *Collection) GetAll() (cols []Collection, err error) {
-	q := `
-	SELECT
-		collection.id AS colID,
-		collection.repo AS colRepo,
-		collection.tag AS colTag,
-		col_manifest.manifest_id AS maniID,
-		upstream.reg AS upReg,
-		upstream.repo AS upRepo,
-		upstream.tag AS upTag
-	FROM
-		collection
-	INNER JOIN col_manifest 
-		ON colID = col_manifest.collection_id
-	INNER JOIN manifest 
-		ON maniID = manifest.id
-	INNER JOIN upstream 
-		ON manifest.upstream_id = upstream.id
-	`
+	q := `SELECT * FROM main.v_get_collections`
 	rows, err := db.Query(q)
 	if err != nil {
 		logrus.Error(err)
@@ -258,7 +38,10 @@ func (c *Collection) GetAll() (cols []Collection, err error) {
 	if err != nil {
 		logrus.Error(err)
 	}
-	if rows.Next() {
+	col := Collection{
+		ID: 0,
+	}
+	for rows.Next() {
 		cRes := colRes{}
 		err = rows.Scan(
 			&cRes.ColID,
@@ -272,46 +55,39 @@ func (c *Collection) GetAll() (cols []Collection, err error) {
 		if err != nil {
 			logrus.Error(err)
 		}
-		rows.Close()
-		fmt.Printf("%+v\n", cRes)
+		if col.ID != int64(cRes.ColID) {
+			if col.ID != 0 {
+				// In case it is not 0 it holds the previous collection, thus we add it
+				cols = append(cols, col)
+			}
+			col = Collection{
+				ID:            int64(cRes.ColID),
+				Repo:          cRes.ColRepo,
+				Tag:           cRes.ColTag,
+				Manifests:     map[string]Manifest{},
+				ManifestCount: 0,
+			}
+		}
+		// Add the manifest to the collection
+		m := Manifest{
+			ID: int64(cRes.ManiID),
+			Upstream: Upstream{
+				Reg:  cRes.UpReg,
+				Repo: cRes.UpRepo,
+				Tag:  cRes.UpTag,
+			},
+		}
+		key := fmt.Sprintf("%s/%s:%s", cRes.UpReg, cRes.UpRepo, cRes.UpTag)
+		col.Manifests[key] = m
+		col.ManifestCount++
+		//fmt.Printf("%+v\n", cRes)
 	}
+	cols = append(cols, col)
 	return
 }
 
 func (c *Collection) GetCollectionByID(colID int64) (col Collection, err error) {
-	q := fmt.Sprintf(`
-	SELECT
-		collection.id AS colID,
-		collection.repo AS colRepo,
-		collection.tag AS colTag,
-		col_manifest.manifest_id AS maniID,
-		upstream.reg AS upReg,
-		upstream.repo AS upRepo,
-		upstream.tag AS upTag,
-		platform.os AS os,
-		platform.arch AS arch,
-		platform.variant AS variant,
-		platform.features AS features,
-		profile.name	 AS profile
-	FROM
-		collection
-	INNER JOIN col_manifest 
-		ON colID = col_manifest.collection_id
-	INNER JOIN manifest 
-		ON maniID = manifest.id
-	INNER JOIN upstream 
-		ON manifest.upstream_id = upstream.id
-	INNER JOIN platform 
-		ON manifest.platform_id = platform.id
-	INNER JOIN platform_filter 
-		ON manifest.platform_id = platform_filter.platform_id
-	INNER JOIN profile_filter 
-		ON platform_filter.filter_id = profile_filter.filter_id
-	INNER JOIN profile
-		ON profile_filter.profile_id = profile.id
-	WHERE
-		collection.id = %d
-	`, colID)
+	q := fmt.Sprintf(`SELECT * FROM main.v_get_collection WHERE colID = %d`, colID)
 	rows, err := db.Query(q)
 	if err != nil {
 		logrus.Error(err)
@@ -372,26 +148,7 @@ func (c *Collection) GetCollectionByID(colID int64) (col Collection, err error) 
 
 func (c *Collection) GetCollectionByRepo(repo string) (cols []Collection, err error) {
 	cols = []Collection{}
-	q := fmt.Sprintf(`
-	SELECT
-		collection.id AS colID,
-		collection.repo AS colRepo,
-		collection.tag AS colTag,
-		col_manifest.manifest_id AS maniID,
-		upstream.reg AS upReg,
-		upstream.repo AS upRepo,
-		upstream.tag AS upTag
-	FROM
-		collection
-	INNER JOIN col_manifest 
-		ON colID = col_manifest.collection_id
-	INNER JOIN manifest 
-		ON maniID = manifest.id
-	INNER JOIN upstream 
-		ON manifest.upstream_id = upstream.id
-	WHERE
-		collection.repo LIKE '%s%%'
-	`, repo)
+	q := fmt.Sprintf(`SELECT * FROM main.v_get_collections WHERE colRepo LIKE '%s%%';`, repo)
 	rows, err := db.Query(q)
 	if err != nil {
 		logrus.Error(err)
@@ -445,5 +202,82 @@ func (c *Collection) GetCollectionByRepo(repo string) (cols []Collection, err er
 	}
 	cols = append(cols, col)
 
+	return
+}
+
+func (c *Collection) CreateViews() (err error) {
+	err = c.CreateCollectionsView()
+	if err != nil {
+		logrus.Error(err)
+		return
+	}
+	err = c.CreateCollectionView()
+	if err != nil {
+		logrus.Error(err)
+		return
+	}
+	return
+}
+
+func (c *Collection) CreateCollectionsView() (err error) {
+	q := `CREATE VIEW IF NOT EXISTS v_get_collections AS
+	SELECT
+		collection.id AS colID,
+		collection.repo AS colRepo,
+		collection.tag AS colTag,
+		manifest.id AS maniID,
+		upstream.reg AS upstreamReg,
+		upstream.repo AS upstreamRepo,
+		upstream.tag AS upstreamTag
+	FROM
+		collection
+		INNER JOIN collection_xtable ON collection.id = collection_xtable.collection_id
+		INNER JOIN manifestlist ON collection_xtable.manifestlist_id = manifestlist.id
+		INNER JOIN manifestlist_xtable ON manifestlist.id = manifestlist_xtable.manifestlist_id
+		INNER JOIN manifest ON manifestlist_xtable.manifest_id = manifest.id
+		INNER JOIN upstream ON manifest.upstream_id = upstream.id
+		INNER JOIN platform ON manifest.platform_id = platform.id
+		INNER JOIN platform_filter ON platform.id = platform_filter.platform_id
+		INNER JOIN profile_filter ON platform_filter.filter_id = profile_filter.filter_id
+		INNER JOIN profile ON profile.id = profile_filter.profile_id`
+	_, err = db.Exec(q)
+	return
+}
+
+func (c *Collection) CreateCollectionView() (err error) {
+	q := `CREATE VIEW IF NOT EXISTS v_get_collection AS
+	SELECT
+		collection.id AS colID,
+		collection.repo AS colRepo,
+		collection.tag AS colTag,
+		manifest.id AS maniID,
+		upstream.reg AS upstreamReg,
+		upstream.repo AS upstreamRepo,
+		upstream.tag AS upstreamTag,
+		platform.os AS os,
+		platform.arch AS arch,
+		platform.variant AS variant,
+		platform.features AS features,
+		profile.name	 AS profile
+	FROM collection
+	INNER JOIN collection_xtable
+		ON collection.id = collection_xtable.collection_id
+	INNER JOIN manifestlist
+		ON collection_xtable.manifestlist_id = manifestlist.id
+	INNER JOIN manifestlist_xtable
+		ON manifestlist.id = manifestlist_xtable.manifestlist_id
+	INNER JOIN manifest
+		ON manifestlist_xtable.manifest_id = manifest.id
+	INNER JOIN upstream
+		ON manifest.upstream_id = upstream.id
+	INNER JOIN platform
+		ON manifest.platform_id = platform.id
+	INNER JOIN platform_filter
+		ON platform.id = platform_filter.platform_id
+	INNER JOIN profile_filter
+		ON platform_filter.filter_id = profile_filter.filter_id
+	INNER JOIN profile
+		ON profile.id = profile_filter.profile_id`
+	_, err = db.Exec(q)
 	return
 }

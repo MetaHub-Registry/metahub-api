@@ -52,7 +52,7 @@ func Initialize(db *driver.DB) *chi.Mux {
 
 	//Sets context for all requests
 	router.Use(middleware.Timeout(30 * time.Second))
-	router.Route("/v1", func(r chi.Router) {
+	router.Route("/api/v1", func(r chi.Router) {
 		r.Post("/collections", h.CollectionGetAll)
 		r.Post("/collection", h.CollectionGetOne)
 		//r.Mount("/metrics", nil)        //for monitoring agents such as prometheus
