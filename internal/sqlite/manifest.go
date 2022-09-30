@@ -1,7 +1,6 @@
 package sqlite
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/sirupsen/logrus"
@@ -17,206 +16,116 @@ type Manifest struct {
 	Profile      Profile  `json:"profile"`
 }
 
-func (m Manifest) createTable() (err error) {
-	tableName := "manifest"
-	q := fmt.Sprintf(`PRAGMA table_info(%s)`, tableName)
-	rows, err := db.Query(q)
-	if err != nil {
-		logrus.Fatal(err)
-	}
-	defer rows.Close()
-	if rows.Next() {
-		logrus.Infof("Table '%s' already exists!", tableName)
-		return
-	}
-	s := `CREATE TABLE IF NOT EXISTS %s (
-		    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-        "digest" TEXT,
-		"image_name" TEXT,
-		"platform_id" int,
-        "upstream_id" TEXT,
-        "config_id" INT,
-		"profile_id" INT,
-		FOREIGN KEY (platform_id)
-			REFERENCES platform (id)
-		FOREIGN KEY (upstream_id)
-			REFERENCES upstream (id) 
-		FOREIGN KEY (config_id)
-			REFERENCES config (id)
-		FOREIGN KEY (profile_id)
-			REFERENCES profile (id) 
-		);`
-	stmt := fmt.Sprintf(s, tableName)
-	query, err := db.Prepare(stmt)
-	if err != nil {
-		logrus.Fatal(err)
-	}
-	_, err = query.Exec()
-	if err != nil {
-		logrus.Fatal(err)
-	}
-	logrus.Infof("Table '%s' created successfully!", tableName)
-	m.bootstrapData()
-	return
-}
-
-func (m Manifest) bootstrapData() (err error) {
-	ctx, cancel := context.WithTimeout(context.Background(), dbTimeout)
-	_ = ctx
-	defer cancel()
-	type plat struct {
-		os       string
-		arch     string
-		variant  string
-		features string
-	}
-	type input struct {
-		name string
-		reg  string
-		repo string
-		tag  string
-		plat plat
-	}
-
-	inputs := []input{
-		{
-			"quay.io/cqnib/gromacs/gcc-7.3.1/2021.5/tmpi:skylake_avx512", "quay.io", "cqnib/gromacs/gcc-7.3.1/2021.5/tmpi", "skylake_avx512",
-			plat{"linux", "amd64", "", "cpu:skylake_avx512"},
-		}, {
-			"quay.io/cqnib/gromacs/gcc-7.3.1/2021.5/tmpi:graviton2", "quay.io", "cqnib/gromacs/gcc-7.3.1/2021.5/tmpi", "graviton2",
-			plat{"linux", "arm64", "", "cpu:graviton2"},
-		}, {
-			"quay.io/cqnib/plain-featuretest:generic", "quay.io", "cqnib/plain-featuretest", "generic",
-			plat{"linux", "amd64", "", ""},
-		}, {
-			"quay.io/cqnib/plain-featuretest:arch-cascadelake", "quay.io", "cqnib/plain-featuretest", "arch-cascadelake",
-			plat{"linux", "amd64", "", "cpu:cascadelake"},
-		}, {
-			"quay.io/cqnib/plain-featuretest:arch-skylake_avx512", "quay.io", "cqnib/plain-featuretest", "arch-skylake_avx512",
-			plat{"linux", "amd64", "", "cpu:skylake_avx512"},
-		}, {
-			"quay.io/cqnib/plain-featuretest:arch-skylake", "quay.io", "cqnib/plain-featuretest", "arch-skylake",
-			plat{"linux", "amd64", "", "cpu:skylake"},
-		}, {
-			"quay.io/cqnib/plain-featuretest:arch-zen", "quay.io", "cqnib/plain-featuretest", "arch-zen",
-			plat{"linux", "amd64", "", "cpu:zen"},
-		}, {
-			"quay.io/cqnib/plain-featuretest:arch-zen2", "quay.io", "cqnib/plain-featuretest", "arch-zen2",
-			plat{"linux", "amd64", "", "cpu:zen2"},
-		}, {
-			"quay.io/cqnib/plain-featuretest:arch-zen3", "quay.io", "cqnib/plain-featuretest", "arch-zen3",
-			plat{"linux", "amd64", "", "cpu:skylake_avx512"},
-		}, {
-			"quay.io/cqnib/plain-featuretest:cpu-broadwell", "quay.io", "cqnib/plain-featuretest", "cpu-broadwell",
-			plat{"linux", "amd64", "", "cpu:broadwell"},
-		}, {
-			"registry.gitlab.com/qnib-pub-containers/qnib/plain-featuretest:20220715-arm64-generic", "registry.gitlab.com", "qnib-pub-containers/qnib/plain-featuretest", "20220715-arm64-generic",
-			plat{"linux", "arm64", "", ""},
-		}, {
-			"registry.gitlab.com/qnib-pub-containers/qnib/plain-featuretest:20220715-arm64-graviton2", "registry.gitlab.com", "qnib-pub-containers/qnib/plain-featuretest", "20220715-arm64-graviton2",
-			plat{"linux", "arm64", "", "cpu:graviton2"},
-		}, {
-			"registry.gitlab.com/qnib-pub-containers/qnib/plain-featuretest:20220715-arm_v6-generic", "registry.gitlab.com", "qnib-pub-containers/qnib/plain-featuretest", "20220715-arm_v6-generic",
-			plat{"linux", "arm", "v6", ""},
-		}, {
-			"registry.gitlab.com/qnib-pub-containers/qnib/plain-featuretest:20220715-arm_v7-generic", "registry.gitlab.com", "qnib-pub-containers/qnib/plain-featuretest", "20220715-arm_v7-generic",
-			plat{"linux", "arm", "v7", ""},
-		}, {
-			"registry.gitlab.com/qnib-pub-containers/qnib/plain-featuretest:20220715-riscv64-generic", "registry.gitlab.com", "qnib-pub-containers/qnib/plain-featuretest", "20220715-riscv64-generic",
-			plat{"linux", "riscv64", "", ""},
-		}, {
-			"quay.io/biocontainers/blast:2.12.0--hf3cf87c_4", "quay.io", "biocontainers/blast", "2.12.0--hf3cf87c_4",
-			plat{"linux", "amd64", "", ""},
-		}, {
-			"quay.io/biocontainers/blast:2.13.0--hf3cf87c_0", "quay.io", "biocontainers/blast", "2.13.0--hf3cf87c_0",
-			plat{"linux", "amd64", "", ""},
-		}, {
-			"registry.gitlab.com/qnib-pub-containers/biocontainers/blast:2-13-0-arm64", "registry.gitlab.com", "qnib-pub-containers/biocontainers/blast", "2-13-0-arm64",
-			plat{"linux", "arm64", "", ""},
-		}, {
-			"quay.io/cqnib/gromacs-2021.5_gcc-7.3.1:x86_64_v4", "quay.io", "cqnib/gromacs-2021.5_gcc-7.3.1", "x86_64_v4",
-			plat{"linux", "amd64", "", ""},
-		}, {
-			"quay.io/cqnib/gromacs-2021.5_gcc-11.3.0:zen3", "quay.io", "cqnib/gromacs-2021.5_gcc-11.3.0", "zen3",
-			plat{"linux", "amd64", "", "cpu:zen3"},
-		}, {
-			"quay.io/cqnib/gromacs-2021.5_gcc-7.3.1:aarch64", "quay.io", "cqnib/gromacs-2021.5_gcc-7.3.1", "aarch64",
-			plat{"linux", "arm64", "", ""},
-		},
-	}
-	cnt := 0
-	for _, i := range inputs {
-		q := fmt.Sprintf(`SELECT id FROM platform WHERE os = "%s" AND arch = "%s"`, i.plat.os, i.plat.arch)
-		if i.plat.variant != "" {
-			q += fmt.Sprintf(` AND variant = "%s"`, i.plat.variant)
-		}
-		if i.plat.features != "" {
-			q += fmt.Sprintf(` AND features = "%s"`, i.plat.features)
-		}
-		q += ";"
-		//fmt.Printf("  %s\n", q)
-		rows, err := db.Query(q)
-		if err != nil {
-			logrus.Error(err)
-			continue
-		}
-		if err != nil {
-			logrus.Error(err)
-			continue
-		}
-		var platID int
-		if rows.Next() {
-			err = rows.Scan(&platID)
-			if err != nil {
-				logrus.Error(err)
-				continue
-			}
-		} else {
-			logrus.Errorf("No platform found for: %v", i.plat)
-			continue
-		}
-		rows.Close()
-		q = fmt.Sprintf(`SELECT id FROM upstream WHERE reg = "%s" AND repo = "%s" AND tag = "%s";`, i.reg, i.repo, i.tag)
-		//fmt.Printf("  %s\n", q)
-		rows, err = db.Query(q)
-		if err != nil {
-			logrus.Error(err)
-			continue
-		}
-		if err != nil {
-			logrus.Error(err)
-			continue
-		}
-		var id int
-		if rows.Next() {
-			err = rows.Scan(&id)
-			if err != nil {
-				logrus.Error(err)
-				continue
-			}
-			rows.Close()
-			q = fmt.Sprintf(`INSERT INTO manifest (image_name, upstream_id, platform_id) VALUES ("%s", %d, %d);`, i.name, id, platID)
-			//fmt.Printf("  %s\n", q)
-			res, err := db.Exec(q)
-			if err != nil {
-				logrus.Error(err)
-				continue
-			}
-			rCnt, _ := res.RowsAffected()
-			cnt += int(rCnt)
-
-		}
-	}
-	logrus.Infof("Inserted %d rows into table 'manifests'", cnt)
-
-	return
-}
-
-func NewManifestFromKeys(keys map[string]interface{}) (mani Manifest, err error) {
-	return
+type maniRow struct {
+	colID           int64
+	maniID          int64
+	maniDigest      string
+	upstreamReg     string
+	upstreamRepo    string
+	upstreamTag     string
+	os              string
+	arch            string
+	variant         string
+	features        string
+	configDigest    string
+	configMediaType string
+	configSize      int
+	profileName     string
 }
 
 func (m *Manifest) GetByCollectionId(colId int64) (manis []Manifest, err error) {
+	manis = []Manifest{}
+	q := fmt.Sprintf(`SELECT * FROM main.manifest_view WHERE colID =%d;`, colId)
+	rows, err := db.Query(q)
+	if err != nil {
+		logrus.Error(err)
+	}
+	if err != nil {
+		logrus.Error(err)
+	}
+	for rows.Next() {
+		maniRes := maniRow{}
+		err = rows.Scan(
+			&maniRes.colID,
+			&maniRes.maniID,
+			&maniRes.maniDigest,
+			&maniRes.upstreamReg,
+			&maniRes.upstreamRepo,
+			&maniRes.upstreamTag,
+			&maniRes.os,
+			&maniRes.arch,
+			&maniRes.variant,
+			&maniRes.features,
+			&maniRes.configDigest,
+			&maniRes.configMediaType,
+			&maniRes.configSize,
+			&maniRes.profileName,
+		)
+		if err != nil {
+			logrus.Error(err)
+		}
+		imgName := fmt.Sprintf("%s/%s:%s", maniRes.upstreamReg, maniRes.upstreamRepo, maniRes.upstreamTag)
+		mani := Manifest{
+			ID:        maniRes.maniID,
+			Digest:    maniRes.maniDigest,
+			ImageName: imgName,
+			PlatformSpec: Platform{
+				OS:       maniRes.os,
+				Arch:     maniRes.arch,
+				Variant:  maniRes.variant,
+				Features: maniRes.features,
+			},
+			Upstream: Upstream{
+				Reg:  maniRes.upstreamReg,
+				Repo: maniRes.upstreamRepo,
+				Tag:  maniRes.upstreamTag,
+			},
+			Config: Config{
+				Digest:    maniRes.configDigest,
+				MediaType: maniRes.configMediaType,
+				Size:      maniRes.configSize,
+			},
+			Profile: Profile{
+				Name: maniRes.profileName,
+			},
+		}
+		manis = append(manis, mani)
+	}
+	return
+}
 
+func (m Manifest) CreateViews() (err error) {
+	err = m.CreateManifestView()
+	return
+}
+
+func (m Manifest) CreateManifestView() (err error) {
+	q := `CREATE VIEW IF NOT EXISTS manifest_view AS
+	SELECT
+		manifest.id AS maniID,
+		manifest.digest AS maniDigest,
+		upstream.reg AS upstreamReg,
+		upstream.repo AS upstreamRepo,
+		upstream.tag AS upstreamTag,
+		platform.os AS os,
+		platform.arch AS arch,
+		platform.variant AS variant,
+		platform.features AS features,
+		config.digest AS configDigest,
+		config.media_type AS configMediaType,
+		config.size AS configSize,
+		profile.name AS profile
+	FROM
+		collection
+		INNER JOIN collection_xtable ON collection.id = collection_xtable.collection_id
+		INNER JOIN manifestlist ON collection_xtable.manifestlist_id = manifestlist.id
+		INNER JOIN manifestlist_xtable ON manifestlist.id = manifestlist_xtable.manifestlist_id
+		INNER JOIN manifest ON manifestlist_xtable.manifest_id = manifest.id
+		INNER JOIN upstream ON manifest.upstream_id = upstream.id
+		INNER JOIN platform ON manifest.platform_id = platform.id
+		INNER JOIN platform_filter ON platform.id = platform_filter.platform_id
+		INNER JOIN profile_filter ON platform_filter.filter_id = profile_filter.filter_id
+		INNER JOIN profile ON profile.id = profile_filter.profile_id`
+	_, err = db.Exec(q)
 	return
 }
