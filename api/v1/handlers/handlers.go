@@ -3,7 +3,7 @@ package handlers
 import (
 	"database/sql"
 
-	"github.com/metahub-registry/metahub-api/internal/sqlite"
+	"github.com/metahub-registry/metahub-api/pkg/backends/sqlite"
 )
 
 type Handlers struct {

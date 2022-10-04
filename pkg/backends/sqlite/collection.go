@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/sirupsen/logrus"
+	"github.com/metahub-registry/metahub-api/pkg/types"
 )
 
 type Collection struct {
@@ -279,5 +280,112 @@ func (c *Collection) CreateCollectionView() (err error) {
 	INNER JOIN profile
 		ON profile.id = profile_filter.profile_id`
 	_, err = db.Exec(q)
+	return
+}
+
+func (c Collection) createCollectionTable() (err error) {
+	tableName := "collection"
+	q := fmt.Sprintf(`PRAGMA table_info(%s)`, tableName)
+	rows, err := db.Query(q)
+	if err != nil {
+		logrus.Fatal(err)
+	}
+	defer rows.Close()
+	if rows.Next() {
+		logrus.Infof("Table '%s' already exists!", tableName)
+		return
+	}
+	s := `CREATE TABLE IF NOT EXISTS %s (
+		    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+        "repo" TEXT,
+		"tag" int
+		);`
+	stmt := fmt.Sprintf(s, tableName)
+	query, err := db.Prepare(stmt)
+	if err != nil {
+		logrus.Fatal(err)
+	}
+	_, err = query.Exec()
+	if err != nil {
+		logrus.Fatal(err)
+	}
+	logrus.Infof("Table '%s' created successfully!", tableName)
+	return
+}
+
+func (c Collection) createCollectionXTable() (err error) {
+	tableName := "collection_xtable"
+	q := fmt.Sprintf(`PRAGMA table_info(%s)`, tableName)
+	rows, err := db.Query(q)
+	if err != nil {
+		logrus.Fatal(err)
+	}
+	defer rows.Close()
+	if rows.Next() {
+		logrus.Infof("Table '%s' already exists!", tableName)
+		return
+	}
+	s := `CREATE TABLE IF NOT EXISTS %s (
+		    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+        "collection_id" INT, 
+		"manifestlist_id" INT,
+		FOREIGN KEY (collection_id)
+			REFERENCES collection (id)
+		FOREIGN KEY (manifestlist_id)
+			REFERENCES manifestlist (id)
+		);`
+	stmt := fmt.Sprintf(s, tableName)
+	query, err := db.Prepare(stmt)
+	if err != nil {
+		logrus.Fatal(err)
+	}
+	_, err = query.Exec()
+	if err != nil {
+		logrus.Fatal(err)
+	}
+	logrus.Infof("Table '%s' created successfully!", tableName)
+	return
+}
+
+func (c Collection) CreateTables() (err error) {
+	err = c.createCollectionTable()
+	if err != nil {
+		return
+	}
+	err = c.createCollectionXTable()
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (c Collection) Insert(i *types.Collection) (err error) {
+	q := `INSERT INTO collection (repo, tag) VALUES (?, ?)`
+	stmt, err := db.Prepare(q)
+	if err != nil {
+		logrus.Error(err)
+		return
+	}
+	res, err := stmt.Exec(i.Repo, i.Tag)
+	if err != nil {
+		logrus.Error(err)
+		return
+	}
+	i.SqlID, err = res.LastInsertId()
+	return
+}
+
+func (c Collection) InsertXTable(colID, mlID int64) (err error) {
+	q := `INSERT INTO collection_xtable (collection_id, manifestlist_id) VALUES (?, ?)`
+	stmt, err := db.Prepare(q)
+	if err != nil {
+		logrus.Error(err)
+		return
+	}
+	_, err = stmt.Exec(colID, mlID)
+	if err != nil {
+		logrus.Error(err)
+		return
+	}
 	return
 }
