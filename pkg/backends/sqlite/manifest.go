@@ -3,7 +3,9 @@ package sqlite
 import (
 	"fmt"
 
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"github.com/metahub-registry/metahub-api/pkg/types"
 )
 
 type Manifest struct {
@@ -127,5 +129,65 @@ func (m Manifest) CreateManifestView() (err error) {
 		INNER JOIN profile_filter ON platform_filter.filter_id = profile_filter.filter_id
 		INNER JOIN profile ON profile.id = profile_filter.profile_id`
 	_, err = db.Exec(q)
+	return
+}
+
+func (m Manifest) CreateTables() (err error) {
+	tableName := "manifest"
+	q := fmt.Sprintf(`PRAGMA table_info(%s)`, tableName)
+	rows, err := db.Query(q)
+	if err != nil {
+		logrus.Fatal(err)
+	}
+	defer rows.Close()
+	if rows.Next() {
+		logrus.Infof("Table '%s' already exists!", tableName)
+		return
+	}
+	s := `CREATE TABLE IF NOT EXISTS %s (
+		    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+        "digest" TEXT,
+		"media_type" TEXT,
+		"size" INT,
+		"platform_id" int,
+        "upstream_id" TEXT,
+        "config_id" INT,
+		"profile_id" INT,
+		FOREIGN KEY (platform_id)
+			REFERENCES platform (id)
+		FOREIGN KEY (upstream_id)
+			REFERENCES upstream (id) 
+		FOREIGN KEY (config_id)
+			REFERENCES config (id)
+		FOREIGN KEY (profile_id)
+			REFERENCES profile (id) 
+		);`
+	stmt := fmt.Sprintf(s, tableName)
+	query, err := db.Prepare(stmt)
+	if err != nil {
+		logrus.Fatal(err)
+	}
+	_, err = query.Exec()
+	if err != nil {
+		logrus.Fatal(err)
+	}
+	logrus.Infof("Table '%s' created successfully!", tableName)
+	return
+}
+
+func (m Manifest) Insert(i *types.Manifest) (err error) {
+	q := `INSERT INTO manifest (digest, media_type, size, platform_id, upstream_id, config_id) VALUES (?, ?, ?, ?, ?, ?)`
+	stmt, err := db.Prepare(q)
+	if err != nil {
+		logrus.Error(err)
+		return
+	}
+	res, err := stmt.Exec(i.Digest, i.MediaType, i.Size, i.Platform.SqlID, i.Upstream.SqlID, i.Config.SqlID)
+	if err != nil {
+		err = errors.Wrap(err, "failed to insert manifest")
+		logrus.Error(err)
+		return
+	}
+	i.SqlID, err = res.LastInsertId()
 	return
 }
