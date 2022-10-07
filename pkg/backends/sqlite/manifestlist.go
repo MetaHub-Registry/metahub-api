@@ -94,13 +94,13 @@ func (ml ManifestList) createManifestlistTable() (err error) {
 }
 
 func (ml ManifestList) Insert(i *types.ManifestList) (err error) {
-	q := `INSERT INTO manifestlist (digest, media_type, size) VALUES (?, ?, ?)`
+	q := `INSERT INTO manifestlist (digest, media_type) VALUES (?, ?)`
 	stmt, err := db.Prepare(q)
 	if err != nil {
 		logrus.Error(err)
 		return
 	}
-	res, err := stmt.Exec(i.Digest, i.MediaType, i.Size)
+	res, err := stmt.Exec(i.Digest, i.MediaType)
 	if err != nil {
 		logrus.Error(err)
 		return
