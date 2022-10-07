@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
+	"os"
 
 	"log"
 	"net/http"
@@ -21,6 +23,16 @@ func ServeApi(cCtx *cli.Context) error {
 	port := cCtx.Int("port")
 	fname := cCtx.String("sqlite-file")
 	// SQL DB
+	if fname == "" {
+		log.Fatal("No sqlite-file given")
+	}
+	if _, err := os.Stat(fname); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			log.Fatalf("sqlite-file '%s'does not exist", fname)
+		} else {
+			log.Fatalf("Error opening sqlite file: %s", err)
+		}
+	}
 	db, err := driver.ConnectSqlite(fname)
 	if err != nil {
 		log.Fatal("Cannot connect to database")
