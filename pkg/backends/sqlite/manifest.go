@@ -104,6 +104,7 @@ func (m Manifest) CreateViews() (err error) {
 func (m Manifest) CreateManifestView() (err error) {
 	q := `CREATE VIEW IF NOT EXISTS manifest_view AS
 	SELECT
+	    collection.id AS colID,
 		manifest.id AS maniID,
 		manifest.digest AS maniDigest,
 		upstream.reg AS upstreamReg,
@@ -127,7 +128,8 @@ func (m Manifest) CreateManifestView() (err error) {
 		INNER JOIN platform ON manifest.platform_id = platform.id
 		INNER JOIN platform_filter ON platform.id = platform_filter.platform_id
 		INNER JOIN profile_filter ON platform_filter.filter_id = profile_filter.filter_id
-		INNER JOIN profile ON profile.id = profile_filter.profile_id`
+		INNER JOIN profile ON profile.id = profile_filter.profile_id
+		INNER JOIN config ON manifest.config_id = config.id`
 	_, err = db.Exec(q)
 	return
 }
