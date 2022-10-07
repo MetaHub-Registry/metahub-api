@@ -2,8 +2,11 @@ package types
 
 import (
 	"encoding/json"
+	"strings"
 
-	"github.com/sirupsen/logrus"
+	"github.com/docker/distribution"
+	"github.com/docker/distribution/manifest/manifestlist"
+	"github.com/opencontainers/go-digest"
 )
 
 type Manifest struct {
@@ -19,20 +22,30 @@ type Manifest struct {
 	Layers    []Layer  `json:"layers"`
 }
 
-func NewManifestFromBytes(data []byte) (mani Manifest, err error) {
-	l := logrus.WithFields(logrus.Fields{
-		"packrusage": "types/manifest.go",
-		"func":       "NewManifestFromBytes",
-	})
-	err = json.Unmarshal(data, &mani)
-	if err != nil {
-		l.Error(err)
-	}
-	mani.Data = data
-	return
-}
-
 func (m Manifest) ToBytes() (data []byte, err error) {
 	data, err = json.Marshal(m)
 	return
+}
+
+func (m Manifest) ToOCIManifestDescriptor() (md manifestlist.ManifestDescriptor) {
+	feats := []string{}
+	for _, f := range strings.Split(m.Platform.Features, ",") {
+		if f != "" {
+			feats = append(feats, f)
+		}
+	}
+	strings.Split(m.Platform.Features, ",")
+	return manifestlist.ManifestDescriptor{
+		distribution.Descriptor{
+			Digest:    digest.Digest(m.Digest),
+			MediaType: m.MediaType,
+			Size:      m.Size,
+		},
+		manifestlist.PlatformSpec{
+			Architecture: m.Platform.Arch,
+			OS:           m.Platform.OS,
+			Variant:      m.Platform.Variant,
+			Features:     feats,
+		},
+	}
 }
