@@ -4,13 +4,16 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"log"
 	"net/http"
 
+	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
 	"github.com/metahub-registry/metahub-api/api/v1/router"
 	"github.com/metahub-registry/metahub-api/internal/driver"
+	"github.com/metahub-registry/metahub-api/pkg/backends/minio"
 )
 
 func ServeApi(cCtx *cli.Context) error {
@@ -22,6 +25,12 @@ func ServeApi(cCtx *cli.Context) error {
 	*/
 	port := cCtx.Int("port")
 	fname := cCtx.String("sqlite-file")
+	if strings.HasPrefix(fname, "s3://") {
+		err := minio.FetchObject(fname)
+		if err != nil {
+			logrus.Fatal(err)
+		}
+	}
 	// SQL DB
 	if fname == "" {
 		log.Fatal("No sqlite-file given")
