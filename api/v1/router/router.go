@@ -57,6 +57,11 @@ func Initialize(db *driver.DB) *chi.Mux {
 		r.Post("/collection", h.CollectionGetOne)
 		//r.Mount("/metrics", nil)        //for monitoring agents such as prometheus
 	})
+	router.Get("/auth", h.AuthHandler)
+	router.Post("/auth", h.AuthHandler)
+	router.Route("/v2", func(r chi.Router) {
+		r.Head("/{image}/manifests/{reference}", h.ManifestHandlerGet)
+	})
 
 	return router
 }

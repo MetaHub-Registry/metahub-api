@@ -17,7 +17,7 @@ func main() {
 				Usage:  "Serves the API",
 				Action: cmd.ServeApi,
 				Flags: []cli.Flag{
-					&cli.StringFlag{Name: "sqlite-file", EnvVars: []string{"SQLITE_FILE"}, Value: "./metahub.sqlite3", Usage: "SQLite file"},
+					&cli.StringFlag{Name: "sqlite-file", EnvVars: []string{"SQLITE_FILE"}, Value: "./metahub.sqlite3", Usage: "SQLite file (prefix s3:// fetches from S3)"},
 					&cli.StringFlag{Name: "db-host", EnvVars: []string{"DB_HOST"}, Value: "localhost", Usage: "DB host"},
 					&cli.StringFlag{Name: "db-user", EnvVars: []string{"DB_USER"}, Value: "postgres", Usage: "DB user"},
 					&cli.StringFlag{Name: "db-port", EnvVars: []string{"DB_PORT"}, Value: "5432", Usage: "DB port"},

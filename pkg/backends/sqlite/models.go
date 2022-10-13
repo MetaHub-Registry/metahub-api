@@ -15,8 +15,8 @@ const dbTimeout = time.Second * 3
 // in this type is available to us throughout the application, anywhere that the
 // app variable is used, provided that the model is also added in the New function.
 type Models struct {
-	//User       User
-	//Token      Token
+	Token      Token
+	User       User
 	Profile    Profile
 	Filter     Filter
 	Platform   Platform
@@ -31,6 +31,8 @@ type Models struct {
 func New(dbPool *sql.DB) (m Models, err error) {
 	db = dbPool
 	m = Models{
+		User:       User{},
+		Token:      Token{},
 		Profile:    Profile{},
 		Filter:     Filter{},
 		Platform:   Platform{},
