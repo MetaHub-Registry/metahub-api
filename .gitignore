@@ -3,5 +3,4 @@ mh-api
 
 coverage.txt
 lcov.info
-metahub.db
 **.sqlite3

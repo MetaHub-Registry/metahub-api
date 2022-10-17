@@ -14,13 +14,13 @@ func Test_CreateView(t *testing.T) {
 func Test_GetAllCollections(t *testing.T) {
 	cols, err := th.Collection.GetAll()
 	assert.NoError(t, err)
-	assert.Len(t, cols, 6)
+	assert.Len(t, cols, 7)
 }
 
 func Test_GetCollectionsByRepo(t *testing.T) {
 	cols, err := th.Collection.GetCollectionByRepo("")
 	assert.NoError(t, err)
-	assert.Len(t, cols, 6)
+	assert.Len(t, cols, 7)
 }
 
 func Test_GetCollectionByID(t *testing.T) {
