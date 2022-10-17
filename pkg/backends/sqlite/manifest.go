@@ -37,7 +37,7 @@ type maniRow struct {
 
 func (m *Manifest) GetByCollectionId(colId int64) (manis []Manifest, err error) {
 	manis = []Manifest{}
-	q := fmt.Sprintf(`SELECT * FROM main.manifest_view WHERE colID =%d;`, colId)
+	q := fmt.Sprintf(`SELECT * FROM main.manifests_view WHERE colID =%d;`, colId)
 	rows, err := db.Query(q)
 	if err != nil {
 		logrus.Error(err)
@@ -102,34 +102,34 @@ func (m Manifest) CreateViews() (err error) {
 }
 
 func (m Manifest) CreateManifestView() (err error) {
-	q := `CREATE VIEW IF NOT EXISTS manifest_view AS
+	q := `CREATE VIEW IF NOT EXISTS manifests_view AS
 	SELECT
-	    collection.id AS colID,
-		manifest.id AS maniID,
-		manifest.digest AS maniDigest,
-		upstream.reg AS upstreamReg,
-		upstream.repo AS upstreamRepo,
-		upstream.tag AS upstreamTag,
-		platform.os AS os,
-		platform.arch AS arch,
-		platform.variant AS variant,
-		platform.features AS features,
-		config.digest AS configDigest,
-		config.media_type AS configMediaType,
-		config.size AS configSize,
-		profile.name AS profile
+	    collections.id AS colID,
+		manifests.id AS maniID,
+		manifests.digest AS maniDigest,
+		upstreams.reg AS upstreamReg,
+		upstreams.repo AS upstreamRepo,
+		upstreams.tag AS upstreamTag,
+		platforms.os AS os,
+		platforms.arch AS arch,
+		platforms.variant AS variant,
+		platforms.features AS features,
+		configs.digest AS configDigest,
+		configs.media_type AS configMediaType,
+		configs.size AS configSize,
+		profiles.name AS profile
 	FROM
-		collection
-		INNER JOIN collection_xtable ON collection.id = collection_xtable.collection_id
-		INNER JOIN manifestlist ON collection_xtable.manifestlist_id = manifestlist.id
-		INNER JOIN manifestlist_xtable ON manifestlist.id = manifestlist_xtable.manifestlist_id
-		INNER JOIN manifest ON manifestlist_xtable.manifest_id = manifest.id
-		INNER JOIN upstream ON manifest.upstream_id = upstream.id
-		INNER JOIN platform ON manifest.platform_id = platform.id
-		INNER JOIN platform_filter ON platform.id = platform_filter.platform_id
-		INNER JOIN profile_filter ON platform_filter.filter_id = profile_filter.filter_id
-		INNER JOIN profile ON profile.id = profile_filter.profile_id
-		INNER JOIN config ON manifest.config_id = config.id`
+		collections
+	INNER JOIN collection_xtable ON collections.id = collection_xtable.collection_id
+	INNER JOIN manifestlists ON collection_xtable.manifestlist_id = manifestlists.id
+	INNER JOIN manifestlist_xtable ON manifestlists.id = manifestlist_xtable.manifestlist_id
+	INNER JOIN manifests ON manifestlist_xtable.manifest_id = manifests.id
+	INNER JOIN upstreams ON manifests.upstream_id = upstreams.id
+	INNER JOIN platforms ON manifests.platform_id = platforms.id
+	INNER JOIN platform_filter ON platforms.id = platform_filter.platform_id
+	INNER JOIN profile_filter ON platform_filter.filter_id = profile_filter.filter_id
+	INNER JOIN profiles ON profiles.id = profile_filter.profile_id
+	INNER JOIN configs ON manifests.config_id = configs.id`
 	_, err = db.Exec(q)
 	return
 }

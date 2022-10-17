@@ -23,14 +23,15 @@ func (h Handlers) CollectionGetOne(w http.ResponseWriter, r *http.Request) {
 		ColID int64 `json:"collection_id"`
 	}
 	pl := Payload{}
-	err := h.readJSON(w, r, &pl)
 	breadCrumbs := []utils.BreadCrumb{}
+	err := h.readJSON(w, r, &pl)
 	if err != nil {
 		logrus.Errorf("CollectionGetOne (body: %v, payload:%v): %v", r.Body, pl, err)
 		h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
 		return
 	}
 	col, err := h.models.Collection.GetCollectionByID(pl.ColID)
+	logrus.Infof("CollectionGetOne(%d): %s:%s", pl.ColID, col.Repo, col.Tag)
 	if err != nil {
 		h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
 		return
@@ -76,7 +77,7 @@ func (h Handlers) CollectionGetAll(w http.ResponseWriter, r *http.Request) {
 		h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
 		return
 	}
-	logrus.Infof("CollectionGetAll: %s", pl.Repo)
+	logrus.Infof("CollectionGetAll: '%s'", pl.Repo)
 	repoSlug := strings.Split(pl.Repo, "/")
 	cols, err := h.models.Collection.GetCollectionByRepo(pl.Repo)
 	if err != nil {

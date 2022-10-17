@@ -52,9 +52,15 @@ func (c *Collection) GetAll() (cols []Collection, err error) {
 			&cRes.UpReg,
 			&cRes.UpRepo,
 			&cRes.UpTag,
+			&cRes.OS,
+			&cRes.Arch,
+			&cRes.Variant,
+			&cRes.Features,
+			&cRes.Profile,
 		)
 		if err != nil {
 			logrus.Error(err)
+			return
 		}
 		if col.ID != int64(cRes.ColID) {
 			if col.ID != 0 {
@@ -88,7 +94,7 @@ func (c *Collection) GetAll() (cols []Collection, err error) {
 }
 
 func (c *Collection) GetCollectionByID(colID int64) (col Collection, err error) {
-	q := fmt.Sprintf(`SELECT * FROM main.v_get_collection WHERE colID = %d`, colID)
+	q := fmt.Sprintf(`SELECT * FROM main.v_get_collections WHERE colID = %d`, colID)
 	rows, err := db.Query(q)
 	if err != nil {
 		logrus.Error(err)
@@ -170,6 +176,11 @@ func (c *Collection) GetCollectionByRepo(repo string) (cols []Collection, err er
 			&cRes.UpReg,
 			&cRes.UpRepo,
 			&cRes.UpTag,
+			&cRes.OS,
+			&cRes.Arch,
+			&cRes.Variant,
+			&cRes.Features,
+			&cRes.Profile,
 		)
 		if err != nil {
 			logrus.Error(err)
@@ -229,7 +240,12 @@ func (c *Collection) CreateCollectionsView() (err error) {
 		manifest.id AS maniID,
 		upstream.reg AS upstreamReg,
 		upstream.repo AS upstreamRepo,
-		upstream.tag AS upstreamTag
+		upstream.tag AS upstreamTag,
+		platform.os AS os,
+		platform.arch AS arch,
+		platform.variant AS variant,
+		platform.features AS features,
+		profile.name	 AS profile
 	FROM
 		collection
 		INNER JOIN collection_xtable ON collection.id = collection_xtable.collection_id
