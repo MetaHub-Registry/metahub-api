@@ -3,6 +3,8 @@ package types
 import (
 	"encoding/json"
 
+	"github.com/docker/distribution"
+	"github.com/opencontainers/go-digest"
 	"github.com/sirupsen/logrus"
 )
 
@@ -27,4 +29,12 @@ func NewConfigFromBytes(data []byte) (res Config, err error) {
 	}
 	res.Data = data
 	return
+}
+
+func (c Config) ToDescriptor() distribution.Descriptor {
+	return distribution.Descriptor{
+		Digest:    digest.Digest(c.Digest),
+		MediaType: c.MediaType,
+		Size:      c.Size,
+	}
 }

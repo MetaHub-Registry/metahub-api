@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"net/http/httputil"
 	"strings"
 
+	"github.com/gorilla/context"
 	"github.com/sirupsen/logrus"
 	"github.com/metahub-registry/metahub-api/pkg/lib/account"
 )
@@ -36,7 +36,7 @@ func (h Handlers) AuthHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		accessTokenString := bearerToken[1]
 		var err error
-		at, err = h.models.User.GetAccessToken(accessTokenString)
+		at, err = h.mag.SQlite.User.GetAccessToken(accessTokenString)
 		if err != nil || at == nil {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
@@ -50,10 +50,10 @@ func (h Handlers) AuthHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h Handlers) AuthMiddleware(next http.Handler) http.Handler {
-	realm := ""
+	realm := "dev:80"
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		dumpedBody, _ := httputil.DumpRequest(r, true)
-		fmt.Printf("%s", dumpedBody)
+		//dumpedBody, _ := httputil.DumpRequest(r, true)
+		//fmt.Printf("%s", dumpedBody)
 		authorizationHeader := r.Header.Get("authorization")
 		if authorizationHeader == "" {
 			logrus.Warn("Unauthenticated request")
@@ -68,7 +68,7 @@ func (h Handlers) AuthMiddleware(next http.Handler) http.Handler {
 		}
 		accessTokenString := bearerToken[1]
 
-		at, err := h.models.User.GetAccessToken(accessTokenString)
+		at, err := h.mag.SQlite.User.GetAccessToken(accessTokenString)
 		if err != nil {
 			logrus.Infof("error getting access token: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
@@ -112,19 +112,20 @@ func (h Handlers) AuthMiddleware(next http.Handler) http.Handler {
 		_ = password
 		_ = username
 		_ = profile
+
 		//err = storage.Login(username, profile, password)
-		//if err != nil {
-		logrus.Error("Need to implement Login")
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-		//}
+		err = h.mag.SQlite.LoginUser(username, profile, password)
+		if err != nil {
+			logrus.Error(err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 
 		// Return the account name to the context
-		/*context.Set(r, "accountName", at.Token)
+		context.Set(r, "accountName", at.Token)
 		context.Set(r, "userName", username)
 		context.Set(r, "profileName", profile)
 		next.ServeHTTP(w, r)
-		*/
 	})
 }
 
@@ -145,8 +146,15 @@ func unauthorized(w http.ResponseWriter, realm string, err oauthError, format st
 	_ = l
 	description := fmt.Sprintf(format, v...)
 	authUrl := realm + "/auth"
+	authUrl = "http://dev:80/auth"
 	authenticateHeader := fmt.Sprintf("Bearer realm=%q,error=%q,error_description=%q", authUrl, err, description)
+	///realm="https://auth.docker.io/token",service="registry.docker.io",scope="repository:samalba/my-app:pull,push"
+
+	//l.Infof("authenticateHeader: %s", authenticateHeader)
 	w.Header().Add("WWW-Authenticate", authenticateHeader)
+	w.Header().Del("Vary")
 	w.Header().Add("Docker-Distribution-Api-Version", "registry/2.0")
+	///{"errors":[{"code":"UNAUTHORIZED","message":"access to the requested resource is not authorized","detail":[{"Type":"repository","Name":"samalba/my-app","Action":"pull"},{"Type":"repository","Name":"samalba/my-app","Action":"push"}]}]}
+
 	w.WriteHeader(http.StatusUnauthorized)
 }

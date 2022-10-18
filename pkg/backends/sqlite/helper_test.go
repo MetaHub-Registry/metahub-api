@@ -47,6 +47,6 @@ func (th *TestHelper) GetSQL() *sql.DB {
 
 func TestMain(m *testing.M) {
 	fmt.Println("TestMain")
-	th = NewTestHelper("../../../misc/sqlite/metahub_20221017.db")
+	th = NewTestHelper("../../../misc/sqlite/metahub_20221018.db")
 	os.Exit(m.Run())
 }

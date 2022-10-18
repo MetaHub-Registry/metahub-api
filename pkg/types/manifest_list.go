@@ -2,6 +2,8 @@ package types
 
 import (
 	"encoding/json"
+	"fmt"
+	"net/http"
 
 	"github.com/docker/distribution/manifest/manifestlist"
 )
@@ -32,4 +34,18 @@ func (ml ManifestList) ToOCIBytes() (b []byte) {
 	}
 	b, _ = json.Marshal(oci)
 	return
+}
+
+func (ml ManifestList) WriteWWWHeader(w http.ResponseWriter) {
+	b := ml.ToOCIBytes()
+	size := len(b)
+	w.Header().Set("Content-Type", ml.MediaType)
+	w.Header().Set("Content-Length", fmt.Sprint(size))
+	w.Header().Set("Docker-Content-Digest", ml.Digest)
+	w.Header().Set("Etag", ml.Digest)
+}
+
+func (ml ManifestList) WriteWWWBody(w http.ResponseWriter) {
+	b := ml.ToOCIBytes()
+	w.Write(b)
 }

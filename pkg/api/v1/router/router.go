@@ -3,12 +3,12 @@ package router
 import (
 	"time"
 
-	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/go-chi/render"
-	"github.com/metahub-registry/metahub-api/api/v1/handlers"
-	"github.com/metahub-registry/metahub-api/internal/driver"
+	"github.com/metahub-registry/metahub-api/pkg/api/v1/handlers"
+	"github.com/metahub-registry/metahub-api/pkg/backends/magazine"
 )
 
 const (
@@ -20,7 +20,7 @@ const (
 //var tracer oteltrace.Tracer
 
 // func Initialize(ncfg config.NeoConfig, db *driver.DB) *chi.Mux {
-func Initialize(db *driver.DB) *chi.Mux {
+func Initialize(mag magazine.Magazine) *chi.Mux {
 	/*var err error
 	tracer, err = utils.NewTracer(serviceName, os.Getenv(envKeyJaegerEndpointURL))
 	if err != nil {
@@ -28,13 +28,14 @@ func Initialize(db *driver.DB) *chi.Mux {
 	}
 	*/
 	// Handlers
-	h := handlers.NewHandlers("dev", db.SQL)
+	h := handlers.NewHandlers("dev", mag)
 	// define router
 	router := chi.NewRouter()
 
 	router.Use(
 		render.SetContentType(render.ContentTypeJSON), //forces Content-type
-		middleware.RedirectSlashes,
+		middleware.StripSlashes,
+		//middleware.Logger,
 		middleware.Recoverer,            //middleware to recover from panics
 		middleware.Heartbeat("/health"), //for heartbeat process such as Kubernetes liveprobeness
 		//otelchi.Middleware(serviceName, otelchi.WithChiRoutes(router)), //for tracing
@@ -58,9 +59,22 @@ func Initialize(db *driver.DB) *chi.Mux {
 		//r.Mount("/metrics", nil)        //for monitoring agents such as prometheus
 	})
 	router.Get("/auth", h.AuthHandler)
-	router.Post("/auth", h.AuthHandler)
+	/////// Subroute with AuthMiddleware to trigger login
+	// (even if the token is the anonymous one)
 	router.Route("/v2", func(r chi.Router) {
-		r.Head("/{image}/manifests/{reference}", h.ManifestHandlerGet)
+		r.Use(h.AuthMiddleware)
+		r.Get("/", h.HeartbeatHandler)
+		// TODO: Is there no way to match multiple lengh path?
+		r.Head("/{image}/manifests/{reference}", h.ManifestHeadHandler)
+		r.Get("/{image}/manifests/{reference}", h.ManifestGetHandler)
+		r.Head("/{repo}/{image}/manifests/{reference}", h.ManifestHeadHandler)
+		r.Get("/{repo}/{image}/manifests/{reference}", h.ManifestGetHandler)
+		// Blobs
+		r.Get("/{image}/blobs/{reference}", h.BlobGetHandler)
+		r.Get("/{repo}/{image}/blobs/{reference}", h.BlobGetHandler)
+		// Tags
+		r.Get("/{image}/tags/list", h.TagGetHandler)
+		r.Get("/{repo}/{image}/tags/list", h.TagGetHandler)
 	})
 
 	return router

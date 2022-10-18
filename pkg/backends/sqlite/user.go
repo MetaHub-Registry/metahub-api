@@ -71,7 +71,7 @@ func (u *User) GetAll() ([]*User, error) {
 func (u *User) GetByUsername(username string) (*User, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), dbTimeout)
 	defer cancel()
-	query := `SELECT id, username, email, first_name, last_name, password, user_active, created_at, updated_at FROM users WHERE username = $1`
+	query := `SELECT id, user_name, email, first_name, last_name, password_hash, user_active, created_at FROM users WHERE user_name = $1`
 
 	var user User
 	row := db.QueryRowContext(ctx, query, username)
@@ -85,7 +85,6 @@ func (u *User) GetByUsername(username string) (*User, error) {
 		&user.Password,
 		&user.Active,
 		&user.CreatedAt,
-		&user.UpdatedAt,
 	)
 
 	if err != nil {

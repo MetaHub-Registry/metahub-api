@@ -1,52 +1,44 @@
 version: '3'
 
 services:
-  metahub-api:
-    build: .
-    ports:
-      - "8080:8080"
+  dev:
+    build: 
+      context: .
+      target: dev
     environment:
-      DB_HOST: postgres
-      DB_PASS: password
-      NEO_URL: bolt://neo4j:7687
-  neo4j:
-    image: neo4j:4.4.9
+      - SQLITE_FILE=/go/metahub-api/misc/sqlite/metahub_20221017.db
+      - PATH=/go/metahub:/go/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     ports:
-      - 7474:7474
-      - 7687:7687
-    environment:
-      NEO4J_AUTH: neo4j/test
+      - 8080:80
     volumes:
-     - neo4j:/data
-  #  start Postgres, and ensure that data is stored to a mounted volume
-  postgres:
-    image: 'postgres:14.0'
-    ports:
-      - "5432:5432"
-    restart: always
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: metahub
+      - .:/go/metahub-api
+    networks:
+      - api-internal
+      - mh-data
+    working_dir: /go/metahub-api
+    command: ["sleep", "inf"]
+  dind:
+    build: misc/docker/dind/
+    privileged: true
     volumes:
-      - ./db-data/postgres/:/var/lib/postgresql/data/
-
+      - .:/go/metahub
+    networks:
+     - api-internal
+    environment:
+      DEV_URL: dev:80
+      CE_URL: ce:80
+      PS1: 'dind > '
   #  start mailhog
   mailhog:
     image: 'mailhog/mailhog:latest'
     ports:
       - "1025:1025"
       - "8025:8025"
+    networks:
+      - api-internal
     restart: always
 
-  pgadmin:
-    image: 'dpage/pgadmin4:latest'
-    ports:
-      - "5050:80"
-    restart: always
-    environment:
-      PGADMIN_DEFAULT_EMAIL: 'user@example.com'
-      PGADMIN_DEFAULT_PASSWORD: 'password'
-
-volumes:
-  neo4j:
+networks:
+  api-internal:
+  mh-data:
+    external: true
