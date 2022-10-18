@@ -1,0 +1,1 @@
+go run main.go serve --config ./misc/config/metahub-api.yaml --metahub-db ./misc/sqlite/

@@ -22,6 +22,7 @@ type maniRow struct {
 	colID           int64
 	maniID          int64
 	maniDigest      string
+	maniListID      int64
 	upstreamReg     string
 	upstreamRepo    string
 	upstreamTag     string
@@ -37,7 +38,10 @@ type maniRow struct {
 
 func (m *Manifest) GetByCollectionId(colId int64) (manis []Manifest, err error) {
 	manis = []Manifest{}
-	q := fmt.Sprintf(`SELECT * FROM main.manifests_view WHERE colID =%d;`, colId)
+	q := `SELECT DISTINCT colID, maniID, maniDigest, upstreamReg, upstreamRepo, upstreamTag, os, arch, variant, features`
+	q += `,configDigest, configMediaType, configSize, profile`
+	q += fmt.Sprintf(` FROM main.manifests_view WHERE colID=%d;`, colId)
+	//logrus.Error(q)
 	rows, err := db.Query(q)
 	if err != nil {
 		logrus.Error(err)
@@ -96,84 +100,121 @@ func (m *Manifest) GetByCollectionId(colId int64) (manis []Manifest, err error) 
 	return
 }
 
-func (m Manifest) CreateViews() (err error) {
-	err = m.CreateManifestView()
-	return
-}
-
-func (m Manifest) CreateManifestView() (err error) {
-	q := `CREATE VIEW IF NOT EXISTS manifests_view AS
-	SELECT
-	    collections.id AS colID,
-		manifests.id AS maniID,
-		manifests.digest AS maniDigest,
-		upstreams.reg AS upstreamReg,
-		upstreams.repo AS upstreamRepo,
-		upstreams.tag AS upstreamTag,
-		platforms.os AS os,
-		platforms.arch AS arch,
-		platforms.variant AS variant,
-		platforms.features AS features,
-		configs.digest AS configDigest,
-		configs.media_type AS configMediaType,
-		configs.size AS configSize,
-		profiles.name AS profile
-	FROM
-		collections
-	INNER JOIN collection_xtable ON collections.id = collection_xtable.collection_id
-	INNER JOIN manifestlists ON collection_xtable.manifestlist_id = manifestlists.id
-	INNER JOIN manifestlist_xtable ON manifestlists.id = manifestlist_xtable.manifestlist_id
-	INNER JOIN manifests ON manifestlist_xtable.manifest_id = manifests.id
-	INNER JOIN upstreams ON manifests.upstream_id = upstreams.id
-	INNER JOIN platforms ON manifests.platform_id = platforms.id
-	INNER JOIN platform_filter ON platforms.id = platform_filter.platform_id
-	INNER JOIN profile_filter ON platform_filter.filter_id = profile_filter.filter_id
-	INNER JOIN profiles ON profiles.id = profile_filter.profile_id
-	INNER JOIN configs ON manifests.config_id = configs.id`
-	_, err = db.Exec(q)
-	return
-}
-
-func (m Manifest) CreateTables() (err error) {
-	tableName := "manifest"
-	q := fmt.Sprintf(`PRAGMA table_info(%s)`, tableName)
+func (m *Manifest) GetTypesManifestByRequest(req types.Request) (res types.Manifest, found bool, err error) {
+	q := `SELECT DISTINCT maniID,maniDigest,os,arch,variant,features,configDigest,configMediaType,configSize,`
+	q += `upstreamReg,upstreamRepo,upstreamTag FROM main.manifests_view`
+	q += fmt.Sprintf(` WHERE maniDigest="%s";`, req.Digest)
 	rows, err := db.Query(q)
 	if err != nil {
-		logrus.Fatal(err)
+		logrus.Error(err)
 	}
-	defer rows.Close()
-	if rows.Next() {
-		logrus.Infof("Table '%s' already exists!", tableName)
-		return
+	for rows.Next() {
+		maniRes := maniRow{}
+		err = rows.Scan(
+			&maniRes.maniID,
+			&maniRes.maniDigest,
+			&maniRes.os,
+			&maniRes.arch,
+			&maniRes.variant,
+			&maniRes.features,
+			&maniRes.configDigest,
+			&maniRes.configMediaType,
+			&maniRes.configSize,
+			&maniRes.upstreamReg,
+			&maniRes.upstreamRepo,
+			&maniRes.upstreamTag,
+		)
+		if err != nil {
+			logrus.Error(err)
+			return
+		}
+		found = true
+		res = types.Manifest{
+			SqlID:     maniRes.maniID,
+			Digest:    maniRes.maniDigest,
+			MediaType: "application/vnd.docker.distribution.manifest.v2+json",
+			Platform: types.Platform{
+				OS:       maniRes.os,
+				Arch:     maniRes.arch,
+				Variant:  maniRes.variant,
+				Features: maniRes.features,
+			},
+			Config: types.Config{
+				Digest:    maniRes.configDigest,
+				MediaType: maniRes.configMediaType,
+				Size:      int64(maniRes.configSize),
+			},
+			Upstream: types.Upstream{
+				Reg:  maniRes.upstreamReg,
+				Repo: maniRes.upstreamRepo,
+				Tag:  maniRes.upstreamTag,
+			},
+			Layers: []types.Layer{},
+		}
 	}
-	s := `CREATE TABLE IF NOT EXISTS %s (
-		    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-        "digest" TEXT,
-		"media_type" TEXT,
-		"size" INT,
-		"platform_id" int,
-        "upstream_id" TEXT,
-        "config_id" INT,
-		"profile_id" INT,
-		FOREIGN KEY (platform_id)
-			REFERENCES platform (id)
-		FOREIGN KEY (upstream_id)
-			REFERENCES upstream (id) 
-		FOREIGN KEY (config_id)
-			REFERENCES config (id)
-		FOREIGN KEY (profile_id)
-			REFERENCES profile (id) 
-		);`
-	stmt := fmt.Sprintf(s, tableName)
-	query, err := db.Prepare(stmt)
+	return
+}
+
+func (m Manifest) TypesManifest_GetByManifestID(manifestID int64) (res types.Manifest, found bool, err error) {
+	return
+}
+
+func (m *Manifest) TypesManifest_GetByManifestListID(mlID int64) (manis []types.Manifest, err error) {
+	manis = []types.Manifest{}
+	q := `SELECT maniID,maniDigest,maniListID,os,arch,variant,features,configDigest,configMediaType,configSize,`
+	q += `upstreamReg,upstreamRepo,upstreamTag	FROM main.manifests_view`
+	q += fmt.Sprintf(` WHERE maniListID=%d;`, mlID)
+	logrus.Warnf("Q: %s", q)
+	rows, err := db.Query(q)
 	if err != nil {
-		logrus.Fatal(err)
+		logrus.Error(err)
 	}
-	_, err = query.Exec()
-	if err != nil {
-		logrus.Fatal(err)
+	for rows.Next() {
+		maniRes := maniRow{}
+		err = rows.Scan(
+			&maniRes.maniID,
+			&maniRes.maniDigest,
+			&maniRes.maniListID,
+			&maniRes.os,
+			&maniRes.arch,
+			&maniRes.variant,
+			&maniRes.features,
+			&maniRes.configDigest,
+			&maniRes.configMediaType,
+			&maniRes.configSize,
+			&maniRes.upstreamReg,
+			&maniRes.upstreamRepo,
+			&maniRes.upstreamTag,
+		)
+		if err != nil {
+			logrus.Error(err)
+		}
+		imgName := fmt.Sprintf("%s/%s:%s", maniRes.upstreamReg, maniRes.upstreamRepo, maniRes.upstreamTag)
+		logrus.Warnf("mani '%s': %s", imgName, maniRes.maniDigest)
+		mani := types.Manifest{
+			SqlID:     maniRes.maniID,
+			Digest:    maniRes.maniDigest,
+			MediaType: "application/vnd.docker.distribution.manifest.v2+json",
+			Platform: types.Platform{
+				OS:       maniRes.os,
+				Arch:     maniRes.arch,
+				Variant:  maniRes.variant,
+				Features: maniRes.features,
+			},
+			Config: types.Config{
+				Digest:    maniRes.configDigest,
+				MediaType: maniRes.configMediaType,
+				Size:      int64(maniRes.configSize),
+			},
+			Upstream: types.Upstream{
+				Reg:  maniRes.upstreamReg,
+				Repo: maniRes.upstreamRepo,
+				Tag:  maniRes.upstreamTag,
+			},
+			Layers: []types.Layer{},
+		}
+		manis = append(manis, mani)
 	}
-	logrus.Infof("Table '%s' created successfully!", tableName)
 	return
 }
 

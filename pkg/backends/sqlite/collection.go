@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"database/sql"
 	"fmt"
 
 	"github.com/sirupsen/logrus"
@@ -15,30 +16,65 @@ type Collection struct {
 	ManifestCount int64               `json:"manifest_count"`
 }
 
-type colRes struct {
+type maniRes struct {
+	ConfigDigest string `json:"config_digest"`
+	ConfigID     int64  `json:"config_id"`
+	ManiID       int64  `json:"mani_id"`
+	ManiDigest   string `json:"mani_digest"`
+	OS           string `json:"os"`
+	Arch         string `json:"arch"`
+	Variant      string `json:"variant,omitempty"`
+	Features     string `json:"features,omitempty"`
+	UpReg        string `json:"up_reg"`
+	UpRepo       string `json:"up_repo"`
+	UpTag        string `json:"up_tag"`
+}
+
+type mlRes struct {
 	ColID    int    `json:"collection_id"`
+	MlID     int    `json:"manifest_list_id"`
 	ColRepo  string `json:"collection_repo"`
 	ColTag   string `json:"collection_tag"`
-	ManiID   int    `json:"manifest_id"`
+	MLDigest string `json:"manifest_list_digest"`
+	MlDigest string `json:"manifest_digest"`
 	UpReg    string `json:"upstream_reg"`
 	UpRepo   string `json:"upstream_repo"`
 	UpTag    string `json:"upstream_tag"`
-	OS       string `json:"os"`
-	Arch     string `json:"arch"`
-	Variant  string `json:"variant"`
-	Features string `json:"features"`
 	Profile  string `json:"profile"`
 }
 
+type cfgRes struct {
+	ConfigDigest    string
+	ConfigID        int64
+	ConfigSize      int64
+	ConfigMediaType string
+}
+
+type colRes struct {
+	ColID      int    `json:"collection_id"`
+	ColRepo    string `json:"collection_repo"`
+	ColTag     string `json:"collection_tag"`
+	ManiID     int    `json:"manifest_id"`
+	ManiDigest string `json:"manifest_digest"`
+	MlDigest   string `json:"manifestlist_digest"`
+	UpReg      string `json:"upstream_reg"`
+	UpRepo     string `json:"upstream_repo"`
+	UpTag      string `json:"upstream_tag"`
+	OS         string `json:"os"`
+	Arch       string `json:"arch"`
+	Variant    string `json:"variant"`
+	Features   string `json:"features"`
+	Profile    string `json:"profile"`
+}
+
 func (c *Collection) GetAll() (cols []Collection, err error) {
-	q := `SELECT * FROM main.v_get_collections`
+	q := `SELECT DISTINCT colID, colRepo, colTag, maniID, upstreamReg, upstreamRepo, upstreamTag, os, arch, variant, features, profile FROM main.v_get_collections`
 	rows, err := db.Query(q)
 	if err != nil {
 		logrus.Error(err)
+		return
 	}
-	if err != nil {
-		logrus.Error(err)
-	}
+
 	col := Collection{
 		ID: 0,
 	}
@@ -87,9 +123,56 @@ func (c *Collection) GetAll() (cols []Collection, err error) {
 		key := fmt.Sprintf("%s/%s:%s", cRes.UpReg, cRes.UpRepo, cRes.UpTag)
 		col.Manifests[key] = m
 		col.ManifestCount++
-		//fmt.Printf("%+v\n", cRes)
+		cols = append(cols, col)
 	}
-	cols = append(cols, col)
+
+	return
+}
+
+func createCol(row *sql.Rows) (col Collection, err error) {
+	cRes := colRes{}
+	err = row.Scan(
+		&cRes.ColID,
+		&cRes.ColRepo,
+		&cRes.ColTag,
+		&cRes.ManiID,
+		&cRes.MlDigest,
+		&cRes.UpReg,
+		&cRes.UpRepo,
+		&cRes.UpTag,
+		&cRes.OS,
+		&cRes.Arch,
+		&cRes.Variant,
+		&cRes.Features,
+		&cRes.Profile,
+	)
+	if err != nil {
+		logrus.Error(err)
+	}
+	if col.ManifestCount == 0 {
+		col.ID = int64(cRes.ColID)
+		col.Repo = cRes.ColRepo
+		col.Tag = cRes.ColTag
+	}
+	// Add the manifest to the collection
+	m := Manifest{
+		ID: int64(cRes.ManiID),
+		Upstream: Upstream{
+			Reg:  cRes.UpReg,
+			Repo: cRes.UpRepo,
+			Tag:  cRes.UpTag,
+		},
+		PlatformSpec: Platform{
+			OS:       cRes.OS,
+			Arch:     cRes.Arch,
+			Variant:  cRes.Variant,
+			Features: cRes.Features,
+		},
+		Profile: Profile{Name: cRes.Profile},
+	}
+	key := fmt.Sprintf("%s/%s:%s", cRes.UpReg, cRes.UpRepo, cRes.UpTag)
+	col.Manifests[key] = m
+	col.ManifestCount++
 	return
 }
 
@@ -113,6 +196,7 @@ func (c *Collection) GetCollectionByID(colID int64) (col Collection, err error) 
 			&cRes.ColRepo,
 			&cRes.ColTag,
 			&cRes.ManiID,
+			&cRes.MlDigest,
 			&cRes.UpReg,
 			&cRes.UpRepo,
 			&cRes.UpTag,
@@ -153,13 +237,97 @@ func (c *Collection) GetCollectionByID(colID int64) (col Collection, err error) 
 	return
 }
 
-func (c *Collection) GetCollectionByRepo(repo string) (cols []Collection, err error) {
-	cols = []Collection{}
-	q := fmt.Sprintf(`SELECT * FROM main.v_get_collections WHERE colRepo LIKE '%s%%';`, repo)
+func (c *Collection) GetTypesManifestByCollectionID(colID int64) (manis []types.Manifest, err error) {
+	q := fmt.Sprintf(`SELECT * FROM main.v_get_manifest WHERE colID=%d;`, colID)
 	rows, err := db.Query(q)
 	if err != nil {
 		logrus.Error(err)
 	}
+	manis = []types.Manifest{}
+	for rows.Next() {
+		res := maniRes{}
+		err = rows.Scan(
+			&res.ConfigDigest,
+			&res.ConfigID,
+			&res.ManiDigest,
+			&res.ManiID,
+			&res.OS,
+			&res.Arch,
+			&res.Variant,
+			&res.Features,
+			&res.UpReg,
+			&res.UpRepo,
+			&res.UpTag,
+		)
+		plat := types.Platform{
+			OS:       res.OS,
+			Arch:     res.Arch,
+			Variant:  res.Variant,
+			Features: res.Features,
+		}
+		// Get the config
+		cfg, err := c.GetConfigByConfigID(int64(res.ConfigID))
+		if err != nil {
+			logrus.Error(err)
+			continue
+		}
+
+		// Layers
+		layers := []types.Layer{}
+		if err != nil {
+			logrus.Error(err)
+			continue
+		}
+		// TODO: Get Layers
+		m := types.Manifest{
+			Platform: plat,
+			Upstream: types.Upstream{
+				Reg:  res.UpReg,
+				Repo: res.UpRepo,
+				Tag:  res.UpTag,
+			},
+			Config: cfg,
+			Layers: layers,
+		}
+		manis = append(manis, m)
+	}
+	return
+}
+
+func (c Collection) GetConfigByConfigID(cfgID int64) (cfg types.Config, err error) {
+	q := `SELECT 
+		configs.digest AS configDigest,
+		configs.id AS configID,
+		configs.size AS configSize,
+		configs.mediaType AS configMediaType
+	FROM configs WHERE configs.id=%d;`
+	query := fmt.Sprintf(q, cfgID)
+	rows, err := db.Query(query)
+	if err != nil {
+		logrus.Error(err)
+	}
+	cfg = types.Config{
+		SqlID: cfgID,
+	}
+	for rows.Next() {
+		res := cfgRes{}
+		err = rows.Scan(
+			&res.ConfigDigest,
+			&res.ConfigID,
+			&res.ConfigSize,
+			&res.ConfigMediaType,
+		)
+		cfg.Digest = res.ConfigDigest
+		cfg.Size = res.ConfigSize
+		cfg.MediaType = res.ConfigMediaType
+	}
+	return
+}
+
+func (c *Collection) GetCollectionsByRepoLike(repo string) (cols []Collection, err error) {
+	cols = []Collection{}
+	q := fmt.Sprintf(`SELECT * FROM main.v_get_collections WHERE colRepo LIKE '%s%%';`, repo)
+	rows, err := db.Query(q)
 	if err != nil {
 		logrus.Error(err)
 	}
@@ -173,6 +341,7 @@ func (c *Collection) GetCollectionByRepo(repo string) (cols []Collection, err er
 			&cRes.ColRepo,
 			&cRes.ColTag,
 			&cRes.ManiID,
+			&cRes.ManiDigest,
 			&cRes.UpReg,
 			&cRes.UpRepo,
 			&cRes.UpTag,

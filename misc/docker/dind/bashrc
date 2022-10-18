@@ -1,0 +1,106 @@
+#!/bin/bash
+
+function getMannifestByTag {
+    TOKEN=$(getToken $1)
+    echo "REPO > $2"
+    echo "TAG  > $3"
+    echo "TOKEN> ${TOKEN}"
+    URL="${MH_URL}/v2/$2/manifests/$3"
+    if [[ ! -z ${DEBUG} ]];then
+	    echo "curl -sH \"Authorization: Bearer ${TOKEN}\" ${URL} |jq ."
+    fi
+    curl -sH "Authorization: Bearer ${TOKEN}" \
+            ${URL} |jq .
+}
+
+function getMannifest {
+    TOKEN=$(getToken $1)
+    echo "REPO > $2"
+    echo "DIG  > $3"
+    echo "TOKEN> ${TOKEN}"
+    URL="${MH_URL}/v2/$2/manifests/sha256:$3"
+    curl -sH "Authorization: Bearer ${TOKEN}" \
+            ${URL} |jq .
+}
+
+function getBlob {
+    TOKEN=$(getToken $1)
+    echo "REPO > $2"
+    echo "DIG  > $3"
+    echo "TOKEN> ${TOKEN}"
+    URL="${MH_URL}/v2/$2/blobs/sha256:$3"
+    curl -sH "Authorization: Bearer ${TOKEN}" \
+            ${URL} |jq .
+}
+
+function downloadBlob {
+    TOKEN=$(getToken $1)
+    echo "downloadBlob $2 $3"
+    URL="${MH_URL}/v2/$2/blobs/sha256:$3"
+    curl -sH "Authorization: Bearer ${TOKEN}" \
+            ${URL} > $3.dat
+}
+
+function traverseML {
+    TOKEN=$(getToken $1)
+    echo "REPO > $2"
+    echo "TAG  > $3"
+    echo "TOKEN> ${TOKEN}"
+    URL="${MH_URL}/v2/$2/manifests/$3"
+    if [[ ! -z ${DEBUG} ]];then
+	    echo "curl -sH \"Authorization: Bearer ${TOKEN}\" ${URL} |jq ."
+    fi
+    m0Dig=$(curl -sH "Authorization: Bearer ${TOKEN}" \
+            ${URL} |jq -r '.manifests[0] | .digest |sub("^sha256:"; "")')
+    downloadBlob $1 $2 ${m0Dig}
+    if [[ $(sha256sum ${m0Dig}.dat |awk '{print $1}') != "${m0Dig}" ]];then
+        echo "ERROR > manifest digest mismatch!"
+    else 
+        echo "INFO  > manifest digest matches"
+    fi
+    URL="${MH_URL}/v2/$2/blobs/sha256:${m0Dig}"
+    m0CfgDig=$(curl -sH "Authorization: Bearer ${TOKEN}" \
+            ${URL} |jq -r '.config.digest |sub("^sha256:"; "")')
+    downloadBlob $1 $2 ${m0CfgDig}
+    if [[ $(sha256sum ${m0CfgDig}.dat |awk '{print $1}') != "${m0CfgDig}" ]];then
+        echo "ERROR > cfg digest mismatch!"
+    else 
+        echo "INFO  > cfg digest matches"
+    fi
+}
+
+function getToken {
+    case $1 in
+        "generic")
+            echo "Z2VuZXJpYw=="
+            ;;
+        "broadwell")
+            echo "cW5pYi9icm9hZHdlbGw6bXlwYXNzd29yZA=="
+            ;;
+        *)
+            echo "$1"
+            ;;
+    esac
+}
+
+function setDev() {
+    export MH_URL=dev:80
+}
+
+function setCe() {
+    export MH_URL=ce:80
+}
+
+function getObj() {
+	curl -s $1 |jq .
+}
+
+function setDEV() {
+    export MH_URL=dev:80
+    alias manifest-tool="manifest-tool --insecure"
+}
+
+function setMH() {
+    export MH_URL=metahub-registry.org
+    unalias manifest-tool
+}

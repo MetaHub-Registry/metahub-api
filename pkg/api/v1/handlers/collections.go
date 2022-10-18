@@ -30,7 +30,7 @@ func (h Handlers) CollectionGetOne(w http.ResponseWriter, r *http.Request) {
 		h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
 		return
 	}
-	col, err := h.models.Collection.GetCollectionByID(pl.ColID)
+	col, err := h.mag.SQlite.Collection.GetCollectionByID(pl.ColID)
 	logrus.Infof("CollectionGetOne(%d): %s:%s", pl.ColID, col.Repo, col.Tag)
 	if err != nil {
 		h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
@@ -49,7 +49,7 @@ func (h Handlers) CollectionGetOne(w http.ResponseWriter, r *http.Request) {
 			breadCrumbs = append(breadCrumbs, bc)
 		}
 	}
-	manis, err := h.models.Manifest.GetByCollectionId(pl.ColID)
+	manis, err := h.mag.SQlite.Manifest.GetByCollectionId(pl.ColID)
 	if err != nil {
 		h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
 		return
@@ -79,7 +79,7 @@ func (h Handlers) CollectionGetAll(w http.ResponseWriter, r *http.Request) {
 	}
 	logrus.Infof("CollectionGetAll: '%s'", pl.Repo)
 	repoSlug := strings.Split(pl.Repo, "/")
-	cols, err := h.models.Collection.GetCollectionByRepo(pl.Repo)
+	cols, err := h.mag.SQlite.Collection.GetCollectionsByRepoLike(pl.Repo)
 	if err != nil {
 		h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
 		return

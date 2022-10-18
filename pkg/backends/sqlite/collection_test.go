@@ -14,18 +14,18 @@ func Test_CreateView(t *testing.T) {
 func Test_GetAllCollections(t *testing.T) {
 	cols, err := th.Collection.GetAll()
 	assert.NoError(t, err)
-	assert.Len(t, cols, 7)
+	assert.Len(t, cols, 36)
 }
 
 func Test_GetCollectionsByRepo(t *testing.T) {
-	cols, err := th.Collection.GetCollectionByRepo("")
+	cols, err := th.Collection.GetCollectionsByRepoLike("")
 	assert.NoError(t, err)
-	assert.Len(t, cols, 7)
+	assert.Len(t, cols, 8)
 }
 
 func Test_GetCollectionByID(t *testing.T) {
 	col, err := th.Collection.GetCollectionByID(1)
 	assert.NoError(t, err)
-	assert.Equal(t, "biocontainers/blast", col.Repo)
-	assert.Equal(t, "2.13.0--hf3cf87c_0", col.Tag)
+	assert.Equal(t, "qnib/featuretest", col.Repo)
+	assert.Equal(t, "latest", col.Tag)
 }
