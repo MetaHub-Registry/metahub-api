@@ -66,6 +66,30 @@ type colRes struct {
 	Profile    string `json:"profile"`
 }
 
+func (c Collection) GetTagsListByRepo(repo string) (res types.TagResponse, err error) {
+	q := fmt.Sprintf(`SELECT DISTINCT colTag FROM main.v_get_collections WHERE colRepo="%s" ORDER BY colTag;`, repo)
+	rows, err := db.Query(q)
+	if err != nil {
+		logrus.Error(err)
+		return
+	}
+	res = types.TagResponse{
+		Name: repo,
+		Tags: []string{},
+	}
+	// TODO: add pagination https://docs.docker.com/registry/spec/api/#pagination-1
+	for rows.Next() {
+		var tag string
+		err = rows.Scan(&tag)
+		if err != nil {
+			logrus.Error(err)
+			return
+		}
+		res.Tags = append(res.Tags, tag)
+	}
+	return
+}
+
 func (c *Collection) GetAll() (cols []Collection, err error) {
 	q := `SELECT DISTINCT colID, colRepo, colTag, maniID, upstreamReg, upstreamRepo, upstreamTag FROM main.v_get_collections`
 	rows, err := db.Query(q)

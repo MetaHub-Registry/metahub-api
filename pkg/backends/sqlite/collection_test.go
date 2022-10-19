@@ -29,5 +29,9 @@ func Test_GetCollections(t *testing.T) {
 	manis, err := th.Collection.GetTypesManifestByCollectionID(exp.ID)
 	assert.NoError(t, err)
 	assert.Len(t, manis, 4)
+	// Tags
 
+	tag, err := th.Collection.GetTagsListByRepo("biocontainers/blast")
+	assert.NoError(t, err)
+	assert.Len(t, tag.Tags, 4)
 }

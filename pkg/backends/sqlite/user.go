@@ -285,5 +285,4 @@ func (u *User) GetAccessToken(token string) (at *account.AccessToken, err error)
 	return &account.AccessToken{
 		Token: token,
 	}, nil
-	return
 }

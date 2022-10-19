@@ -23,9 +23,8 @@ func (mag Magazine) ManifestListGetByRequest(req types.Request) (ml types.Manife
 		return
 	}
 	manis, err := mag.SQlite.Manifest.TypesManifest_GetByManifestListID(ml.SqlID)
-	for idx, m := range manis {
+	for _, m := range manis {
 		// Fetch Manifest from Minio
-		logrus.Warnf("Mani[%d]: %v", idx, m)
 		miniMani, err := mag.Minio.ManifestGetObj(ctx, m.Digest)
 		if err != nil {
 			logrus.Errorf("Failed to fetch Manifest from Object store: %v", err)

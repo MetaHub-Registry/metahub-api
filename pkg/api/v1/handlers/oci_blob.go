@@ -17,14 +17,15 @@ func (h Handlers) BlobGetHandler(w http.ResponseWriter, r *http.Request) {
 	} else {
 		msg += fmt.Sprintf("%s)", req.Tag)
 	}
-	logrus.Warn(msg)
+	logrus.Info(msg)
 	cfg, found, err := h.mag.ConfigBlob_GetByHTTPRequest(r)
 	if err != nil {
 		// 1. FALSE
 		msg := fmt.Sprintf("failed to fetch config: %v", err)
 		logrus.Error(msg)
 		msg = "failed to fetch config blob"
-		helper.WriteOCIErrror(w, http.StatusInternalServerError, msg, msg)
+		e := helper.NewErrPayload("INTERNAL_ERROR", msg, msg)
+		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 		return
 	}
 	if found {
@@ -39,7 +40,8 @@ func (h Handlers) BlobGetHandler(w http.ResponseWriter, r *http.Request) {
 		msg := fmt.Sprintf("failed to fetch layer: %v", err)
 		logrus.Error(msg)
 		msg = "failed to fetch layer blob"
-		helper.WriteOCIErrror(w, http.StatusInternalServerError, msg, msg)
+		e := helper.NewErrPayload("INTERNAL_ERROR", msg, msg)
+		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 		return
 	}
 	if found {
@@ -47,4 +49,8 @@ func (h Handlers) BlobGetHandler(w http.ResponseWriter, r *http.Request) {
 		layer.WriteWWWBody(w)
 		return
 	}
+	// Not found
+	msg = "could not find blob"
+	e := helper.NewErrPayload("NAME_UNKNOWN", msg, msg)
+	helper.WriteOCIErrror(w, http.StatusNotFound, e)
 }

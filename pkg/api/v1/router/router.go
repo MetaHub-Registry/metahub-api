@@ -35,7 +35,7 @@ func Initialize(mag magazine.Magazine) *chi.Mux {
 	router.Use(
 		render.SetContentType(render.ContentTypeJSON), //forces Content-type
 		middleware.StripSlashes,
-		//middleware.Logger,
+		middleware.Logger,
 		middleware.Recoverer,            //middleware to recover from panics
 		middleware.Heartbeat("/health"), //for heartbeat process such as Kubernetes liveprobeness
 		//otelchi.Middleware(serviceName, otelchi.WithChiRoutes(router)), //for tracing
@@ -75,6 +75,7 @@ func Initialize(mag magazine.Magazine) *chi.Mux {
 		// Tags
 		r.Get("/{image}/tags/list", h.TagGetHandler)
 		r.Get("/{repo}/{image}/tags/list", h.TagGetHandler)
+		r.Get("/_catalog", h.CatalogGetHandler)
 	})
 
 	return router
