@@ -3,7 +3,6 @@ package sqlite
 import (
 	"fmt"
 
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/metahub-registry/metahub-api/pkg/types"
 )
@@ -43,9 +42,6 @@ func (m *Manifest) GetByCollectionId(colId int64) (manis []Manifest, err error) 
 	q += fmt.Sprintf(` FROM main.manifests_view WHERE colID=%d;`, colId)
 	//logrus.Error(q)
 	rows, err := db.Query(q)
-	if err != nil {
-		logrus.Error(err)
-	}
 	if err != nil {
 		logrus.Error(err)
 	}
@@ -155,10 +151,6 @@ func (m *Manifest) GetTypesManifestByRequest(req types.Request) (res types.Manif
 	return
 }
 
-func (m Manifest) TypesManifest_GetByManifestID(manifestID int64) (res types.Manifest, found bool, err error) {
-	return
-}
-
 func (m *Manifest) TypesManifest_GetByManifestListID(mlID int64) (manis []types.Manifest, err error) {
 	manis = []types.Manifest{}
 	q := `SELECT maniID,maniDigest,maniListID,os,arch,variant,features,configDigest,configMediaType,configSize,`
@@ -215,22 +207,5 @@ func (m *Manifest) TypesManifest_GetByManifestListID(mlID int64) (manis []types.
 		}
 		manis = append(manis, mani)
 	}
-	return
-}
-
-func (m Manifest) Insert(i *types.Manifest) (err error) {
-	q := `INSERT INTO manifest (digest, media_type, size, platform_id, upstream_id, config_id) VALUES (?, ?, ?, ?, ?, ?)`
-	stmt, err := db.Prepare(q)
-	if err != nil {
-		logrus.Error(err)
-		return
-	}
-	res, err := stmt.Exec(i.Digest, i.MediaType, i.Size, i.Platform.SqlID, i.Upstream.SqlID, i.Config.SqlID)
-	if err != nil {
-		err = errors.Wrap(err, "failed to insert manifest")
-		logrus.Error(err)
-		return
-	}
-	i.SqlID, err = res.LastInsertId()
 	return
 }

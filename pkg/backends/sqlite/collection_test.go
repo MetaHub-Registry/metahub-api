@@ -17,15 +17,17 @@ func Test_GetAllCollections(t *testing.T) {
 	assert.Len(t, cols, 36)
 }
 
-func Test_GetCollectionsByRepo(t *testing.T) {
-	cols, err := th.Collection.GetCollectionsByRepoLike("")
+func Test_GetCollections(t *testing.T) {
+	cols, err := th.Collection.GetCollectionsByRepoLike("gromacs/tmpi")
 	assert.NoError(t, err)
-	assert.Len(t, cols, 8)
-}
+	assert.Len(t, cols, 1)
+	exp := cols[0]
+	col, err := th.Collection.GetCollectionByID(exp.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, "gromacs/tmpi", col.Repo)
+	assert.Equal(t, "2021.5", col.Tag)
+	manis, err := th.Collection.GetTypesManifestByCollectionID(exp.ID)
+	assert.NoError(t, err)
+	assert.Len(t, manis, 4)
 
-func Test_GetCollectionByID(t *testing.T) {
-	col, err := th.Collection.GetCollectionByID(1)
-	assert.NoError(t, err)
-	assert.Equal(t, "qnib/featuretest", col.Repo)
-	assert.Equal(t, "latest", col.Tag)
 }
