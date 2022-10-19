@@ -4,8 +4,8 @@ go 1.19
 
 require (
 	github.com/StudioSol/set v1.0.0
+	github.com/chrispappas/golang-generics-set v1.0.1
 	github.com/containers/image v3.0.2+incompatible
-	github.com/containers/image/v5 v5.23.0
 	github.com/docker/distribution v2.8.1+incompatible
 	github.com/go-chi/chi/v5 v5.0.7
 	github.com/go-chi/cors v1.2.1

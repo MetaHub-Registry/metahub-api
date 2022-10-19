@@ -156,7 +156,6 @@ func (m *Manifest) TypesManifest_GetByManifestListID(mlID int64) (manis []types.
 	q := `SELECT maniID,maniDigest,maniListID,os,arch,variant,features,configDigest,configMediaType,configSize,`
 	q += `upstreamReg,upstreamRepo,upstreamTag	FROM main.manifests_view`
 	q += fmt.Sprintf(` WHERE maniListID=%d;`, mlID)
-	logrus.Warnf("Q: %s", q)
 	rows, err := db.Query(q)
 	if err != nil {
 		logrus.Error(err)
@@ -181,8 +180,6 @@ func (m *Manifest) TypesManifest_GetByManifestListID(mlID int64) (manis []types.
 		if err != nil {
 			logrus.Error(err)
 		}
-		imgName := fmt.Sprintf("%s/%s:%s", maniRes.upstreamReg, maniRes.upstreamRepo, maniRes.upstreamTag)
-		logrus.Warnf("mani '%s': %s", imgName, maniRes.maniDigest)
 		mani := types.Manifest{
 			SqlID:     maniRes.maniID,
 			Digest:    maniRes.maniDigest,
