@@ -6,7 +6,6 @@ import (
 
 	imgTypes "github.com/containers/image/types"
 	"github.com/minio/minio-go/v7"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -25,8 +24,7 @@ func (m Minio) ConfigGetBytes(ctx context.Context, path string) (b []byte, err e
 	defer obj.Close()
 	b, e := io.ReadAll(obj)
 	if e != nil {
-		err = errors.Wrap(e, "failed to read config")
-		logrus.Fatal(err)
+		return nil, e
 	}
 	return
 }

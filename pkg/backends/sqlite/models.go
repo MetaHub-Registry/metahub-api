@@ -23,6 +23,7 @@ type Models struct {
 	Filter       Filter
 	Platform     Platform
 	Collection   Collection
+	Layer        Layer
 	Manifest     Manifest
 	ManifestList ManifestList
 	Config       Config

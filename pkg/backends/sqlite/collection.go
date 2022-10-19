@@ -1,7 +1,6 @@
 package sqlite
 
 import (
-	"database/sql"
 	"fmt"
 
 	"github.com/sirupsen/logrus"
@@ -68,7 +67,7 @@ type colRes struct {
 }
 
 func (c *Collection) GetAll() (cols []Collection, err error) {
-	q := `SELECT DISTINCT colID, colRepo, colTag, maniID, upstreamReg, upstreamRepo, upstreamTag, os, arch, variant, features, profile FROM main.v_get_collections`
+	q := `SELECT DISTINCT colID, colRepo, colTag, maniID, upstreamReg, upstreamRepo, upstreamTag FROM main.v_get_collections`
 	rows, err := db.Query(q)
 	if err != nil {
 		logrus.Error(err)
@@ -88,11 +87,6 @@ func (c *Collection) GetAll() (cols []Collection, err error) {
 			&cRes.UpReg,
 			&cRes.UpRepo,
 			&cRes.UpTag,
-			&cRes.OS,
-			&cRes.Arch,
-			&cRes.Variant,
-			&cRes.Features,
-			&cRes.Profile,
 		)
 		if err != nil {
 			logrus.Error(err)
@@ -129,55 +123,23 @@ func (c *Collection) GetAll() (cols []Collection, err error) {
 	return
 }
 
-func createCol(row *sql.Rows) (col Collection, err error) {
-	cRes := colRes{}
-	err = row.Scan(
-		&cRes.ColID,
-		&cRes.ColRepo,
-		&cRes.ColTag,
-		&cRes.ManiID,
-		&cRes.MlDigest,
-		&cRes.UpReg,
-		&cRes.UpRepo,
-		&cRes.UpTag,
-		&cRes.OS,
-		&cRes.Arch,
-		&cRes.Variant,
-		&cRes.Features,
-		&cRes.Profile,
-	)
-	if err != nil {
-		logrus.Error(err)
-	}
-	if col.ManifestCount == 0 {
-		col.ID = int64(cRes.ColID)
-		col.Repo = cRes.ColRepo
-		col.Tag = cRes.ColTag
-	}
-	// Add the manifest to the collection
-	m := Manifest{
-		ID: int64(cRes.ManiID),
-		Upstream: Upstream{
-			Reg:  cRes.UpReg,
-			Repo: cRes.UpRepo,
-			Tag:  cRes.UpTag,
-		},
-		PlatformSpec: Platform{
-			OS:       cRes.OS,
-			Arch:     cRes.Arch,
-			Variant:  cRes.Variant,
-			Features: cRes.Features,
-		},
-		Profile: Profile{Name: cRes.Profile},
-	}
-	key := fmt.Sprintf("%s/%s:%s", cRes.UpReg, cRes.UpRepo, cRes.UpTag)
-	col.Manifests[key] = m
-	col.ManifestCount++
-	return
-}
-
 func (c *Collection) GetCollectionByID(colID int64) (col Collection, err error) {
-	q := fmt.Sprintf(`SELECT * FROM main.v_get_collections WHERE colID = %d`, colID)
+	q := fmt.Sprintf(`SELECT
+		colID,
+		colRepo,
+		colTag,
+		maniID,
+		manifestlistDigest,
+		upstreamReg,
+		upstreamRepo,
+		upstreamTag,
+		os,
+		arch,
+		variant,
+		features,
+		profile
+	FROM
+		main.v_get_collections WHERE colID = %d`, colID)
 	rows, err := db.Query(q)
 	if err != nil {
 		logrus.Error(err)
@@ -238,7 +200,7 @@ func (c *Collection) GetCollectionByID(colID int64) (col Collection, err error) 
 }
 
 func (c *Collection) GetTypesManifestByCollectionID(colID int64) (manis []types.Manifest, err error) {
-	q := fmt.Sprintf(`SELECT * FROM main.v_get_manifest WHERE colID=%d;`, colID)
+	q := fmt.Sprintf(`SELECT configDigest,configID,maniDigest,maniID,os,arch,variant,features,upstreamReg,upstreamRepo,upstreamTag FROM main.manifests_view WHERE colID=%d;`, colID)
 	rows, err := db.Query(q)
 	if err != nil {
 		logrus.Error(err)
@@ -299,7 +261,7 @@ func (c Collection) GetConfigByConfigID(cfgID int64) (cfg types.Config, err erro
 		configs.digest AS configDigest,
 		configs.id AS configID,
 		configs.size AS configSize,
-		configs.mediaType AS configMediaType
+		configs.media_type AS configMediaType
 	FROM configs WHERE configs.id=%d;`
 	query := fmt.Sprintf(q, cfgID)
 	rows, err := db.Query(query)
@@ -326,7 +288,21 @@ func (c Collection) GetConfigByConfigID(cfgID int64) (cfg types.Config, err erro
 
 func (c *Collection) GetCollectionsByRepoLike(repo string) (cols []Collection, err error) {
 	cols = []Collection{}
-	q := fmt.Sprintf(`SELECT * FROM main.v_get_collections WHERE colRepo LIKE '%s%%';`, repo)
+	q := fmt.Sprintf(`SELECT
+		colID,
+		colRepo,
+		colTag,
+		maniID,
+		upstreamReg,
+		upstreamRepo,
+		upstreamTag,
+		os,
+		arch,
+		variant,
+		features,
+		profile
+	FROM
+		main.v_get_collections WHERE colRepo LIKE '%s%%';`, repo)
 	rows, err := db.Query(q)
 	if err != nil {
 		logrus.Error(err)
@@ -341,7 +317,6 @@ func (c *Collection) GetCollectionsByRepoLike(repo string) (cols []Collection, e
 			&cRes.ColRepo,
 			&cRes.ColTag,
 			&cRes.ManiID,
-			&cRes.ManiDigest,
 			&cRes.UpReg,
 			&cRes.UpRepo,
 			&cRes.UpTag,
@@ -465,112 +440,5 @@ func (c *Collection) CreateCollectionView() (err error) {
 	INNER JOIN profile
 		ON profile.id = profile_filter.profile_id`
 	_, err = db.Exec(q)
-	return
-}
-
-func (c Collection) createCollectionTable() (err error) {
-	tableName := "collection"
-	q := fmt.Sprintf(`PRAGMA table_info(%s)`, tableName)
-	rows, err := db.Query(q)
-	if err != nil {
-		logrus.Fatal(err)
-	}
-	defer rows.Close()
-	if rows.Next() {
-		logrus.Infof("Table '%s' already exists!", tableName)
-		return
-	}
-	s := `CREATE TABLE IF NOT EXISTS %s (
-		    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-        "repo" TEXT,
-		"tag" int
-		);`
-	stmt := fmt.Sprintf(s, tableName)
-	query, err := db.Prepare(stmt)
-	if err != nil {
-		logrus.Fatal(err)
-	}
-	_, err = query.Exec()
-	if err != nil {
-		logrus.Fatal(err)
-	}
-	logrus.Infof("Table '%s' created successfully!", tableName)
-	return
-}
-
-func (c Collection) createCollectionXTable() (err error) {
-	tableName := "collection_xtable"
-	q := fmt.Sprintf(`PRAGMA table_info(%s)`, tableName)
-	rows, err := db.Query(q)
-	if err != nil {
-		logrus.Fatal(err)
-	}
-	defer rows.Close()
-	if rows.Next() {
-		logrus.Infof("Table '%s' already exists!", tableName)
-		return
-	}
-	s := `CREATE TABLE IF NOT EXISTS %s (
-		    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-        "collection_id" INT, 
-		"manifestlist_id" INT,
-		FOREIGN KEY (collection_id)
-			REFERENCES collection (id)
-		FOREIGN KEY (manifestlist_id)
-			REFERENCES manifestlist (id)
-		);`
-	stmt := fmt.Sprintf(s, tableName)
-	query, err := db.Prepare(stmt)
-	if err != nil {
-		logrus.Fatal(err)
-	}
-	_, err = query.Exec()
-	if err != nil {
-		logrus.Fatal(err)
-	}
-	logrus.Infof("Table '%s' created successfully!", tableName)
-	return
-}
-
-func (c Collection) CreateTables() (err error) {
-	err = c.createCollectionTable()
-	if err != nil {
-		return
-	}
-	err = c.createCollectionXTable()
-	if err != nil {
-		return
-	}
-	return
-}
-
-func (c Collection) Insert(i *types.Collection) (err error) {
-	q := `INSERT INTO collection (repo, tag) VALUES (?, ?)`
-	stmt, err := db.Prepare(q)
-	if err != nil {
-		logrus.Error(err)
-		return
-	}
-	res, err := stmt.Exec(i.Repo, i.Tag)
-	if err != nil {
-		logrus.Error(err)
-		return
-	}
-	i.SqlID, err = res.LastInsertId()
-	return
-}
-
-func (c Collection) InsertXTable(colID, mlID int64) (err error) {
-	q := `INSERT INTO collection_xtable (collection_id, manifestlist_id) VALUES (?, ?)`
-	stmt, err := db.Prepare(q)
-	if err != nil {
-		logrus.Error(err)
-		return
-	}
-	_, err = stmt.Exec(colID, mlID)
-	if err != nil {
-		logrus.Error(err)
-		return
-	}
 	return
 }

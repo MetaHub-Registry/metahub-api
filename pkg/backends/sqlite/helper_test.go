@@ -13,14 +13,16 @@ import (
 var th TestHelper
 
 type TestHelper struct {
-	drvDB      *driver.DB
-	Collection Collection
-	Config     Config
-	Filter     Filter
-	Manifest   Manifest
-	Platform   Platform
-	Profile    Profile
-	Upstream   Upstream
+	drvDB        *driver.DB
+	Collection   Collection
+	Config       Config
+	Filter       Filter
+	Layer        Layer
+	Manifest     Manifest
+	ManifestList ManifestList
+	Platform     Platform
+	Profile      Profile
+	Upstream     Upstream
 }
 
 func NewTestHelper(fname string) TestHelper {
@@ -30,14 +32,16 @@ func NewTestHelper(fname string) TestHelper {
 	}
 	db = drvDB.SQL
 	return TestHelper{
-		drvDB:      drvDB,
-		Collection: Collection{},
-		Config:     Config{},
-		Filter:     Filter{},
-		Manifest:   Manifest{},
-		Platform:   Platform{},
-		Profile:    Profile{},
-		Upstream:   Upstream{},
+		drvDB:        drvDB,
+		Collection:   Collection{},
+		Config:       Config{},
+		Filter:       Filter{},
+		Layer:        Layer{},
+		Manifest:     Manifest{},
+		ManifestList: ManifestList{},
+		Platform:     Platform{},
+		Profile:      Profile{},
+		Upstream:     Upstream{},
 	}
 }
 
@@ -47,6 +51,6 @@ func (th *TestHelper) GetSQL() *sql.DB {
 
 func TestMain(m *testing.M) {
 	fmt.Println("TestMain")
-	th = NewTestHelper("../../../misc/sqlite/metahub_20221018.db")
+	th = NewTestHelper("../../../misc/sqlite/metahub_20221018-1.db")
 	os.Exit(m.Run())
 }

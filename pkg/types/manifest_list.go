@@ -37,6 +37,8 @@ func (ml ManifestList) ToOCIBytes() (b []byte) {
 }
 
 func (ml ManifestList) WriteWWWHeader(w http.ResponseWriter) {
+	// TODO: Not sure if that is stable over time. We might need to
+	//
 	b := ml.ToOCIBytes()
 	size := len(b)
 	w.Header().Set("Content-Type", ml.MediaType)

@@ -2,6 +2,8 @@ package types
 
 import (
 	"encoding/json"
+	"fmt"
+	"net/http"
 
 	"github.com/docker/distribution"
 	"github.com/opencontainers/go-digest"
@@ -37,4 +39,17 @@ func (c Config) ToDescriptor() distribution.Descriptor {
 		MediaType: c.MediaType,
 		Size:      c.Size,
 	}
+}
+
+func (c Config) WriteWWWHeader(w http.ResponseWriter) {
+	b := c.Data
+	size := len(b)
+	w.Header().Set("Content-Type", c.MediaType)
+	w.Header().Set("Content-Length", fmt.Sprint(size))
+	w.Header().Set("Docker-Content-Digest", c.Digest)
+	w.Header().Set("Etag", c.Digest)
+}
+
+func (c Config) WriteWWWBody(w http.ResponseWriter) {
+	w.Write(c.Data)
 }
