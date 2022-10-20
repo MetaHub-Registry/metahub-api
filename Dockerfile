@@ -15,6 +15,14 @@ RUN --mount=type=cache,target=/go/pkg/mod go mod tidy
 ENV CGO_ENABLED=1 GOOS=linux
 RUN --mount=type=cache,target=/go/pkg/mod go build -a -ldflags '-extldflags "-static"' .
 COPY ./misc/docker/dev/bash_history /root/.bash_history
+
+FROM alpine:3.16.2 AS prod
+ENV METAHUB_SERVER_PORT=80
+COPY --from=go /go/metahub-api/metahub-api /usr/bin/metahub-api
+COPY ./metahub.db /var/lib/metahub.db
+CMD ["metahub-api", "serve"]
+
+
 FROM alpine:3.16.2
 ENV METAHUB_SERVER_PORT=80
 COPY --from=go /go/metahub-api/metahub-api /usr/bin/metahub-api

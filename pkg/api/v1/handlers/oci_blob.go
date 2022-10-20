@@ -45,6 +45,18 @@ func (h Handlers) BlobGetHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if found {
+		/*
+			// Get Presigned URL
+			if svcConfig.Storage.RedirectBlob {
+				psUrl, err := storage.GetPresignedUrl(digest.String())
+				if err == nil {
+					l.Debugf("307 temporariy redirect blob from '%s' to MinIO/S3 presigend URL", repository)
+					http.Redirect(w, r, psUrl, http.StatusTemporaryRedirect)
+					MetaHubBlobRedirectBytes.With(prometheus.Labels{"repo": repository, "digest": utils.ShortenDigest(digest.String())}).Add(float64(blob.Size))
+					return
+				}
+			}
+		*/
 		layer.WriteWWWHeader(w)
 		layer.WriteWWWBody(w)
 		return
@@ -54,3 +66,41 @@ func (h Handlers) BlobGetHandler(w http.ResponseWriter, r *http.Request) {
 	e := helper.NewErrPayload("NAME_UNKNOWN", msg, msg)
 	helper.WriteOCIErrror(w, http.StatusNotFound, e)
 }
+
+/*
+func (db NeoMinDatabase) GetPresignedUrl(digest string) (urlStr string, err error) {
+	l := log.WithFields(log.Fields{
+		"package": "neomin",
+		"db":      "minio",
+		"func":    "GetPresignedUrl",
+		"digest":  utils.ShortenDigest(digest),
+	})
+	mediaType, err := db.GetMediaTypeByDigest(digest)
+	if err != nil {
+		return
+	}
+	switch mediaType {
+	case "image.rootfs.diff.tar.gzip":
+	default:
+		err = fmt.Errorf("mediaType '%s' not supposed to be stored in the blobs bucket. Only 'image.rootfs.diff.tar.gzip'", mediaType)
+		return
+	}
+	// Set request parameters for content-disposition.
+	reqParams := make(url.Values)
+
+	// Generates a presigned url which expires in a day.
+	psUrl, err := db.layerClient.PresignedGetObject(
+		context.Background(),
+		db.MinioConfig.GetBucketName("layers"),
+		digest,
+		time.Second*30*60,
+		reqParams)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	l.Debug("Successfully generated presigned URL")
+	urlStr = psUrl.String()
+	return
+}
+*/
