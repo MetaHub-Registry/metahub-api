@@ -16,5 +16,5 @@ fi
 
 aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin 193198941246.dkr.ecr.eu-west-1.amazonaws.com
 
-docker build -t 193198941246.dkr.ecr.eu-west-1.amazonaws.com/qnib-golang/metahub-api:${GO_PIPELINE_COUNTER} .
-docker push 193198941246.dkr.ecr.eu-west-1.amazonaws.com/qnib-golang/metahub-api:${GO_PIPELINE_COUNTER}
+docker build -f Dockerfile.legacy -t 193198941246.dkr.ecr.eu-west-1.amazonaws.com/qnib-golang/metahub-api:${GO_PIPELINE_LABEL} .
+docker push 193198941246.dkr.ecr.eu-west-1.amazonaws.com/qnib-golang/metahub-api:${GO_PIPELINE_LABEL}
