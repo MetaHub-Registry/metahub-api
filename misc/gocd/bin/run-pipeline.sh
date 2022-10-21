@@ -17,6 +17,5 @@ curl -sH "Authorization: bearer ccca261ed4b37169d257e55ec4cdcc891daf5b09" \
      -o metahub.db "${GO_SERVER_URL}/files/${GO_DEPENDENCY_LOCATOR_METAHUB_ADMIN}/Job/metahub.db"
 
 $(aws --profile=ecr ecr get-login --no-include-email --region eu-west-1)
-
-docker build -f Dockerfile.legacy -t 193198941246.dkr.ecr.eu-west-1.amazonaws.com/qnib-golang/metahub-api:${GO_PIPELINE_LABEL} .
-docker push 193198941246.dkr.ecr.eu-west-1.amazonaws.com/qnib-golang/metahub-api:${GO_PIPELINE_LABEL}
+docker build -f Dockerfile.legacy -t 193198941246.dkr.ecr.eu-west-1.amazonaws.com/metahub-api-prod:gocd-${GO_PIPELINE_LABEL} .
+docker push 193198941246.dkr.ecr.eu-west-1.amazonaws.com/metahub-api-prod:gocd-${GO_PIPELINE_LABEL}
