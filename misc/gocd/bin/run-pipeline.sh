@@ -4,19 +4,6 @@ if [[ ! -z ${GO_PIPELINE_LABEL} ]];then
     env |sort >> gocd.env 
 fi
 
-if [[ -f /run/secrets/aws-ecr-access-key ]];then
-    export AWS_ACCESS_KEY=$(cat /run/secrets/aws-ecr-access-key)
-else 
-    echo "ERROR: No AWS ECR ACCESS KEY found (/run/secrets/aws-ecr-access-key)"
-    exit 1
-fi
-if [[ -f /run/secrets/aws-ecr-secret-access-key ]];then
-    export AWS_SECRET_ACCESS_KEY=$(cat /run/secrets/aws-ecr-secret-access-key)
-else 
-    echo "ERROR: No AWS ECR SECRET KEY found (/run/secrets/aws-ecr-secret-access-key)"
-    exit 1
-fi
-
 if [[ -f /run/secrets/gocd-token ]];then
     export GOCD_TOKEN=$(cat /run/secrets/gocd-token)
 else 
