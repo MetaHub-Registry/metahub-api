@@ -15,8 +15,8 @@ func (m Minio) ConfigGetBytes(ctx context.Context, path string) (b []byte, err e
 		"func":    "ConfigGetObj",
 	})
 	_ = l
-	cli := m.BucketConfig[configsBucket].Client
-	obj, err := cli.GetObject(ctx, configsBucket, path, minio.GetObjectOptions{})
+	cli := m.BucketConfig[configsBucketKey].Client
+	obj, err := cli.GetObject(ctx, m.GetConfigsBucketName(), path, minio.GetObjectOptions{})
 	if err != nil {
 		logrus.Errorf("Error getting config: %s", err)
 		return

@@ -36,9 +36,9 @@ func FetchObject(path string) (err error) {
 */
 
 const (
-	layerBucket     = "layers"
-	manifestsBucket = "manifests"
-	configsBucket   = "configs"
+	layersBucketKey    = "layers"
+	manifestsBucketKey = "manifests"
+	configsBucketKey   = "configs"
 )
 
 type BucketConfig struct {
@@ -54,6 +54,18 @@ type BucketConfig struct {
 
 type Minio struct {
 	BucketConfig map[string]BucketConfig
+}
+
+func (m Minio) GetManifestsBucketName() string {
+	return m.BucketConfig[manifestsBucketKey].Bucket
+}
+
+func (m Minio) GetLayersBucketName() string {
+	return m.BucketConfig[layersBucketKey].Bucket
+}
+
+func (m Minio) GetConfigsBucketName() string {
+	return m.BucketConfig[configsBucketKey].Bucket
 }
 
 func NewMinio(cfgFile string) (m Minio, err error) {
@@ -74,13 +86,19 @@ func NewMinio(cfgFile string) (m Minio, err error) {
 
 		// Search config in home directory with name ".cobra-example" (without extension).
 		viper.AddConfigPath(home)
-		viper.SetConfigName(".metahub-admin")
+		viper.SetConfigName(".metahub-api")
 		viper.SetConfigType("yaml")
 	}
 	m.BucketConfig = map[string]BucketConfig{
-		layerBucket:     {},
-		manifestsBucket: {},
-		configsBucket:   {},
+		layersBucketKey: {
+			Bucket: layersBucketKey,
+		},
+		manifestsBucketKey: {
+			Bucket: manifestsBucketKey,
+		},
+		configsBucketKey: {
+			Bucket: configsBucketKey,
+		},
 	}
 	bc := BucketConfig{
 		URL:      viper.GetString("minio.url"),
@@ -100,6 +118,12 @@ func NewMinio(cfgFile string) (m Minio, err error) {
 			bCfg.URL = viper.GetString(key)
 		} else {
 			bCfg.URL = bc.URL
+		}
+		key = fmt.Sprintf("minio.%s.bucket", b)
+		if viper.IsSet(key) {
+			bCfg.Bucket = viper.GetString(key)
+		} else {
+			bCfg.Bucket = bc.Bucket
 		}
 		key = fmt.Sprintf("minio.%s.region", b)
 		if viper.IsSet(key) {

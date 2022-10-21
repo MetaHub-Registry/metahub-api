@@ -18,8 +18,8 @@ func (m Minio) ManifestGetObj(ctx context.Context, path string) (mani types.Mani
 		"func":       "ManifestGetObj",
 		"path":       path,
 	})
-	cli := m.BucketConfig[manifestsBucket].Client
-	obj, err := cli.GetObject(ctx, manifestsBucket, path, minio.GetObjectOptions{})
+	cli := m.BucketConfig[manifestsBucketKey].Client
+	obj, err := cli.GetObject(ctx, m.GetManifestsBucketName(), path, minio.GetObjectOptions{})
 	if err != nil {
 		logrus.Errorf("Error getting manifest: %s", err)
 		return
