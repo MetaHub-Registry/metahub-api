@@ -11,22 +11,7 @@ import (
 	"github.com/metahub-registry/metahub-api/pkg/backends/magazine"
 )
 
-const (
-	envKeyJaegerEndpointURL = "JAEGER_ENDPOINT_URL"
-	addr                    = ":8090"
-	serviceName             = "metahub-api"
-)
-
-//var tracer oteltrace.Tracer
-
-// func Initialize(ncfg config.NeoConfig, db *driver.DB) *chi.Mux {
 func Initialize(mag magazine.Magazine) *chi.Mux {
-	/*var err error
-	tracer, err = utils.NewTracer(serviceName, os.Getenv(envKeyJaegerEndpointURL))
-	if err != nil {
-		log.Fatalf("unable to initialize tracer due: %v", err)
-	}
-	*/
 	// Handlers
 	h := handlers.NewHandlers("dev", mag)
 	// define router
@@ -38,7 +23,6 @@ func Initialize(mag magazine.Magazine) *chi.Mux {
 		middleware.Logger,
 		middleware.Recoverer,            //middleware to recover from panics
 		middleware.Heartbeat("/health"), //for heartbeat process such as Kubernetes liveprobeness
-		//otelchi.Middleware(serviceName, otelchi.WithChiRoutes(router)), //for tracing
 		cors.Handler(cors.Options{
 			// AllowedOrigins:   []string{"https://foo.com"}, // Use this to allow specific origin hosts
 			AllowedOrigins: []string{"https://*", "http://*"},
@@ -56,7 +40,6 @@ func Initialize(mag magazine.Magazine) *chi.Mux {
 	router.Route("/api/v1", func(r chi.Router) {
 		r.Post("/collections", h.CollectionGetAll)
 		r.Post("/collection", h.CollectionGetOne)
-		//r.Mount("/metrics", nil)        //for monitoring agents such as prometheus
 	})
 	router.Get("/auth", h.AuthHandler)
 	/////// Subroute with AuthMiddleware to trigger login
@@ -77,6 +60,5 @@ func Initialize(mag magazine.Magazine) *chi.Mux {
 		r.Get("/{repo}/{image}/tags/list", h.TagGetHandler)
 		r.Get("/_catalog", h.CatalogGetHandler)
 	})
-
 	return router
 }
