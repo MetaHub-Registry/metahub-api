@@ -8,7 +8,7 @@ ENV CGO_ENABLED=1 GOOS=linux
 RUN go build -a -ldflags '-extldflags "-static"' .
 
 FROM alpine:3.16.2
-RUN apk add py3-pip jq \
+RUN apk add py3-pip jq bash \
  && pip3 install wildq
 ENV METAHUB_API_PORT=80
 ENV METAHUB_DB=/var/lib/metahub.db
