@@ -1,5 +1,9 @@
 #!/bin/bash
 
+if [[ ! -z ${GO_PIPELINE_LABEL} ]];then
+    env |sort >> gocd.env 
+fi
+
 if [[ -f /run/secrets/aws-ecr-access-key ]];then
     export AWS_ACCESS_KEY=$(cat /run/secrets/aws-ecr-access-key)
 else 
