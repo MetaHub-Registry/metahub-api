@@ -52,13 +52,17 @@ func (h Handlers) AuthHandler(w http.ResponseWriter, r *http.Request) {
 func (h Handlers) AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var realm string
-		switch r.Proto {
-		case "HTTP/1.0":
-			realm = "http://" + r.Host
-		case "HTTP/1.1":
-			realm = "http://" + r.Host
-		case "HTTP/2.0":
-			realm = "https://" + r.Host
+		if r.Host == "metahub-registry.org" {
+			realm = "https://metahub-registry.org"
+		} else {
+			switch r.Proto {
+			case "HTTP/1.0":
+				realm = "http://" + r.Host
+			case "HTTP/1.1":
+				realm = "http://" + r.Host
+			case "HTTP/2.0":
+				realm = "https://" + r.Host
+			}
 		}
 		//dumpedBody, _ := httputil.DumpRequest(r, true)
 		//fmt.Printf("%s", dumpedBody)
