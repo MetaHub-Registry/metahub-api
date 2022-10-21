@@ -50,8 +50,16 @@ func (h Handlers) AuthHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h Handlers) AuthMiddleware(next http.Handler) http.Handler {
-	realm := "dev:80"
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var realm string
+		switch r.Proto {
+		case "HTTP/1.0":
+			realm = "http://" + r.Host
+		case "HTTP/1.1":
+			realm = "http://" + r.Host
+		case "HTTP/2.0":
+			realm = "https://" + r.Host
+		}
 		//dumpedBody, _ := httputil.DumpRequest(r, true)
 		//fmt.Printf("%s", dumpedBody)
 		authorizationHeader := r.Header.Get("authorization")
@@ -132,9 +140,8 @@ func (h Handlers) AuthMiddleware(next http.Handler) http.Handler {
 type oauthError string
 
 var (
-	invalidRequest    oauthError = "invalid_request"
-	invalidToken      oauthError = "invalid_token"
-	insufficientScope oauthError = "insufficient_scope"
+	invalidRequest oauthError = "invalid_request"
+	invalidToken   oauthError = "invalid_token"
 )
 
 // unauthorized returns a request to the user for auth - e.g., "get a token from this endpoint"
@@ -146,9 +153,7 @@ func unauthorized(w http.ResponseWriter, realm string, err oauthError, format st
 	_ = l
 	description := fmt.Sprintf(format, v...)
 	authUrl := realm + "/auth"
-	authUrl = "http://dev:80/auth"
 	authenticateHeader := fmt.Sprintf("Bearer realm=%q,error=%q,error_description=%q", authUrl, err, description)
-	///realm="https://auth.docker.io/token",service="registry.docker.io",scope="repository:samalba/my-app:pull,push"
 
 	//l.Infof("authenticateHeader: %s", authenticateHeader)
 	w.Header().Add("WWW-Authenticate", authenticateHeader)
