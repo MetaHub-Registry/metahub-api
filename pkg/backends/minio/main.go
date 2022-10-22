@@ -164,6 +164,10 @@ func NewMinio(cfgFile string) (m Minio, err error) {
 	return
 }
 
+func (m Minio) GetLayerBucketConfig() BucketConfig {
+	return m.BucketConfig[layersBucketKey]
+}
+
 func (m Minio) ConnectClients() (err error) {
 	for _, v := range reflect.ValueOf(m.BucketConfig).MapKeys() {
 		b := fmt.Sprintf("%s", v)
