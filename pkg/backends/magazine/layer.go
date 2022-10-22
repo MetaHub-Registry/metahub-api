@@ -8,7 +8,15 @@ import (
 	"github.com/metahub-registry/metahub-api/pkg/types"
 )
 
+func (mag Magazine) Layer_GetPresignedUrlByHTTPRequest(r *http.Request) (psUrl string, err error) {
+	ctx := context.Background()
+	req := types.NewRequest(r)
+	return mag.Minio.LayerGetPreSignedUrl(ctx, req.Digest)
+}
+
 func (mag Magazine) Layer_GetByHTTPRequest(r *http.Request) (layer types.Layer, found bool, err error) {
+	ctx := context.Background()
+
 	req := types.NewRequest(r)
 	// Fetch Layer from SQLite
 	layer, found, err = mag.SQlite.Layer.LayerGetByDigest(req.Digest)
@@ -21,7 +29,6 @@ func (mag Magazine) Layer_GetByHTTPRequest(r *http.Request) (layer types.Layer, 
 		return
 	}
 	// Fetch Blob
-	ctx := context.Background()
 	b, err := mag.Minio.LayerGetBytes(ctx, req.Digest)
 	switch {
 	case err != nil && err.Error() == "The specified key does not exist.":

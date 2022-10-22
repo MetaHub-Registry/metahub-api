@@ -24,6 +24,7 @@ services:
       - .:/go/metahub
     networks:
      - api-internal
+     - mh-data
     environment:
       DEV_URL: dev:80
       CE_URL: ce:80

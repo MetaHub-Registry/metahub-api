@@ -11,3 +11,4 @@ minio:
     bucket: configs
   layers:
     bucket: layers
+    redirect: true

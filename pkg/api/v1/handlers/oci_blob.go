@@ -34,6 +34,19 @@ func (h Handlers) BlobGetHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// OK, let's check if it is a layer
+	// If redirect is enabled, we need to fetch the PreSignedURL
+	if h.mag.Minio.GetLayerBucketConfig().Redirect {
+		psUrl, err := h.mag.Layer_GetPresignedUrlByHTTPRequest(r)
+		if err != nil {
+			e := helper.NewErrPayload("INTERNAL_ERROR", "failed to fetch layer presigned url", err.Error())
+			helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
+		} else {
+			logrus.Infof("307 temporariy redirect blob from '%s' to MinIO/S3 presigend URL: %s", req.Repo, psUrl)
+			http.Redirect(w, r, psUrl, http.StatusTemporaryRedirect)
+			return
+		}
+	}
+
 	layer, found, err := h.mag.Layer_GetByHTTPRequest(r)
 	if err != nil {
 		// 1. FALSE
