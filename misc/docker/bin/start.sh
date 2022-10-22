@@ -8,6 +8,7 @@ cat /opt/metahub-api/metahub-api.yaml \
 	|wildq -M -i yaml '.minio.url = "s3.amazonaws.com"' \
 	|wildq -M -i yaml '.minio.configs.bucket = "CONFIGS_BUCKET"' | sed -e "s/CONFIGS_BUCKET/${CONFIGS_BUCKET}/" \
 	|wildq -M -i yaml '.minio.layers.bucket = "LAYERS_BUCKET"' | sed -e "s/LAYERS_BUCKET/${LAYERS_BUCKET}/" \
+	|wildq -M -i yaml '.minio.layers.redirect = "true"' \
 	|wildq -M -i yaml '.minio.manifests.bucket = "MANIFESTS_BUCKET"' | sed -e "s/MANIFESTS_BUCKET/${MANIFESTS_BUCKET}/" \
 	> ${CFG_FILE}
 
