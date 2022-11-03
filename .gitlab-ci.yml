@@ -39,8 +39,8 @@ container:ecr:
     - tags
   before_script:
     - apk add --no-cache curl jq python3 py3-pip git go
-    - git clone https://gitlab-ci-token:${CI_JOB_TOKEN}@github.com/metahub-registry/metahub-core /tmp/github.com/metahub-registry/metahub-core
-    - go mod edit -replace github.com/metahub-registry/metahub-core=/tmp/github.com/metahub-registry/metahub-core   
+    - git clone https://gitlab-ci-token:${CI_JOB_TOKEN}@github.com/metahub-registry/metahub-core exp/metalib
+    - go mod edit -replace github.com/metahub-registry/metahub-core=/go/metahub-api/exp/metalib   
     - pip install awscli
     - aws ecr get-login-password --region ${AWS_REGION}| docker login --username AWS --password-stdin $DOCKER_REGISTRY
   script:
