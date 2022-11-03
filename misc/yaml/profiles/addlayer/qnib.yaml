@@ -1,0 +1,15 @@
+profile:
+  name: library/addlayer:qnib
+  actions:
+    - name: manifest-add
+      event: post-manifest-get
+      args:
+        # This requires a tag
+        layerRepository: qnib/layer-awscli:2022-06-08.1
+        repository: qnib/.*
+        environment:
+          prepend:
+            PATH: /usr/local/aws-cli/bin
+        labels:
+          LAYER_PATH: /usr/local/bin/aws
+          LAYER_ARCH: x86_64

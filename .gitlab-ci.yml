@@ -10,6 +10,9 @@ test:
     #variables:
     #  DOCKER_HOST: tcp://docker:2375/
     #  DOCKER_DRIVER: overlay2
+    before_script:
+      - git clone https://gitlab-ci-token:${CI_JOB_TOKEN}@github.com/metahub-registry/metahub-core /tmp/github.com/metahub-registry/metahub-core
+      - go mod edit -replace github.com/metahub-registry/metahub-core=/tmp/github.com/metahub-registry/metahub-core   
     script: 
       - go mod tidy
       - go test -short -timeout 60s ./... -coverprofile coverage.txt
@@ -35,6 +38,8 @@ container:ecr:
   only:
     - tags
   before_script:
+    - git clone https://gitlab-ci-token:${CI_JOB_TOKEN}@github.com/metahub-registry/metahub-core /tmp/github.com/metahub-registry/metahub-core
+    - go mod edit -replace github.com/metahub-registry/metahub-core=/tmp/github.com/metahub-registry/metahub-core   
     - apk add --no-cache curl jq python3 py3-pip
     - pip install awscli
     - aws ecr get-login-password --region ${AWS_REGION}| docker login --username AWS --password-stdin $DOCKER_REGISTRY

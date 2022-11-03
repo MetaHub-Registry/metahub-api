@@ -1,0 +1,8 @@
+profile:
+  name: library/allowlist:latest
+  actions:
+    - name: manifest-filter
+      event: pre-manifest-get
+      args:
+        allow:
+         - vanessa/salad

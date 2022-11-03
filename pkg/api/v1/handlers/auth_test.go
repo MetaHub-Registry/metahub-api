@@ -1,0 +1,96 @@
+package handlers
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/metahub-registry/metahub-core/pkg/utils"
+)
+
+func Test_Auth_AuthHandler_Success(t *testing.T) {
+	bs := utils.NewBootstrap()
+	bs.AddBootstrap("users")
+	bs.SetSqlEmptyAll()
+	br, err := SetupTest(bs)
+	assert.NoError(t, err)
+	defer TeardownTest(bs)
+	/// Request
+	token, err := br.Get("user:test#bearer")
+	assert.NoError(t, err)
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodHead, "/auth?account=qnib", nil)
+	r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	h.AuthHandler(w, r)
+	assert.Equal(t, http.StatusOK, w.Code)
+	var js map[string]string
+	err = json.Unmarshal(w.Body.Bytes(), &js)
+	assert.NoError(t, err)
+	gotToken, ok := js["token"]
+	assert.True(t, ok)
+	assert.Equal(t, "dGVzdDp0ZXN0", gotToken)
+}
+
+func Test_Auth_AuthHandler_Fail(t *testing.T) {
+	bs := utils.NewBootstrap()
+	bs.SetSqlEmptyAll()
+	_, err := SetupTest(bs)
+	assert.NoError(t, err)
+	defer TeardownTest(bs)
+	/// Request
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodHead, "/auth", nil)
+	h.AuthHandler(w, r)
+	assert.Equal(t, http.StatusOK, w.Code)
+	var js map[string]string
+	err = json.Unmarshal(w.Body.Bytes(), &js)
+	assert.NoError(t, err)
+	gotToken, ok := js["token"]
+	assert.True(t, ok)
+	assert.Equal(t, "REDACTED-IN-HISTORY", gotToken)
+	/// empty auth
+	r1 := httptest.NewRequest(http.MethodHead, "/auth?account=qnib", nil)
+	r1.Header.Set("Authorization", "")
+	w1 := httptest.NewRecorder()
+	h.AuthHandler(w1, r1)
+	assert.Equal(t, http.StatusUnauthorized, w1.Code)
+	// invalid Bearer
+	r2 := httptest.NewRequest(http.MethodHead, "/auth?account=qnib", nil)
+	r2.Header.Set("Authorization", "Bearer A B C")
+	w2 := httptest.NewRecorder()
+	h.AuthHandler(w2, r2)
+	assert.Equal(t, http.StatusUnauthorized, w2.Code)
+}
+
+func Test_Auth_AuthMiddlewareHandler_WithUser(t *testing.T) {
+	bs := utils.NewBootstrap()
+	bs.AddBootstrap("users")
+	bs.SetSqlEmptyAll()
+	br, err := SetupTest(bs)
+	assert.NoError(t, err)
+	defer TeardownTest(bs)
+	/// Request
+	token, err := br.Get("user:test#bearer")
+	assert.NoError(t, err)
+	// Real user
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodHead, "/v2", nil)
+	r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	h.AuthMiddlewareHandler(w, r)
+	assert.Equal(t, http.StatusOK, w.Code)
+	// Empty auth
+	w1 := httptest.NewRecorder()
+	r1 := httptest.NewRequest(http.MethodHead, "/v2", nil)
+	r1.Header.Set("Authorization", "")
+	h.AuthMiddlewareHandler(w1, r1)
+	assert.Equal(t, http.StatusUnauthorized, w1.Code)
+	// invalid Bearer
+	w2 := httptest.NewRecorder()
+	r2 := httptest.NewRequest(http.MethodHead, "/v2", nil)
+	r2.Header.Set("Authorization", "Bearer A B C")
+	h.AuthMiddlewareHandler(w2, r2)
+	assert.Equal(t, http.StatusUnauthorized, w2.Code)
+}

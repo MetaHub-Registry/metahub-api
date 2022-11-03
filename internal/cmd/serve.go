@@ -12,8 +12,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/metahub-registry/metahub-api/pkg/api/v1/router"
-	"github.com/metahub-registry/metahub-api/pkg/backends/magazine"
 	"github.com/metahub-registry/metahub-api/pkg/config"
+	"github.com/metahub-registry/metahub-core/pkg/backends/magazine"
 )
 
 // serveCmd represents the parse command
@@ -40,26 +40,7 @@ func init() {
 func sCmd(cmd *cobra.Command, args []string) {
 	config.SetCommandValues(cmd)
 	port, _ := cmd.Flags().GetInt("port")
-	/*
-		fname, _ := cmd.Flags().GetString("metahub-db")
-		// SQL DB
-		if fname == "" {
-			log.Fatal("No sqlite-file given")
-		}
-		if _, err := os.Stat(fname); err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				log.Fatalf("sqlite-file '%s'does not exist", fname)
-			} else {
-				log.Fatalf("Error opening sqlite file: %s", err)
-			}
-		}
-		db, err := driver.ConnectSqlite(fname)
-		if err != nil {
-			log.Fatal("Cannot connect to database")
-		}
-		defer db.SQL.Close()
-	*/
-	mag, err := magazine.NewMagazine(cmd, "none")
+	mag, err := magazine.NewMagazine(cmd, "")
 	if err != nil {
 		err = errors.Wrap(err, "Cannot create magazine")
 		log.Fatal(err)

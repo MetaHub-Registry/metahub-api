@@ -1,0 +1,8 @@
+profile:
+  name: library/addlayer:latest
+  actions:
+    - name: manifest-add
+      event: post-manifest-get
+      args:
+        repository: qnib/.*
+        manipulation: awscli:latest

@@ -1,0 +1,13 @@
+profile:
+  name: aws/cascadelake
+  actions:
+    - name: manifest-filter
+      event: post-manifest-list-get
+      args:
+        select: .manifests .[] .platform .features
+        value: arch:cascadelake
+    - name: manifest-add
+      event: post-manifest-get
+      args:
+        layerRepository: qnib/layer-awscli
+        repository: qnib/featuretest

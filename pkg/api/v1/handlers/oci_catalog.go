@@ -6,7 +6,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/metahub-registry/metahub-api/pkg/lib/helper"
-	"github.com/metahub-registry/metahub-api/pkg/types"
+	"github.com/metahub-registry/metahub-core/pkg/types"
 )
 
 func (h Handlers) CatalogGetHandler(w http.ResponseWriter, r *http.Request) {

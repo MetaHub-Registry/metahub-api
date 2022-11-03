@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"github.com/metahub-registry/metahub-api/pkg/backends/magazine"
+	"github.com/metahub-registry/metahub-core/pkg/backends/magazine"
 )
 
 type Handlers struct {

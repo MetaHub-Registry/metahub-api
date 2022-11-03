@@ -12,6 +12,7 @@ services:
       - 8080:80
     volumes:
       - .:/go/metahub-api
+      - /Users/kniepbert/go/src/github.com/metahub-registry/metahub-core:/Users/kniepbert/go/src/github.com/metahub-registry/metahub-core
     networks:
       - api-internal
       - mh-data
@@ -20,6 +21,7 @@ services:
   dind:
     build: misc/docker/dind/
     privileged: true
+    restart: always
     volumes:
       - .:/go/metahub
     networks:
