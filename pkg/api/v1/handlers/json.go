@@ -5,15 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"strings"
 )
-
-// jsonResponse is the type used for generic JSON responses
-type jsonResponse struct {
-	Error   bool        `json:"error"`
-	Message string      `json:"message"`
-	Data    interface{} `json:"data,omitempty"`
-}
 
 type envelope map[string]interface{}
 
@@ -67,36 +59,4 @@ func (h Handlers) writeJSON(w http.ResponseWriter, status int, data interface{},
 	}
 
 	return nil
-}
-
-// errorJSON takes an error, and optionally a response status code, and generates and sends
-// a json error response
-func (h Handlers) errorJSON(w http.ResponseWriter, err error, status ...int) {
-	statusCode := http.StatusBadRequest
-
-	if len(status) > 0 {
-		statusCode = status[0]
-	}
-
-	var customErr error
-
-	switch {
-	case strings.Contains(err.Error(), "SQLSTATE 23505"):
-		customErr = errors.New("duplicate value violates unique constraint")
-		statusCode = http.StatusForbidden
-	case strings.Contains(err.Error(), "SQLSTATE 22001"):
-		customErr = errors.New("the value you are trying to insert is too large")
-		statusCode = http.StatusForbidden
-	case strings.Contains(err.Error(), "SQLSTATE 23503"):
-		customErr = errors.New("foreign key violation")
-		statusCode = http.StatusForbidden
-	default:
-		customErr = err
-	}
-
-	var payload jsonResponse
-	payload.Error = true
-	payload.Message = customErr.Error()
-
-	h.writeJSON(w, statusCode, payload)
 }

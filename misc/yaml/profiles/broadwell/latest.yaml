@@ -1,0 +1,8 @@
+profile:
+  name: broadwell
+  actions:
+    - name: manifest-filter
+      event: post-manifest-list-get
+      args:
+        select: .manifests .[] .platform .features
+        value: cpu:broadwell

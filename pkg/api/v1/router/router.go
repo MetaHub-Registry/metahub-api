@@ -8,7 +8,7 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/go-chi/render"
 	"github.com/metahub-registry/metahub-api/pkg/api/v1/handlers"
-	"github.com/metahub-registry/metahub-api/pkg/backends/magazine"
+	"github.com/metahub-registry/metahub-core/pkg/backends/magazine"
 )
 
 func Initialize(mag magazine.Magazine) *chi.Mux {
@@ -52,13 +52,27 @@ func Initialize(mag magazine.Magazine) *chi.Mux {
 		r.Get("/{image}/manifests/{reference}", h.ManifestGetHandler)
 		r.Head("/{repo}/{image}/manifests/{reference}", h.ManifestHeadHandler)
 		r.Get("/{repo}/{image}/manifests/{reference}", h.ManifestGetHandler)
+		//// Upload Manifest
+		r.Put("/{image}/manifests/{reference}", h.ManifestPutHandler)
+		r.Put("/{repo}/{image}/manifests/{reference}", h.ManifestPutHandler)
 		// Blobs
-		r.Get("/{image}/blobs/{reference}", h.BlobGetHandler)
-		r.Get("/{repo}/{image}/blobs/{reference}", h.BlobGetHandler)
+		r.Get("/{image}/blobs/{reference}", h.BlobHandler)
+		r.Get("/{repo}/{image}/blobs/{reference}", h.BlobHandler)
+		///// HEAD is the same w/o actually writing a body
+		r.Head("/{image}/blobs/{reference}", h.BlobHandler)
+		r.Head("/{repo}/{image}/blobs/{reference}", h.BlobHandler)
+
 		// Tags
 		r.Get("/{image}/tags/list", h.TagGetHandler)
 		r.Get("/{repo}/{image}/tags/list", h.TagGetHandler)
 		r.Get("/_catalog", h.CatalogGetHandler)
+		// Upload Blobs
+		r.Post("/{repo}/{image}/blobs/uploads", h.BlobUploadPostHandler)
+		r.Post("/{image}/blobs/uploads", h.BlobUploadPostHandler)
+		r.Patch("/{image}/blobs/uploads/{uuid}", h.BlobUploadPatchHandler)
+		r.Patch("/{repo}/{image}/blobs/uploads/{uuid}", h.BlobUploadPatchHandler)
+		r.Put("/{image}/blobs/uploads/{uuid}", h.BlobUploadPutHandler)
+		r.Put("/{repo}/{image}/blobs/uploads/{uuid}", h.BlobUploadPutHandler)
 	})
 	return router
 }

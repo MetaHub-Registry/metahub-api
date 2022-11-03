@@ -2,11 +2,12 @@ package handlers
 
 import (
 	"fmt"
+	"io/ioutil"
 	"net/http"
 
 	"github.com/sirupsen/logrus"
 	"github.com/metahub-registry/metahub-api/pkg/lib/helper"
-	"github.com/metahub-registry/metahub-api/pkg/types"
+	"github.com/metahub-registry/metahub-core/pkg/types"
 )
 
 func (h Handlers) ManifestHeadHandler(w http.ResponseWriter, r *http.Request) {
@@ -62,6 +63,34 @@ func (h Handlers) ManifestGetHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	} else {
 		msg := "no such manifest"
+		e := helper.NewErrPayload("MANIFEST_UNKNOWN", msg, msg)
+		helper.WriteOCIErrror(w, http.StatusNotFound, e)
+	}
+}
+
+func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
+	req := types.NewRequest(r)
+	logrus.Infof("%-5s ManifestPutHandler(%s, %s)", r.Method, req.Repo, req.Tag)
+	buf, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		logrus.Fatal("request", err)
+	}
+	switch req.ContentType {
+	case "application/vnd.docker.distribution.manifest.v2+json":
+		// Put manifest in object store
+		m, err := h.mag.StoreManifestUpload(req, buf)
+		if err != nil {
+			msg := fmt.Sprintf("failed to store manifest: %v", err)
+			logrus.Error(msg)
+			e := helper.NewErrPayload("MANIFEST_INVALID", msg, msg)
+			helper.WriteOCIErrror(w, http.StatusBadRequest, e)
+			return
+		}
+		// Put maniest in database
+		m.WriteWWWHeader(w)
+		w.WriteHeader(http.StatusCreated)
+	default:
+		msg := fmt.Sprintf("Unsupported ContentType: %s", req.ContentType)
 		e := helper.NewErrPayload("MANIFEST_UNKNOWN", msg, msg)
 		helper.WriteOCIErrror(w, http.StatusNotFound, e)
 	}
