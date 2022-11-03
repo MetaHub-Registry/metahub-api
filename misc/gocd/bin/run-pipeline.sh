@@ -11,7 +11,9 @@ else
     echo "ERROR: No AWS ECR SECRET KEY found (/run/secrets/aws-ecr-secret-access-key)"
     exit 1
 fi
-
+if [[ -z ${CI_JOB_TOKEN} ]];then
+   CI_JOB_TOKEN=${GITLAB_TOKEN}
+fi
 cat go.mod|awk '!/^replace/'
 git clone https://gitlab-ci-token:${CI_JOB_TOKEN}@github.com/metahub-registry/metahub-core exp/metalib
 go mod edit -replace github.com/metahub-registry/metahub-core=/go/metahub-api/exp/metalib  
