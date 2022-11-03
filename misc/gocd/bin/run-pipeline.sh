@@ -12,6 +12,9 @@ else
     exit 1
 fi
 
+cat go.mod|awk '!/^replace/'
+git clone https://gitlab-ci-token:${CI_JOB_TOKEN}@github.com/metahub-registry/metahub-core exp/metalib
+go mod edit -replace github.com/metahub-registry/metahub-core=/go/metahub-api/exp/metalib  
 
 ## Fetch Artefact
 curl -sH "Authorization: bearer ccca261ed4b37169d257e55ec4cdcc891daf5b09" \
