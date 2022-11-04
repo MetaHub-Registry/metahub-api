@@ -31,7 +31,7 @@ func Test_Auth_AuthHandler_Success(t *testing.T) {
 	assert.NoError(t, err)
 	gotToken, ok := js["token"]
 	assert.True(t, ok)
-	assert.Equal(t, "dGVzdDp0ZXN0", gotToken)
+	assert.Equal(t, token, gotToken)
 }
 
 func Test_Auth_AuthHandler_Fail(t *testing.T) {
@@ -51,12 +51,6 @@ func Test_Auth_AuthHandler_Fail(t *testing.T) {
 	gotToken, ok := js["token"]
 	assert.True(t, ok)
 	assert.Equal(t, "REDACTED-IN-HISTORY", gotToken)
-	/// empty auth
-	r1 := httptest.NewRequest(http.MethodHead, "/auth?account=qnib", nil)
-	r1.Header.Set("Authorization", "")
-	w1 := httptest.NewRecorder()
-	h.AuthHandler(w1, r1)
-	assert.Equal(t, http.StatusUnauthorized, w1.Code)
 	// invalid Bearer
 	r2 := httptest.NewRequest(http.MethodHead, "/auth?account=qnib", nil)
 	r2.Header.Set("Authorization", "Bearer A B C")

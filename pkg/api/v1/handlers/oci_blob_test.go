@@ -26,6 +26,46 @@ var (
 	}
 )
 
+func Test_BlobHandler_DirectPost(t *testing.T) {
+	l0up, l0byte := types.FT_arm_BlobUpload_Layer0()
+	bs := utils.NewBootstrap()
+	bs.SetSqlEmptyAll()
+	bs.AddBootstrap("users")
+	bs.AddBootstrap("profiles")
+	bs.AddBootstrap("layer:qnib/test")
+	br, err := SetupTest(bs)
+	assert.NoError(t, err)
+	defer TeardownTest(bs)
+	/// Request
+	token, err := br.Get("user:test#bearer")
+	assert.NoError(t, err)
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodHead, "/{repo}/{image}/blobs/{reference}", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("repo", "qnib")
+	rctx.URLParams.Add("image", "test")
+	rctx.URLParams.Add("reference", l1.Digest)
+	r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
+	r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	/// POST w/o data to initiaite upload
+	h.BlobUploadPostHandler(w, r)
+	assert.Equal(t, http.StatusAccepted, w.Code)
+	assert.Equal(t, 0, w.Body.Len())
+	// POST With data
+	wDat := httptest.NewRecorder()
+	rDat := httptest.NewRequest(http.MethodHead, "/{repo}/{image}/blobs/{reference}", bytes.NewReader(l0byte))
+	rctxDat := chi.NewRouteContext()
+	rctxDat.URLParams.Add("repo", "qnib")
+	rctxDat.URLParams.Add("image", "test")
+	rctxDat.URLParams.Add("reference", l0up.Digest)
+	rDat = rDat.WithContext(context.WithValue(rDat.Context(), chi.RouteCtxKey, rctxDat))
+	rDat.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	rDat.Header.Set("Content-Length", fmt.Sprintf("%d", len(l0byte)))
+	h.BlobUploadPostHandler(wDat, rDat)
+	assert.Equal(t, http.StatusCreated, wDat.Code)
+	assert.Equal(t, 0, wDat.Body.Len())
+}
+
 func Test_BlobHandler_LayerTest(t *testing.T) {
 	bs := utils.NewBootstrap()
 	bs.SetSqlEmptyAll()

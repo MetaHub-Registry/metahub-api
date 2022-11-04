@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/sirupsen/logrus"
+	"github.com/metahub-registry/metahub-core/pkg/types"
 )
 
 /*
@@ -36,17 +37,40 @@ type Payload struct {
 	Errors []ErrorPayload `json:"errors"`
 }
 
-type ErrorPayload struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-	Details string `json:"detail"`
+type Detail struct {
+	Type   string `json:"Type"`
+	Name   string `json:"Name"`
+	Action string `json:"Action"`
 }
 
-func NewErrPayload(code, msg, detail string) ErrorPayload {
+func NewDetail(dType, dName, dAction string) Detail {
+	return Detail{
+		Type:   dType,
+		Name:   dName,
+		Action: dAction,
+	}
+}
+
+func NewDetailFromReq(req types.Request) Detail {
+	// TODO: Better logic here
+	return Detail{
+		Type:   "repository",
+		Name:   req.Repo,
+		Action: "pull",
+	}
+}
+
+type ErrorPayload struct {
+	Code    string   `json:"code"`
+	Message string   `json:"message"`
+	Details []Detail `json:"detail"`
+}
+
+func NewErrPayload(code, msg string, det Detail) ErrorPayload {
 	return ErrorPayload{
 		Code:    code,
 		Message: msg,
-		Details: detail,
+		Details: []Detail{det},
 	}
 }
 
@@ -66,3 +90,5 @@ func WriteOCIErrror(w http.ResponseWriter, statusCode int, errPl ...ErrorPayload
 	}
 	w.Write(payload.ToBytes())
 }
+
+//[{"Type":"repository","Name":"samalba/my-app","Action":"pull"}

@@ -16,6 +16,7 @@ import (
 )
 
 func (h Handlers) BlobUploadPutHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := context.Background()
 	// Complete the upload specified by uuid, optionally appending the body as the final chunk.
 	req := types.NewRequest(r)
 	logrus.Infof("%-5s BlobUploadPutHandler(%s, %s)", r.Method, req.Repo, req.UUID)
@@ -23,21 +24,48 @@ func (h Handlers) BlobUploadPutHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Fatal("request", err)
 	}
-	l := len(buf)
-	logrus.Infof("Read %d bytes", l)
 	bu, err := h.mag.SQlite.BlobUpload.GetByUUID(req.UUID)
 	if err != nil {
 		log.Fatal("request", err)
 	}
-	if bu.Digest == req.Digest {
-		logrus.Fatalf("digest in DB (by UUID) and provided URL digest are not equal: %s != %s", bu.Digest, req.Digest)
+	if req.Length > 0 {
+		// We do not have a PATH but directly a PUT request with the data
+		dig := digest.FromBytes(buf)
+		bu.Digest = dig.String()
+		err = h.mag.StoreBlobUpload(ctx, &bu, buf)
+		if err != nil {
+			logrus.Error(err)
+			msg := "failed to store blob upload"
+			det := helper.NewDetailFromReq(req)
+			e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+			helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
+			return
+		}
+		err = h.mag.SQlite.BlobUpload.UpdateDigestByUUID(&bu)
+		if err != nil {
+			logrus.Error(err)
+			msg := "failed to update blob upload"
+			det := helper.NewDetailFromReq(req)
+			e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+			helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
+			return
+		}
+
+	}
+	if bu.Digest != req.Digest {
+		msg := fmt.Sprintf("digest in DB (by UUID) and provided URL digest are not equal: %s != %s", bu.Digest, req.Digest)
+		logrus.Error(msg)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 	}
 	// Finish the upload
 	err = h.mag.SQlite.BlobUpload.CompleteByUUID(&bu)
 	if err != nil {
 		logrus.Error(err)
 		msg := "failed to update blob in DB"
-		e := helper.NewErrPayload("INTERNAL_ERROR", msg, msg)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
 		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 		return
 	}
@@ -53,7 +81,8 @@ func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		logrus.Error(err)
 		msg := "failed to fetch blob upload"
-		e := helper.NewErrPayload("INTERNAL_ERROR", msg, msg)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
 		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 		return
 	}
@@ -67,7 +96,8 @@ func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		logrus.Error(err)
 		msg := "failed to store blob upload"
-		e := helper.NewErrPayload("INTERNAL_ERROR", msg, msg)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
 		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 		return
 	}
@@ -75,7 +105,8 @@ func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		logrus.Error(err)
 		msg := "failed to update blob upload"
-		e := helper.NewErrPayload("INTERNAL_ERROR", msg, msg)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
 		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 		return
 	}
@@ -96,7 +127,6 @@ func (h Handlers) BlobUploadPostHandler(w http.ResponseWriter, r *http.Request) 
 		msg = fmt.Sprintf("%s, UUID:%s)", msg, req.UUID)
 	}
 	logrus.Warnf(msg)
-
 	bu := types.OCIBlobUpload{
 		UploadedBy: req.User,
 		Digest:     req.Digest,
@@ -106,11 +136,11 @@ func (h Handlers) BlobUploadPostHandler(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		logrus.Error(err)
 		msg := "failed to create blob upload"
-		e := helper.NewErrPayload("INTERNAL_ERROR", msg, msg)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
 		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 		return
 	}
-
 	if req.Length > 0 {
 		// Successful completion of the request MUST return a 201 Created and MUST include the following header:
 		buf, err := ioutil.ReadAll(r.Body)
@@ -125,7 +155,8 @@ func (h Handlers) BlobUploadPostHandler(w http.ResponseWriter, r *http.Request) 
 		if err != nil {
 			logrus.Error(err)
 			msg := "failed to store blob upload"
-			e := helper.NewErrPayload("INTERNAL_ERROR", msg, msg)
+			det := helper.NewDetailFromReq(req)
+			e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
 			helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 			return
 		}
@@ -153,7 +184,8 @@ func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
 		msg := fmt.Sprintf("failed to fetch config: %v", err)
 		logrus.Error(msg)
 		msg = "failed to fetch config blob"
-		e := helper.NewErrPayload("INTERNAL_ERROR", msg, msg)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
 		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 		return
 	}
@@ -170,7 +202,8 @@ func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "GET" && h.mag.Minio.GetLayerBucketConfig().Redirect {
 		psUrl, err := h.mag.Layer_GetPresignedUrlByHTTPRequest(r)
 		if err != nil {
-			e := helper.NewErrPayload("INTERNAL_ERROR", "failed to fetch layer presigned url", err.Error())
+			det := helper.NewDetailFromReq(req)
+			e := helper.NewErrPayload("INTERNAL_ERROR", "failed to fetch layer presigned url", det)
 			helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 		} else {
 			//logrus.Infof("307 temporariy redirect blob from '%s' to MinIO/S3 presigend URL: %s", req.Repo, psUrl)
@@ -184,7 +217,8 @@ func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
 		msg := fmt.Sprintf("failed to fetch layer: %v", err)
 		logrus.Error(msg)
 		msg = "failed to fetch layer blob"
-		e := helper.NewErrPayload("INTERNAL_ERROR", msg, msg)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
 		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 		return
 	}
@@ -197,6 +231,7 @@ func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	// Not found
 	msg = "could not find blob"
-	e := helper.NewErrPayload("NAME_UNKNOWN", msg, msg)
+	det := helper.NewDetailFromReq(req)
+	e := helper.NewErrPayload("NAME_UNKNOWN", msg, det)
 	helper.WriteOCIErrror(w, http.StatusNotFound, e)
 }

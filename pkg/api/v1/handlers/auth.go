@@ -2,14 +2,18 @@ package handlers
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"net/http/httputil"
 	"strings"
 
 	"github.com/gorilla/context"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"github.com/metahub-registry/metahub-api/pkg/lib/helper"
 	"github.com/metahub-registry/metahub-core/pkg/types"
 )
 
@@ -20,42 +24,52 @@ var (
 	invalidToken   oauthError = "invalid_token"
 )
 
+func getAccessTokenFromBearerToken(r *http.Request) (at *types.AccessToken, user string, err error) {
+	at = &types.AccessToken{}
+	authorizationHeader := r.Header.Get("authorization")
+	if authorizationHeader == "" {
+		return
+	}
+	bearerToken := strings.Split(authorizationHeader, " ")
+	if len(bearerToken) != 2 {
+		err = fmt.Errorf("invalid authorization header: %q", authorizationHeader)
+		return
+	}
+	accessTokenString := bearerToken[1]
+	//logrus.Warnf("accessTokenString: %s", accessTokenString)
+	decoded, _ := base64.StdEncoding.DecodeString(accessTokenString)
+	parts := strings.Split(string(decoded), ":")
+	if len(parts) != 2 {
+		err = fmt.Errorf("invalid access token: %q", accessTokenString)
+		return
+	}
+	user = parts[0]
+	at.Token = accessTokenString
+	return
+}
+
 func (h Handlers) AuthHandler(w http.ResponseWriter, r *http.Request) {
 	acct := r.URL.Query().Get("account")
-	authorizationHeader := r.Header.Get("authorization")
-	var at *types.AccessToken
-	if acct == "" {
-		at = &types.AccessToken{
-			// TODO: this token should represent the user account 'generic'
-			Token: "REDACTED-IN-HISTORY",
-		}
-	} else {
-		if authorizationHeader == "" {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-
-		bearerToken := strings.Split(authorizationHeader, " ")
-		if len(bearerToken) != 2 {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-		accessTokenString := bearerToken[1]
-		var err error
-		at, err = h.mag.SQlite.User.GetAccessToken(accessTokenString)
-		if err != nil || at == nil {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
+	at, user, err := getAccessTokenFromBearerToken(r)
+	if err != nil {
+		err = errors.Wrap(err, "error getting access token from bearer token")
+		logrus.Error(err)
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	if acct == "" && user == "" {
+		at.Token = "REDACTED-IN-HISTORY"
 	}
 	// Prepare the body of the response
 	responseBodyBytes := new(bytes.Buffer)
+
 	json.NewEncoder(responseBodyBytes).Encode(at)
 	data := responseBodyBytes.Bytes()
 	w.Write(data)
 }
 
 func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) {
+	req := types.NewRequest(r)
 	var realm string
 	if r.Host == "metahub-registry.org" {
 		realm = "https://metahub-registry.org"
@@ -69,18 +83,20 @@ func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) 
 			realm = "https://" + r.Host
 		}
 	}
-	//dumpedReq, _ := httputil.DumpRequest(r, false)
-	//logrus.Warnf("Request:#### \n%s\n####", dumpedReq)
+	dumpedReq, _ := httputil.DumpRequest(r, false)
+	fmt.Printf("Request:#### \n%s\n####", dumpedReq)
 	authorizationHeader := r.Header.Get("authorization")
 	if authorizationHeader == "" {
 		logrus.Warn("Unauthenticated request")
-		unauthorized(w, realm, invalidRequest, "missing authorization header")
+		det := helper.NewDetailFromReq(req)
+		unauthorized(w, realm, det, invalidRequest, "missing authorization header")
 		return
 
 	}
 	bearerToken := strings.Split(authorizationHeader, " ")
 	if len(bearerToken) != 2 {
-		unauthorized(w, realm, invalidRequest, "invalid authorization header: %q", authorizationHeader)
+		det := helper.NewDetail("repository", req.Repo, "pull")
+		unauthorized(w, realm, det, invalidRequest, "invalid authorization header: %q", authorizationHeader)
 		return
 	}
 	accessTokenString := bearerToken[1]
@@ -93,7 +109,8 @@ func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) 
 	}
 	if at == nil {
 		logrus.Error("unknown access token")
-		unauthorized(w, realm, invalidToken, "unknown access token")
+		det := helper.NewDetailFromReq(req)
+		unauthorized(w, realm, det, invalidToken, "unknown access token")
 		return
 	}
 	var username, profile, password string
@@ -137,7 +154,6 @@ func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) 
 	context.Set(r, "accountName", at.Token)
 	context.Set(r, "userName", username)
 	context.Set(r, "profileName", profile)
-	//logrus.Warnf("accountName: %s / user: %s / profile: %s", at.Token, username, profile)
 }
 
 func (h Handlers) AuthMiddleware(next http.Handler) http.Handler {
@@ -148,7 +164,7 @@ func (h Handlers) AuthMiddleware(next http.Handler) http.Handler {
 }
 
 // unauthorized returns a request to the user for auth - e.g., "get a token from this endpoint"
-func unauthorized(w http.ResponseWriter, realm string, err oauthError, format string, v ...interface{}) {
+func unauthorized(w http.ResponseWriter, realm string, det helper.Detail, err oauthError, format string, v ...interface{}) {
 	l := logrus.WithFields(logrus.Fields{
 		"package": "middleware",
 		"func":    "unauthorized",
@@ -160,9 +176,11 @@ func unauthorized(w http.ResponseWriter, realm string, err oauthError, format st
 
 	//l.Infof("authenticateHeader: %s", authenticateHeader)
 	w.Header().Add("WWW-Authenticate", authenticateHeader)
-	w.Header().Del("Vary")
-	w.Header().Add("Docker-Distribution-Api-Version", "registry/2.0")
+	//w.Header().Del("Vary")
+	//w.Header().Add("Docker-Distribution-Api-Version", "registry/2.0")
 	///{"errors":[{"code":"UNAUTHORIZED","message":"access to the requested resource is not authorized","detail":[{"Type":"repository","Name":"samalba/my-app","Action":"pull"},{"Type":"repository","Name":"samalba/my-app","Action":"push"}]}]}
+	msg := "access to the requested resource is not authorized"
+	e := helper.NewErrPayload("UNAUTHORIZED", msg, det)
+	helper.WriteOCIErrror(w, http.StatusUnauthorized, e)
 
-	w.WriteHeader(http.StatusUnauthorized)
 }
