@@ -18,7 +18,8 @@ func (h Handlers) ManifestHeadHandler(w http.ResponseWriter, r *http.Request) {
 		// 1. FALSE
 		msg := fmt.Sprintf("failed to fetch ManifestList: %v", err)
 		logrus.Error(msg)
-		e := helper.NewErrPayload("INTERNAL_ERROR", msg, msg)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
 		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 		return
 	}
@@ -29,17 +30,20 @@ func (h Handlers) ManifestHeadHandler(w http.ResponseWriter, r *http.Request) {
 	imgName := fmt.Sprintf("%s/%s", req.Repo, req.Tag)
 	msg := fmt.Sprintf("failed to fetch ManifestList for collection '%s'", imgName)
 	logrus.Error(msg)
-	e := helper.NewErrPayload("MANIFEST_UNKNOWN", msg, msg)
+	det := helper.NewDetailFromReq(req)
+	e := helper.NewErrPayload("MANIFEST_UNKNOWN", msg, det)
 	helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 }
 
 func (h Handlers) ManifestGetHandler(w http.ResponseWriter, r *http.Request) {
+	req := types.NewRequest(r)
 	ml, found, err := h.mag.ManifestList_GetByHTTPRequest(r)
 	if err != nil {
 		// 1. FALSE
 		msg := fmt.Sprintf("failed to fetch ManifestList: %v", err)
 		logrus.Error(msg)
-		e := helper.NewErrPayload("INTERNAL_ERROR", msg, msg)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
 		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 		return
 	}
@@ -53,7 +57,8 @@ func (h Handlers) ManifestGetHandler(w http.ResponseWriter, r *http.Request) {
 		// 1. FALSE
 		msg := fmt.Sprintf("failed to fetch ManifestList: %v", err)
 		logrus.Error(msg)
-		e := helper.NewErrPayload("INTERNAL_ERROR", msg, msg)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
 		helper.WriteOCIErrror(w, http.StatusNotFound, e)
 		return
 	}
@@ -63,7 +68,8 @@ func (h Handlers) ManifestGetHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	} else {
 		msg := "no such manifest"
-		e := helper.NewErrPayload("MANIFEST_UNKNOWN", msg, msg)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("MANIFEST_UNKNOWN", msg, det)
 		helper.WriteOCIErrror(w, http.StatusNotFound, e)
 	}
 }
@@ -82,7 +88,22 @@ func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			msg := fmt.Sprintf("failed to store manifest: %v", err)
 			logrus.Error(msg)
-			e := helper.NewErrPayload("MANIFEST_INVALID", msg, msg)
+			det := helper.NewDetailFromReq(req)
+			e := helper.NewErrPayload("MANIFEST_INVALID", msg, det)
+			helper.WriteOCIErrror(w, http.StatusBadRequest, e)
+			return
+		}
+		// Put maniest in database
+		m.WriteWWWHeader(w)
+		w.WriteHeader(http.StatusCreated)
+	case "application/vnd.oci.image.manifest.v1+json":
+		// Put manifest in object store
+		m, err := h.mag.StoreManifestUpload(req, buf)
+		if err != nil {
+			msg := fmt.Sprintf("failed to store manifest: %v", err)
+			logrus.Error(msg)
+			det := helper.NewDetailFromReq(req)
+			e := helper.NewErrPayload("MANIFEST_INVALID", msg, det)
 			helper.WriteOCIErrror(w, http.StatusBadRequest, e)
 			return
 		}
@@ -91,7 +112,8 @@ func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusCreated)
 	default:
 		msg := fmt.Sprintf("Unsupported ContentType: %s", req.ContentType)
-		e := helper.NewErrPayload("MANIFEST_UNKNOWN", msg, msg)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("MANIFEST_UNKNOWN", msg, det)
 		helper.WriteOCIErrror(w, http.StatusNotFound, e)
 	}
 }

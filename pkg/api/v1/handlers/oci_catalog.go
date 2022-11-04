@@ -19,7 +19,8 @@ func (h Handlers) CatalogGetHandler(w http.ResponseWriter, r *http.Request) {
 		msg := fmt.Sprintf("failed to fetch catalog: %v", err)
 		logrus.Error(msg)
 		msg = "failed to fetch tags"
-		e := helper.NewErrPayload("INTERNAL_ERROR", msg, msg)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
 		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 		return
 	}
