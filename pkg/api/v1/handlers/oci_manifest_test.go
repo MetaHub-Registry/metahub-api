@@ -44,6 +44,7 @@ func Test_UploadManifest_FTarm(t *testing.T) {
 	}, map[string]string{
 		"Authorization": fmt.Sprintf("Bearer %s", token),
 	}, "/{repo}/{image}/blobs/uploads/{uuid}", l0bytes)
+
 	h.BlobUploadPostHandler(&wL0, rL0)
 	assert.Equal(t, http.StatusAccepted, wL0.Code)
 	// Fetch Upload from DB
@@ -284,7 +285,8 @@ func Test_UploadManifest_FTarm(t *testing.T) {
 	}
 	rows.Close()
 	assert.Equal(t, "qnib/featuretest", repo)
-	assert.Equal(t, "latest-linux.arm64", tag)
+	//assert.Equal(t, "latest-linux.arm64", tag)
+	assert.Equal(t, "latest", tag)
 	////// FETCH MANIFEST_LIST via Collection
 	/// Direct DB
 	req := types.Request{
@@ -331,5 +333,20 @@ func Test_UploadManifest_FTarm(t *testing.T) {
 	assert.NoError(t, err)
 	assert.True(t, found)
 	assert.Equal(t, mani.Digest, gotMani.Digest)
-
+	// Fetch Manifest by tag
+	_, rManiTagGet := createNewHTTPTest(map[string]string{
+		"repo":      testRepo,
+		"image":     testImage,
+		"reference": testTag,
+	}, map[string]string{
+		"accountName": token,
+		"userName":    "test",
+		"profileName": "generic",
+	}, map[string]string{
+		"Authorization": fmt.Sprintf("Bearer %s", token),
+	}, "/{repo}/{image}/manifests/{reference}", nil)
+	gotTagMani, foundTag, err := h.mag.Manifest_GetByHTTPRequest(rManiTagGet)
+	assert.NoError(t, err)
+	assert.True(t, foundTag)
+	assert.Equal(t, mani.Digest, gotTagMani.Digest)
 }
