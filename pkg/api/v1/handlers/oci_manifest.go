@@ -41,7 +41,7 @@ func (h Handlers) ManifestHeadHandler(w http.ResponseWriter, r *http.Request) {
 		ml.WriteWWWHeader(w)
 		return
 	}
-	m, found, err := h.mag.Manifest_GetByHTTPRequest(r)
+	m, found, err = h.mag.Manifest_GetByHTTPRequest(r)
 	if err != nil {
 		// 1. FALSE
 		msg := fmt.Sprintf("failed to fetch ManifestList: %v", err)
