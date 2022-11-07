@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"net/http/httputil"
 	"strings"
 
 	"github.com/gorilla/context"
@@ -83,8 +82,8 @@ func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) 
 			realm = "https://" + r.Host
 		}
 	}
-	dumpedReq, _ := httputil.DumpRequest(r, false)
-	fmt.Printf("Request:#### \n%s\n####", dumpedReq)
+	//dumpedReq, _ := httputil.DumpRequest(r, false)
+	//fmt.Printf("Request:#### \n%s\n####", dumpedReq)
 	authorizationHeader := r.Header.Get("authorization")
 	if authorizationHeader == "" {
 		logrus.Warn("Unauthenticated request")
