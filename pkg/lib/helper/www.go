@@ -2,6 +2,7 @@ package helper
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/sirupsen/logrus"
@@ -44,6 +45,9 @@ type Detail struct {
 }
 
 func NewDetail(dType, dName, dAction string) Detail {
+	if dName == "" {
+		dName = "unknown"
+	}
 	return Detail{
 		Type:   dType,
 		Name:   dName,
@@ -53,9 +57,13 @@ func NewDetail(dType, dName, dAction string) Detail {
 
 func NewDetailFromReq(req types.Request) Detail {
 	// TODO: Better logic here
+	repo := req.Repo
+	if repo == "" {
+		repo = "unknown"
+	}
 	return Detail{
 		Type:   "repository",
-		Name:   req.Repo,
+		Name:   repo,
 		Action: "pull",
 	}
 }
@@ -85,10 +93,15 @@ func (p Payload) ToBytes() []byte {
 
 func WriteOCIErrror(w http.ResponseWriter, statusCode int, errPl ...ErrorPayload) {
 	w.WriteHeader(statusCode)
+
 	payload := Payload{
 		Errors: errPl,
 	}
-	w.Write(payload.ToBytes())
+	b := payload.ToBytes()
+	w.Header().Add("Content-Type", "application/json")
+	w.Header().Add("Content-Length", fmt.Sprint(len(b)))
+	w.Write(b)
+
 }
 
 //[{"Type":"repository","Name":"samalba/my-app","Action":"pull"}

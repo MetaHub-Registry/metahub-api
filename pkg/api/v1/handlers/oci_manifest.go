@@ -27,12 +27,26 @@ func (h Handlers) ManifestHeadHandler(w http.ResponseWriter, r *http.Request) {
 		ml.WriteWWWHeader(w)
 		return
 	}
+	m, found, err := h.mag.Manifest_GetByHTTPRequest(r)
+	if err != nil {
+		// 1. FALSE
+		msg := fmt.Sprintf("failed to fetch ManifestList: %v", err)
+		logrus.Error(msg)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+		helper.WriteOCIErrror(w, http.StatusNotFound, e)
+		return
+	}
+	if found {
+		m.WriteWWWHeader(w)
+		return
+	}
 	imgName := fmt.Sprintf("%s/%s", req.Repo, req.Tag)
 	msg := fmt.Sprintf("failed to fetch ManifestList for collection '%s'", imgName)
 	logrus.Error(msg)
 	det := helper.NewDetailFromReq(req)
 	e := helper.NewErrPayload("MANIFEST_UNKNOWN", msg, det)
-	helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
+	helper.WriteOCIErrror(w, http.StatusNotFound, e)
 }
 
 func (h Handlers) ManifestGetHandler(w http.ResponseWriter, r *http.Request) {

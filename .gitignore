@@ -4,3 +4,4 @@ mh-api
 coverage.txt
 lcov.info
 **.sqlite3
+report.html
