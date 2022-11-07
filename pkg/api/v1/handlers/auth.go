@@ -62,7 +62,7 @@ func (h Handlers) AuthHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	// Prepare the body of the response
 	responseBodyBytes := new(bytes.Buffer)
-
+	w.Header().Add("Content-Type", "application/json; charset=utf-8")
 	json.NewEncoder(responseBodyBytes).Encode(at)
 	data := responseBodyBytes.Bytes()
 	w.Write(data)
@@ -95,7 +95,11 @@ func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) 
 	}
 	bearerToken := strings.Split(authorizationHeader, " ")
 	if len(bearerToken) != 2 {
-		det := helper.NewDetail("repository", req.Repo, "pull")
+		repo := req.Repo
+		if req.Repo == "" {
+			repo = "repo"
+		}
+		det := helper.NewDetail("repository", repo, "pull")
 		unauthorized(w, realm, det, invalidRequest, "invalid authorization header: %q", authorizationHeader)
 		return
 	}
@@ -173,13 +177,13 @@ func unauthorized(w http.ResponseWriter, realm string, det helper.Detail, err oa
 	description := fmt.Sprintf(format, v...)
 	authUrl := realm + "/auth"
 	authenticateHeader := fmt.Sprintf("Bearer realm=%q,error=%q,error_description=%q", authUrl, err, description)
-
+	w.Header().Add("Content-Type", "application/json")
 	//l.Infof("authenticateHeader: %s", authenticateHeader)
 	w.Header().Add("WWW-Authenticate", authenticateHeader)
 	//w.Header().Del("Vary")
 	//w.Header().Add("Docker-Distribution-Api-Version", "registry/2.0")
 	///{"errors":[{"code":"UNAUTHORIZED","message":"access to the requested resource is not authorized","detail":[{"Type":"repository","Name":"samalba/my-app","Action":"pull"},{"Type":"repository","Name":"samalba/my-app","Action":"push"}]}]}
-	msg := "access to the requested resource is not authorized"
+	msg := "authentication required"
 	e := helper.NewErrPayload("UNAUTHORIZED", msg, det)
 	helper.WriteOCIErrror(w, http.StatusUnauthorized, e)
 
