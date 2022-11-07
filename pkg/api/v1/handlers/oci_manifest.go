@@ -13,6 +13,20 @@ import (
 func (h Handlers) ManifestHeadHandler(w http.ResponseWriter, r *http.Request) {
 	// Check whether it is a manifest or manifest list
 	req := types.NewRequest(r)
+	m, found, err := h.mag.Manifest_GetByHTTPRequest(r)
+	if err != nil {
+		// 1. FALSE
+		msg := fmt.Sprintf("failed to fetch ManifestList: %v", err)
+		logrus.Error(msg)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+		helper.WriteOCIErrror(w, http.StatusNotFound, e)
+		return
+	}
+	if found {
+		m.WriteWWWHeader(w)
+		return
+	}
 	ml, found, err := h.mag.ManifestList_GetByHTTPRequest(r)
 	if err != nil {
 		// 1. FALSE
@@ -51,6 +65,21 @@ func (h Handlers) ManifestHeadHandler(w http.ResponseWriter, r *http.Request) {
 
 func (h Handlers) ManifestGetHandler(w http.ResponseWriter, r *http.Request) {
 	req := types.NewRequest(r)
+	m, found, err := h.mag.Manifest_GetByHTTPRequest(r)
+	if err != nil {
+		// 1. FALSE
+		msg := fmt.Sprintf("failed to fetch ManifestList: %v", err)
+		logrus.Error(msg)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+		helper.WriteOCIErrror(w, http.StatusNotFound, e)
+		return
+	}
+	if found {
+		m.WriteWWWHeader(w)
+		m.WriteWWWBody(w)
+		return
+	}
 	ml, found, err := h.mag.ManifestList_GetByHTTPRequest(r)
 	if err != nil {
 		// 1. FALSE
@@ -66,7 +95,7 @@ func (h Handlers) ManifestGetHandler(w http.ResponseWriter, r *http.Request) {
 		ml.WriteWWWBody(w)
 		return
 	}
-	m, found, err := h.mag.Manifest_GetByHTTPRequest(r)
+	m, found, err = h.mag.Manifest_GetByHTTPRequest(r)
 	if err != nil {
 		// 1. FALSE
 		msg := fmt.Sprintf("failed to fetch ManifestList: %v", err)
