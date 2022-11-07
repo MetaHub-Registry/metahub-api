@@ -12,7 +12,7 @@ import (
 	"github.com/gorilla/context"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"github.com/metahub-registry/metahub-api/pkg/lib/helper"
+	"github.com/metahub-registry/metahub-core/pkg/helper"
 	"github.com/metahub-registry/metahub-core/pkg/types"
 )
 
@@ -35,7 +35,6 @@ func getAccessTokenFromBearerToken(r *http.Request) (at *types.AccessToken, user
 		return
 	}
 	accessTokenString := bearerToken[1]
-	//logrus.Warnf("accessTokenString: %s", accessTokenString)
 	decoded, _ := base64.StdEncoding.DecodeString(accessTokenString)
 	parts := strings.Split(string(decoded), ":")
 	if len(parts) != 2 {
@@ -82,6 +81,7 @@ func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) 
 			realm = "https://" + r.Host
 		}
 	}
+	//fmt.Printf("Request:$$$ %s\n", req.String())
 	//dumpedReq, _ := httputil.DumpRequest(r, false)
 	//fmt.Printf("Request:#### \n%s\n####", dumpedReq)
 	authorizationHeader := r.Header.Get("authorization")
@@ -146,17 +146,21 @@ func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) 
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	err = h.mag.SQlite.LoginUser(username, password)
+	code, pl, err := h.mag.SQlite.LoginUserScope(username, password, req)
 	if err != nil {
 		logrus.Error(err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-
-	// Return the account name to the context
-	context.Set(r, "accountName", at.Token)
-	context.Set(r, "userName", username)
-	context.Set(r, "profileName", profile)
+	switch code {
+	case http.StatusOK:
+		// Return the account name to the context
+		context.Set(r, "accountName", at.Token)
+		context.Set(r, "userName", username)
+		context.Set(r, "profileName", profile)
+	default:
+		helper.WriteOCIErrror(w, http.StatusUnauthorized, pl)
+	}
 }
 
 func (h Handlers) AuthMiddleware(next http.Handler) http.Handler {

@@ -88,3 +88,32 @@ func Test_Auth_AuthMiddlewareHandler_WithUser(t *testing.T) {
 	h.AuthMiddlewareHandler(w2, r2)
 	assert.Equal(t, http.StatusUnauthorized, w2.Code)
 }
+
+func Test_Auth_AuthMiddlewareHandler_WithScope(t *testing.T) {
+	testRepo := "test/image"
+	testTag := "tag123"
+	bs := utils.NewBootstrap()
+	bs.AddBootstrap("users")
+	//bs.SetSqlite("Desktop/metahub.db")
+	bs.SetSqlEmptyAll()
+	br, err := SetupTest(bs)
+	assert.NoError(t, err)
+	defer TeardownTest(bs)
+	/// Request
+	token, err := br.Get("user:test#bearer")
+	assert.NoError(t, err)
+	w := httptest.NewRecorder()
+	url := fmt.Sprintf("/v2/%s/manifests/%s", testRepo, testTag)
+	r := httptest.NewRequest(http.MethodPut, url, nil)
+	r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	h.AuthMiddlewareHandler(w, r)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	token, err = br.Get("user:admin#bearer")
+	assert.NoError(t, err)
+	wAdmin := httptest.NewRecorder()
+
+	r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	h.AuthMiddlewareHandler(wAdmin, r)
+	assert.Equal(t, http.StatusOK, wAdmin.Code)
+
+}
