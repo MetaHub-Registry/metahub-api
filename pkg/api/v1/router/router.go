@@ -42,6 +42,7 @@ func Initialize(mag magazine.Magazine) *chi.Mux {
 		r.Post("/collection", h.CollectionGetOne)
 	})
 	router.Get("/auth", h.AuthHandler)
+
 	/////// Subroute with AuthMiddleware to trigger login
 	// (even if the token is the anonymous one)
 	router.Route("/v2", func(r chi.Router) {
@@ -74,5 +75,6 @@ func Initialize(mag magazine.Magazine) *chi.Mux {
 		r.Put("/{image}/blobs/uploads/{uuid}", h.BlobUploadPutHandler)
 		r.Put("/{repo}/{image}/blobs/uploads/{uuid}", h.BlobUploadPutHandler)
 	})
+	router.Get("/", h.RedirectToWWW)
 	return router
 }

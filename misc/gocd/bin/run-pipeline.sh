@@ -18,6 +18,7 @@ cat go.mod|awk '!/^replace/'
 git clone https://gitlab-ci-token:${CI_JOB_TOKEN}@github.com/metahub-registry/metahub-core exp/metalib
 go mod edit -replace github.com/metahub-registry/metahub-core=/go/metahub-api/exp/metalib  
 
+rm -f metahub.db
 ## Fetch Artefact
 curl -sH "Authorization: bearer ${GOCD_TOKEN}" \
      -o metahub.db "${GO_SERVER_URL}/files/${GO_DEPENDENCY_LOCATOR_METAHUB_ADMIN}/Job/metahub.db"
