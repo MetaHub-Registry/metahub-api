@@ -28,4 +28,4 @@ curl -sH "Authorization: bearer ${GOCD_TOKEN}" \
      -o metahub.db "${GO_SERVER_URL}/files/${GO_DEPENDENCY_LOCATOR_METAHUB_ADMIN}/RunQnib/misc/gocd/bin/metahub.db"
 NEW_IMAGE=metahub-api-test:gocd-${GO_PIPELINE_LABEL}
 docker build -f Dockerfile.legacy -t ${NEW_IMAGE} .
-docker run -d --name ${NEW_IMAGE} -p 8080:8080 ${NEW_IMAGE}
+docker run -d --name ${GO_PIPELINE_NAME}-${GO_PIPELINE_LABEL} -p 8080:8080 ${NEW_IMAGE}
