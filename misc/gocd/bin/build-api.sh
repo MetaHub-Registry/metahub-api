@@ -29,3 +29,4 @@ curl -sH "Authorization: bearer ${GOCD_TOKEN}" \
 NEW_IMAGE=metahub-api-test:gocd-${GO_PIPELINE_LABEL}
 docker build -f Dockerfile.legacy -t ${NEW_IMAGE} .
 docker save -o ${TOPDIR}/metahub-api.tar ${NEW_IMAGE}
+docker rmi ${NEW_IMAGE}
