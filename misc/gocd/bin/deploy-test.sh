@@ -26,7 +26,6 @@ rm -f metahub.db
 ## Fetch Artefact
 curl -sH "Authorization: bearer ${GOCD_TOKEN}" \
      -o metahub.db "${GO_SERVER_URL}/files/${GO_DEPENDENCY_LOCATOR_METAHUB_ADMIN}/RunQnib/misc/gocd/bin/metahub.db"
-$(aws --profile=ecr ecr get-login --no-include-email --region eu-west-1)
 NEW_IMAGE=metahub-api-test:gocd-${GO_PIPELINE_LABEL}
 docker build -f Dockerfile.legacy -t ${NEW_IMAGE} .
-docker run -d --name metahub-api-test-${GO_PIPELINE_LABEL} -p 8080:8080 ${NEW_IMAGE}
+docker run -d --name ${NEW_IMAGE} -p 8080:8080 ${NEW_IMAGE}
