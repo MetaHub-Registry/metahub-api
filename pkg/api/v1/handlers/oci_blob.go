@@ -70,7 +70,6 @@ func (h Handlers) BlobUploadPutHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.mag.SQlite.BlobUpload.WriteOCIPutResponse(w, &bu)
-
 }
 
 func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request) {

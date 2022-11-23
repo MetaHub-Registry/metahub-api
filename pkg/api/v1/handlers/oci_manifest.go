@@ -63,6 +63,27 @@ func (h Handlers) ManifestHeadHandler(w http.ResponseWriter, r *http.Request) {
 	helper.WriteOCIErrror(w, http.StatusNotFound, e)
 }
 
+func (h Handlers) ManifestDelHandler(w http.ResponseWriter, r *http.Request) {
+	req := types.NewRequest(r)
+	found, err := h.mag.Manifest_DeleteByHTTPRequest(r)
+	if err != nil {
+		msg := fmt.Sprintf("failed to delete manifest: %v", err)
+		logrus.Error(msg)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("MANIFEST_UNKNOWN", msg, det)
+		helper.WriteOCIErrror(w, http.StatusNotFound, e)
+		return
+	}
+	if !found {
+		msg := fmt.Sprintf("failed to delete manifest: %v", err)
+		logrus.Error(msg)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("MANIFEST_UNKNOWN", msg, det)
+		helper.WriteOCIErrror(w, http.StatusNotFound, e)
+		return
+	}
+}
+
 func (h Handlers) ManifestGetHandler(w http.ResponseWriter, r *http.Request) {
 	req := types.NewRequest(r)
 	m, found, err := h.mag.Manifest_GetByHTTPRequest(r)
