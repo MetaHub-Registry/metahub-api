@@ -56,6 +56,9 @@ func Initialize(mag magazine.Magazine) *chi.Mux {
 		//// Upload Manifest
 		r.Put("/{image}/manifests/{reference}", h.ManifestPutHandler)
 		r.Put("/{repo}/{image}/manifests/{reference}", h.ManifestPutHandler)
+		//// Delete
+		r.Delete("/{image}/manifests/{reference}", h.ManifestDelHandler)
+		r.Delete("/{repo}/{image}/manifests/{reference}", h.ManifestDelHandler)
 		// Blobs
 		r.Get("/{image}/blobs/{reference}", h.BlobHandler)
 		r.Get("/{repo}/{image}/blobs/{reference}", h.BlobHandler)
