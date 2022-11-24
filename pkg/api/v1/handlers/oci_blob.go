@@ -234,3 +234,18 @@ func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
 	e := helper.NewErrPayload("NAME_UNKNOWN", msg, det)
 	helper.WriteOCIErrror(w, http.StatusNotFound, e)
 }
+
+func (h Handlers) BlobDelHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	req := types.NewRequest(r)
+	err := h.mag.BlobDelete(ctx, req)
+	if err != nil {
+		msg := fmt.Sprintf("failed to delete blob: %v", err)
+		logrus.Error(msg)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("MANIFEST_UNKNOWN", msg, det)
+		helper.WriteOCIErrror(w, http.StatusNotFound, e)
+		return
+	}
+	w.WriteHeader(http.StatusAccepted)
+}

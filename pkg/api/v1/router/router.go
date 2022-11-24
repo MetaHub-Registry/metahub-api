@@ -77,6 +77,9 @@ func Initialize(mag magazine.Magazine) *chi.Mux {
 		r.Patch("/{repo}/{image}/blobs/uploads/{uuid}", h.BlobUploadPatchHandler)
 		r.Put("/{image}/blobs/uploads/{uuid}", h.BlobUploadPutHandler)
 		r.Put("/{repo}/{image}/blobs/uploads/{uuid}", h.BlobUploadPutHandler)
+		// Delete Blobs
+		r.Delete("/{repo}/{image}/blobs/{reference}", h.BlobDelHandler)
+		r.Delete("/{image}/blobs/{reference}", h.BlobDelHandler)
 	})
 	router.Get("/", h.RedirectToWWW)
 	return router

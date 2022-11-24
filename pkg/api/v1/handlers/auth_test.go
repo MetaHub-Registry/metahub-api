@@ -75,6 +75,12 @@ func Test_Auth_AuthMiddlewareHandler_WithUser(t *testing.T) {
 	r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	h.AuthMiddlewareHandler(w, r)
 	assert.Equal(t, http.StatusOK, w.Code)
+	// No auth
+	w0 := httptest.NewRecorder()
+	r0 := httptest.NewRequest(http.MethodHead, "/v2", nil)
+	h.AuthMiddlewareHandler(w0, r0)
+	assert.Equal(t, http.StatusUnauthorized, w0.Code)
+
 	// Empty auth
 	w1 := httptest.NewRecorder()
 	r1 := httptest.NewRequest(http.MethodHead, "/v2", nil)

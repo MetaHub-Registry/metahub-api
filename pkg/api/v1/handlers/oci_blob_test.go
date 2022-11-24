@@ -204,9 +204,9 @@ func Test_Upload_UploadBlobSequence(t *testing.T) {
 	assert.Equal(t, fmt.Sprintf("/v2/qnib/alpine/blobs/uploads/%s", uuid), gotPutLoc)
 }
 
-func createNewHTTPTest(p, c, h map[string]string, url string, b []byte) (w httptest.ResponseRecorder, r *http.Request) {
+func createNewHTTPTest(meth string, p, c, h map[string]string, url string, b []byte) (w httptest.ResponseRecorder, r *http.Request) {
 	w = *httptest.NewRecorder()
-	r = httptest.NewRequest(http.MethodPost, url, bytes.NewReader(b))
+	r = httptest.NewRequest(meth, url, bytes.NewReader(b))
 	rctx := chi.NewRouteContext()
 	for k, v := range p {
 		rctx.URLParams.Add(k, v)
