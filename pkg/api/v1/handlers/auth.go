@@ -51,8 +51,7 @@ func (h Handlers) AuthHandler(w http.ResponseWriter, r *http.Request) {
 	at, user, err := getAccessTokenFromBearerToken(r)
 	if err != nil {
 		err = errors.Wrap(err, "error getting access token from bearer token")
-		logrus.Error(err)
-		w.WriteHeader(http.StatusUnauthorized)
+		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
 	if acct == "" && user == "" {
@@ -66,7 +65,7 @@ func (h Handlers) AuthHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(data)
 }
 
-func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) {
+func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) (err error) {
 	req := types.NewRequest(r)
 	var realm string
 	if r.Host == "metahub-registry.org" {
@@ -86,11 +85,10 @@ func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) 
 	//fmt.Printf("Request:#### \n%s\n####", dumpedReq)
 	authorizationHeader := r.Header.Get("authorization")
 	if authorizationHeader == "" {
-		logrus.Warn("Unauthenticated request")
+		logrus.Warn("Unauthenticated request as no authorization header was provided")
 		det := helper.NewDetailFromReq(req)
 		unauthorized(w, realm, det, invalidRequest, "missing authorization header")
-		return
-
+		return fmt.Errorf("missing authorization header")
 	}
 	bearerToken := strings.Split(authorizationHeader, " ")
 	if len(bearerToken) != 2 {
@@ -99,8 +97,9 @@ func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) 
 			repo = "repo"
 		}
 		det := helper.NewDetail("repository", repo, "pull")
+		w.WriteHeader(http.StatusUnauthorized)
 		unauthorized(w, realm, det, invalidRequest, "invalid authorization header: %q", authorizationHeader)
-		return
+		return fmt.Errorf("valid authorization header")
 	}
 	accessTokenString := bearerToken[1]
 
@@ -108,13 +107,14 @@ func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		logrus.Infof("error getting access token: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
-		return
+		return fmt.Errorf("error getting token")
 	}
 	if at == nil {
 		logrus.Error("unknown access token")
 		det := helper.NewDetailFromReq(req)
+		w.WriteHeader(http.StatusUnauthorized)
 		unauthorized(w, realm, det, invalidToken, "unknown access token")
-		return
+		return fmt.Errorf("error getting token")
 	}
 	var username, profile, password string
 	// The access token is the base64 encoded username and password we need to check
@@ -136,21 +136,23 @@ func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) 
 			username = profSplit[0]
 			profile = profSplit[1]
 		default:
-			log.Printf("username needs to prefix with profile (defaults to generic): '<user>/<profile>'")
+			msg := "username needs to prefix with profile (defaults to generic): '<user>/<profile>'"
+			log.Print(msg)
 			w.WriteHeader(http.StatusBadRequest)
-			return
+			return fmt.Errorf(msg)
 		}
 
 	default:
-		log.Printf("username needs to prefix with profile (defaults to generic): '<user>/<profile>'")
+		msg := "username needs to prefix with profile (defaults to generic): '<user>/<profile>'"
+		log.Print(msg)
 		w.WriteHeader(http.StatusBadRequest)
-		return
+		return fmt.Errorf(msg)
 	}
 	code, pl, err := h.mag.SQlite.LoginUserScope(username, password, req)
 	if err != nil {
 		logrus.Error(err)
 		w.WriteHeader(http.StatusInternalServerError)
-		return
+		return err
 	}
 	switch code {
 	case http.StatusOK:
@@ -160,12 +162,17 @@ func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) 
 		context.Set(r, "profileName", profile)
 	default:
 		helper.WriteOCIErrror(w, http.StatusUnauthorized, pl)
+		return fmt.Errorf("error logging in")
 	}
+	return nil
 }
 
 func (h Handlers) AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		h.AuthMiddlewareHandler(w, r)
+		err := h.AuthMiddlewareHandler(w, r)
+		if err != nil {
+			return
+		}
 		next.ServeHTTP(w, r)
 	})
 }
@@ -189,5 +196,4 @@ func unauthorized(w http.ResponseWriter, realm string, det helper.Detail, err oa
 	msg := "authentication required"
 	e := helper.NewErrPayload("UNAUTHORIZED", msg, det)
 	helper.WriteOCIErrror(w, http.StatusUnauthorized, e)
-
 }
