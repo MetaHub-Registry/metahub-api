@@ -296,7 +296,7 @@ func Test_UploadManifest_FTarm(t *testing.T) {
 		Tag:     testTag,
 		Profile: "generic",
 	}
-	_, found, err := h.mag.SQlite.ManifestList.GetTypesManifestListByRequest(req)
+	_, found, err := h.mag.SQlite.GetTypesManifestListByRequest(req)
 	assert.NoError(t, err)
 	assert.True(t, found)
 	//assert.Len(t, ml.Manifests, 1)
