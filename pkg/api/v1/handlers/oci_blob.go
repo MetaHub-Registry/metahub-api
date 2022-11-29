@@ -85,6 +85,25 @@ func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request)
 		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 		return
 	}
+	// Fetch all chunks already uploaded
+	chunks, err := h.mag.SQlite.BlobUpload.GetChunkUploadsByUUID(bu.SqlID)
+	if err != nil {
+		logrus.Error(err)
+		msg := "failed to fetch blob upload"
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
+		return
+	}
+	if len(chunks) == 0 && req.RangeStartByte != -1 {
+		// We expect the first chunk to start at offset 0
+		if req.RangeStartByte != 0 {
+			msg := "Range should start at 0"
+			det := helper.NewDetailFromReq(req)
+			e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+			helper.WriteOCIErrror(w, http.StatusRequestedRangeNotSatisfiable, e)
+		}
+	}
 	buf, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		log.Fatal("request", err)

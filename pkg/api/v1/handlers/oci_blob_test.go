@@ -181,7 +181,7 @@ func Test_Upload_UploadBlobSequence(t *testing.T) {
 	gCtx.Set(rPatch, "profileName", "generic")
 	rPatch.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	rPatch.Header.Set("Content-Type", "application/octet-stream")
-	rPatch.Header.Set("Content-Range", "1-1")
+	rPatch.Header.Set("Content-Range", fmt.Sprintf("0-%d", len(l0bytes)-1))
 	rPatch.Header.Set("Content-Length", fmt.Sprintf("%d", len(l0bytes)))
 	h.BlobUploadPatchHandler(wPatch, rPatch)
 	assert.Equal(t, http.StatusAccepted, wPatch.Code)

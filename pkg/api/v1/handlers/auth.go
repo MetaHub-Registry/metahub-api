@@ -85,7 +85,7 @@ func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) 
 	//fmt.Printf("Request:#### \n%s\n####", dumpedReq)
 	authorizationHeader := r.Header.Get("authorization")
 	if authorizationHeader == "" {
-		logrus.Warn("Unauthenticated request as no authorization header was provided")
+		//logrus.Warn("Unauthenticated request as no authorization header was provided")
 		det := helper.NewDetailFromReq(req)
 		unauthorized(w, realm, det, invalidRequest, "missing authorization header")
 		return fmt.Errorf("missing authorization header")
