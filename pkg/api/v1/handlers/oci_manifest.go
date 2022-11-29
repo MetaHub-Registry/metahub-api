@@ -152,6 +152,7 @@ func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		// Put maniest in database
 		m.WriteWWWHeader(w)
+		w.Header().Set("Location", fmt.Sprintf("%s://%s/v2/%s/manifests/%s", req.Protocol, req.Host, req.Repo, req.Tag))
 		w.WriteHeader(http.StatusCreated)
 	case "application/vnd.oci.image.manifest.v1+json":
 		// Put manifest in object store
@@ -166,6 +167,7 @@ func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		// Put maniest in database
 		m.WriteWWWHeader(w)
+		w.Header().Set("Location", fmt.Sprintf("%s://%s/v2/%s/manifests/%s", req.Protocol, req.Host, req.Repo, req.Tag))
 		w.WriteHeader(http.StatusCreated)
 	default:
 		msg := fmt.Sprintf("Unsupported ContentType: %s", req.ContentType)

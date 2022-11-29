@@ -533,6 +533,92 @@ func Test_Manifest_OCITest(t *testing.T) {
 	*/
 }
 
+func Test_Manifest_OCITest_NoLayers(t *testing.T) {
+	bs := utils.NewBootstrap()
+	bs.SetSqlEmptyAll()
+	bs.AddBootstrap("users")
+	bs.AddBootstrap("profiles")
+	bs.AddBootstrap("platforms")
+	//bs.SetSqlite("Desktop/metahub.db")
+	err := h.mag.Minio.EmptyAll()
+	assert.NoError(t, err)
+	err = h.mag.SQlite.EmptyData(true)
+	assert.NoError(t, err)
+	br, err := SetupTest(bs)
+	assert.NoError(t, err)
+	defer TeardownTest(bs)
+	_ = br
+	token, err := br.Get("user:test#bearer")
+	assert.NoError(t, err)
+	// Tests
+	testRepo := "oci"
+	testImage := "conformance"
+	testTag := "tagtest0"
+	cfg := types.Config{
+		Data: []byte(`{
+			"author": "TneKdQXHXICsSXwR",
+			"architecture": "amd64",
+			"os": "linux",
+			"rootfs": {
+				"type": "layers",
+				"diff_ids": []
+			}
+		}`),
+	}
+	cfgDig := digest.FromBytes(cfg.Data)
+	logrus.Errorf("cfgDig: %s", cfgDig)
+	/// Direct Post with config
+	wCfgPost, rCfgPost := createNewHTTPTest(http.MethodPost, map[string]string{
+		"repo":  testRepo,
+		"image": testImage,
+	}, map[string]string{
+		"accountName": token,
+		"userName":    "test",
+		"profileName": "generic",
+	}, map[string]string{
+		"Authorization":  fmt.Sprintf("Bearer %s", token),
+		"Content-Type":   "application/octet-stream",
+		"Content-Range":  "1-1",
+		"Content-Length": fmt.Sprintf("%d", len(cfg.Data)),
+	}, "/{repo}/{image}/blobs/uploads/{uuid}", cfg.Data)
+	h.BlobUploadPostHandler(&wCfgPost, rCfgPost)
+	assert.Equal(t, http.StatusCreated, wCfgPost.Code)
+	/// Manifest
+	dat := []byte(`{
+		"schemaVersion": 2,
+		"config": {
+			"mediaType": "application/vnd.oci.image.config.v1+json",
+			"digest": "sha256:9926ec0751c67b1aa49c051ef77be145fa13e84fd03fb728a4af3ed159c208ac",
+			"size": 129,
+			"data": "ewoJImF1dGhvciI6ICJBSnM5bUhSRFloSU1PQXJxIiwKCSJhcmNoaXRlY3R1cmUiOiAiYW1kNjQiLAoJIm9zIjogImxpbnV4IiwKCSJyb290ZnMiOiB7CgkJInR5cGUiOiAibGF5ZXJzIiwKCQkiZGlmZl9pZHMiOiBbXQoJfQp9",
+			"newUnspecifiedField": "aGVsbG8gd29ybGQ="
+		},
+		"layers": []
+	}`)
+	mani := types.Manifest{
+		Data: dat,
+	}
+	expManiDigest := digest.FromBytes(mani.Data)
+
+	wManiPut, rManiPut := createNewHTTPTest(http.MethodPut, map[string]string{
+		"repo":      testRepo,
+		"image":     testImage,
+		"reference": testTag,
+	}, map[string]string{
+		"accountName": token,
+		"userName":    "test",
+		"profileName": "generic",
+	}, map[string]string{
+		"Authorization": fmt.Sprintf("Bearer %s", token),
+		"Content-Type":  "application/vnd.docker.distribution.manifest.v2+json",
+	}, "/{repo}/{image}/manifests/{reference}", mani.Data)
+	h.ManifestPutHandler(&wManiPut, rManiPut)
+	assert.Equal(t, http.StatusCreated, wManiPut.Code)
+	maniDigest := wManiPut.Header().Get("Docker-Content-Digest")
+	assert.Equal(t, expManiDigest.String(), maniDigest)
+	assert.Equal(t, "http://example.com/v2/oci/conformance/manifests/tagtest0", wManiPut.Header().Get("Location"))
+}
+
 func Test_Manifest_Remove(t *testing.T) {
 	testRepo := "qnib"
 	testImage := "featuretest"
