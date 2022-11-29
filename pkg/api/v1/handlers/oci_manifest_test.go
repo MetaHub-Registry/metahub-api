@@ -146,7 +146,7 @@ func Test_UploadManifest_FTarm(t *testing.T) {
 	}, map[string]string{
 		"Authorization":  fmt.Sprintf("Bearer %s", token),
 		"Content-Type":   "application/octet-stream",
-		"Content-Range":  "1-1",
+		"Content-Range":  fmt.Sprintf("0-%d", len(l0bytes)-1),
 		"Content-Length": fmt.Sprintf("%d", len(l0bytes)),
 	}, "/{repo}/{image}/blobs/uploads/{uuid}", l0bytes)
 	h.BlobUploadPatchHandler(&wL0Patch, rL0Patch)
@@ -232,7 +232,7 @@ func Test_UploadManifest_FTarm(t *testing.T) {
 	}, map[string]string{
 		"Authorization":  fmt.Sprintf("Bearer %s", token),
 		"Content-Type":   "application/octet-stream",
-		"Content-Range":  "1-1",
+		"Content-Range":  fmt.Sprintf("0-%d", len(l1bytes)-1),
 		"Content-Length": fmt.Sprintf("%d", len(l1bytes)),
 	}, "/{repo}/{image}/blobs/uploads/{uuid}", l1bytes)
 	h.BlobUploadPatchHandler(&wL1Patch, rL1Patch)
@@ -296,7 +296,7 @@ func Test_UploadManifest_FTarm(t *testing.T) {
 	}, map[string]string{
 		"Authorization":  fmt.Sprintf("Bearer %s", token),
 		"Content-Type":   "application/octet-stream",
-		"Content-Range":  "1-1",
+		"Content-Range":  fmt.Sprintf("0-%d", len(cfgBytes)-1),
 		"Content-Length": fmt.Sprintf("%d", len(cfgBytes)),
 	}, "/{repo}/{image}/blobs/uploads/{uuid}", cfgBytes)
 	h.BlobUploadPatchHandler(&wCfgPatch, rCfgPatch)
@@ -470,7 +470,7 @@ func Test_Manifest_OCITest(t *testing.T) {
 	}, map[string]string{
 		"Authorization":  fmt.Sprintf("Bearer %s", token),
 		"Content-Type":   "application/octet-stream",
-		"Content-Range":  "1-1",
+		"Content-Range":  fmt.Sprintf("0-%d", len(cfg.Data)-1),
 		"Content-Length": fmt.Sprintf("%d", len(cfg.Data)),
 	}, "/{repo}/{image}/blobs/uploads/{uuid}", cfg.Data)
 	h.BlobUploadPostHandler(&wCfgPost, rCfgPost)
@@ -578,7 +578,7 @@ func Test_Manifest_OCITest_NoLayers(t *testing.T) {
 	}, map[string]string{
 		"Authorization":  fmt.Sprintf("Bearer %s", token),
 		"Content-Type":   "application/octet-stream",
-		"Content-Range":  "1-1",
+		"Content-Range":  fmt.Sprintf("0-%d", len(cfg.Data)-1),
 		"Content-Length": fmt.Sprintf("%d", len(cfg.Data)),
 	}, "/{repo}/{image}/blobs/uploads/{uuid}", cfg.Data)
 	h.BlobUploadPostHandler(&wCfgPost, rCfgPost)
