@@ -13,6 +13,76 @@ import (
 	"github.com/metahub-registry/metahub-core/pkg/utils"
 )
 
+func Test_UploadManifest_FTarm_Short(t *testing.T) {
+	testRepo := "qnib"
+	testImage := "featuretest"
+	testTag := "arm64"
+	bs := utils.NewBootstrap()
+	bs.SetSqlEmptyAll()
+	err := h.mag.Minio.EmptyAll()
+	assert.NoError(t, err)
+	err = h.mag.SQlite.EmptyData(true)
+	assert.NoError(t, err)
+	bs.AddBootstrap("users")
+	bs.AddBootstrap("profiles")
+	bs.AddBootstrap("platforms")
+	bs.AddBootstrap("upstreams:qnib/featuretest:arm64")
+	bs.AddBootstrap("layers:qnib/featuretest:arm64")
+	bs.AddBootstrap("config:qnib/featuretest:arm64")
+	// TODO: REMOVE
+	//bs.SetSqlite("Desktop/metahub.db")
+	br, err := SetupTest(bs)
+	assert.NoError(t, err)
+	defer TeardownTest(bs)
+	/// Request
+	token, err := br.Get("user:test#bearer")
+	assert.NoError(t, err)
+	/// Manifest
+	mani := types.FT_arm_Manifest()
+	wManiPut, rManiPut := createNewHTTPTest(http.MethodPut, map[string]string{
+		"repo":      testRepo,
+		"image":     testImage,
+		"reference": testTag,
+	}, map[string]string{
+		"accountName": token,
+		"userName":    "test",
+		"profileName": "generic",
+	}, map[string]string{
+		"Authorization": fmt.Sprintf("Bearer %s", token),
+		"Content-Type":  "application/vnd.docker.distribution.manifest.v2+json",
+	}, "/{repo}/{image}/manifests/{reference}", mani.Data)
+	h.ManifestPutHandler(&wManiPut, rManiPut)
+	assert.Equal(t, http.StatusCreated, wManiPut.Code)
+	// Check DB
+	// Upstream
+	q := fmt.Sprintf(`SELECT id,repo,tag FROM main.upstreams WHERE digest="%s";`, mani.Digest)
+	rows, err := h.mag.SQlite.Query(q)
+	assert.NoError(t, err)
+	defer rows.Close()
+	var id int
+	var repo, tag string
+	if rows.Next() {
+		err = rows.Scan(&id, &repo, &tag)
+		assert.NoError(t, err)
+	} else {
+		t.Fatal("No upstream found")
+	}
+	rows.Close()
+	assert.Equal(t, "qnib/featuretest", repo)
+	assert.Equal(t, "arm64", tag)
+	////// FETCH MANIFEST_LIST via Collection
+	/// Direct DB
+	req := types.Request{
+		Repo:    fmt.Sprintf("%s/%s", testRepo, testImage),
+		Tag:     testTag,
+		Profile: "generic",
+	}
+	_, found, err := h.mag.SQlite.GetTypesManifestListByRequest(req)
+	assert.NoError(t, err)
+	assert.True(t, found)
+
+}
+
 func Test_UploadManifest_FTarm(t *testing.T) {
 	testRepo := "qnib"
 	testImage := "featuretest"
@@ -474,11 +544,11 @@ func Test_Manifest_Remove(t *testing.T) {
 	bs.AddBootstrap("users")
 	bs.AddBootstrap("profiles")
 	bs.AddBootstrap("platforms")
-	bs.AddBootstrap("upstreams:qnib/featuretest-arm64")
-	bs.AddBootstrap("layers:qnib/featuretest-arm64")
-	bs.AddBootstrap("config:qnib/featuretest-arm64")
-	bs.AddBootstrap("manifest:qnib/featuretest-arm64")
-	bs.AddBootstrap("manifestlist:qnib/featuretest-generic-arm64")
+	bs.AddBootstrap("upstreams:qnib/featuretest:arm64")
+	bs.AddBootstrap("layers:qnib/featuretest:arm64")
+	bs.AddBootstrap("config:qnib/featuretest:arm64")
+	bs.AddBootstrap("manifest:qnib/featuretest:arm64")
+	bs.AddBootstrap("manifestlist:qnib/featuretest:arm64")
 	//bs.SetSqlite("Desktop/metahub.db")
 	br, err := SetupTest(bs)
 	assert.NoError(t, err)
@@ -487,7 +557,7 @@ func Test_Manifest_Remove(t *testing.T) {
 	/// Request
 	token, err := br.Get("user:test#bearer")
 	assert.NoError(t, err)
-	maniDigest, err := br.Get("manifest:qnib/featuretest-arm64#digest")
+	maniDigest, err := br.Get("manifest:qnib/featuretest:arm64#digest")
 	assert.NoError(t, err)
 	// Remove
 	_, rManiDel := createNewHTTPTest(http.MethodDelete, map[string]string{

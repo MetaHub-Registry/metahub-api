@@ -100,11 +100,11 @@ func TeardownTest(bs utils.Bootstrap) {
 }
 
 func SetupTest(bs utils.Bootstrap) (br utils.BootstrapResult, err error) {
-	logrus.Info("> SetupTest")
+	logrus.Debug("> SetupTest")
 	br = utils.NewBootstrapResult()
 	for _, b := range bs.Bootstraps {
-		logrus.Errorf("SetupTest: %s", b)
 		sq := h.mag.SQlite
+		min := h.mag.Minio
 		switch b {
 		case "profiles":
 			err = sqlite.Setup_Profiles(&sq, &br, "../../../../misc/yaml/profiles")
@@ -121,36 +121,52 @@ func SetupTest(bs utils.Bootstrap) (br utils.BootstrapResult, err error) {
 			if err != nil {
 				return
 			}
-		case "manifest:qnib/featuretest-arm64":
+		case "manifest:qnib/featuretest:arm64":
 			err = sqlite.Setup_Manifest_QNIB_FeatureTest_arm(&sq, &br)
 			if err != nil {
 				return
 			}
-		case "config:qnib/featuretest-arm64":
+		case "config:qnib/featuretest:arm64":
 			err = sqlite.Setup_Config_FTarm(&sq, &br)
 			if err != nil {
 				return
 			}
-		case "upstreams:qnib/featuretest-arm64":
+			cfgByte := types.FT_arm_ConfigByte()
+			dig, err := br.Get("config:qnib/featuretest:arm64#digest")
+			if err != nil {
+				return br, err
+			}
+			err = min.ConfigPutObj(ctx, dig, cfgByte)
+			if err != nil {
+				return br, err
+			}
+		case "upstreams:qnib/featuretest:arm64":
 			err = sqlite.Setup_Upstream_FTarm(&sq, &br)
 			if err != nil {
 				return
 			}
-		case "layers:qnib/featuretest-arm64":
+		case "layers:qnib/featuretest:arm64":
 			err = sqlite.Setup_Layers_FTarm(&sq, &br)
 			if err != nil {
 				return
 			}
-		case "manifestlist:qnib/featuretest-generic-arm64":
+		case "manifestlist:qnib/featuretest:arm64":
 			err = sqlite.Setup_Manifestlist_FTarm(&sq, &br)
 			if err != nil {
 				return
 			}
-		case "collection:qnib/featuretest":
-			err = sqlite.Setup_Collection_QNIB_FeatureTest(&sq, &br)
+		case "manifestlist:qnib/featuretest:generic":
+			err = sqlite.Setup_Manifestlist_FT_generic(&sq, &br)
 			if err != nil {
 				return
 			}
+
+		case "collection:qnib/featuretest:arm64":
+			err = sqlite.Setup_Collection_QNIB_FeatureTest_arm(&sq, &br)
+			if err != nil {
+				return
+			}
+
 		case "filter:generic":
 			err = sqlite.Setup_Filter_Generic(&sq, &br)
 			if err != nil {
