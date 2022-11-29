@@ -53,33 +53,35 @@ func Test_UploadManifest_FTarm_Short(t *testing.T) {
 	}, "/{repo}/{image}/manifests/{reference}", mani.Data)
 	h.ManifestPutHandler(&wManiPut, rManiPut)
 	assert.Equal(t, http.StatusCreated, wManiPut.Code)
-	// Check DB
-	// Upstream
-	q := fmt.Sprintf(`SELECT id,repo,tag FROM main.upstreams WHERE digest="%s";`, mani.Digest)
-	rows, err := h.mag.SQlite.Query(q)
-	assert.NoError(t, err)
-	defer rows.Close()
-	var id int
-	var repo, tag string
-	if rows.Next() {
-		err = rows.Scan(&id, &repo, &tag)
+	/*
+		// Check DB
+		// Upstream
+		q := fmt.Sprintf(`SELECT id,repo,tag FROM main.upstreams WHERE digest="%s";`, mani.Digest)
+		rows, err := h.mag.SQlite.Query(q)
 		assert.NoError(t, err)
-	} else {
-		t.Fatal("No upstream found")
-	}
-	rows.Close()
-	assert.Equal(t, "qnib/featuretest", repo)
-	assert.Equal(t, "arm64", tag)
-	////// FETCH MANIFEST_LIST via Collection
-	/// Direct DB
-	req := types.Request{
-		Repo:    fmt.Sprintf("%s/%s", testRepo, testImage),
-		Tag:     testTag,
-		Profile: "generic",
-	}
-	_, found, err := h.mag.SQlite.GetTypesManifestListByRequest(req)
-	assert.NoError(t, err)
-	assert.True(t, found)
+		defer rows.Close()
+		var id int
+		var repo, tag string
+		if rows.Next() {
+			err = rows.Scan(&id, &repo, &tag)
+			assert.NoError(t, err)
+		} else {
+			t.Fatal("No upstream found")
+		}
+		rows.Close()
+		assert.Equal(t, "qnib/featuretest", repo)
+		assert.Equal(t, "arm64", tag)
+		////// FETCH MANIFEST_LIST via Collection
+		/// Direct DB
+		req := types.Request{
+			Repo:    fmt.Sprintf("%s/%s", testRepo, testImage),
+			Tag:     testTag,
+			Profile: "generic",
+		}
+		_, found, err := h.mag.SQlite.GetTypesManifestListByRequest(req)
+		assert.NoError(t, err)
+		assert.True(t, found)
+	*/
 
 }
 

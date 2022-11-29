@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/metahub-registry/metahub-core/pkg/backends/magazine"
 	"github.com/metahub-registry/metahub-core/pkg/backends/minio"
@@ -106,6 +107,10 @@ func SetupTest(bs utils.Bootstrap) (br utils.BootstrapResult, err error) {
 		sq := h.mag.SQlite
 		min := h.mag.Minio
 		switch b {
+		default:
+			err = fmt.Errorf("No Setup for '%s'", b)
+			return br, err
+		// Users/Profile/Platforms
 		case "profiles":
 			err = sqlite.Setup_Profiles(&sq, &br, "../../../../misc/yaml/profiles")
 			if err != nil {
@@ -121,28 +126,23 @@ func SetupTest(bs utils.Bootstrap) (br utils.BootstrapResult, err error) {
 			if err != nil {
 				return
 			}
-		case "manifest:qnib/featuretest:arm64":
-			err = sqlite.Setup_Manifest_QNIB_FeatureTest_arm(&sq, &br)
-			if err != nil {
-				return
-			}
-		case "config:qnib/featuretest:arm64":
-			err = sqlite.Setup_Config_FTarm(&sq, &br)
-			if err != nil {
-				return
-			}
-			cfgByte := types.FT_arm_ConfigByte()
-			dig, err := br.Get("config:qnib/featuretest:arm64#digest")
-			if err != nil {
-				return br, err
-			}
-			err = min.ConfigPutObj(ctx, dig, cfgByte)
-			if err != nil {
-				return br, err
-			}
+		// Upstream
 		case "upstreams:qnib/featuretest:arm64":
 			err = sqlite.Setup_Upstream_FTarm(&sq, &br)
 			if err != nil {
+				return
+			}
+		case "upstreams:qnib/featuretest:amd64":
+			err = sqlite.Setup_Upstream_FT_amd64(&sq, &br)
+			if err != nil {
+				err = errors.Wrap(err, "Setup_Upstream_FT_amd64")
+				return
+			}
+		// Layers
+		case "layers:qnib/featuretest:amd64":
+			err = sqlite.Setup_Layers_FT_amd64(&sq, &br)
+			if err != nil {
+				err = errors.Wrap(err, "Setup_Layers_FT_amd64")
 				return
 			}
 		case "layers:qnib/featuretest:arm64":
@@ -150,14 +150,63 @@ func SetupTest(bs utils.Bootstrap) (br utils.BootstrapResult, err error) {
 			if err != nil {
 				return
 			}
+		/// CONFIG
+		case "config:qnib/featuretest:amd64":
+			err = sqlite.Setup_Config_FT_amd64(&sq, &br)
+			if err != nil {
+				err = errors.Wrap(err, "sqlite.Setup_Config_FT_amd64")
+				return
+			}
+			err = minio.Setup_Config_FT_amd64(&min, &br)
+			if err != nil {
+				err = errors.Wrap(err, "minio.Setup_Config_FT_amd64")
+				return
+			}
+		case "config:qnib/featuretest:arm64":
+			err = sqlite.Setup_Config_FTarm(&sq, &br)
+			if err != nil {
+				return
+			}
+			err = minio.Setup_Config_FT_arm64(&min, &br)
+			if err != nil {
+				err = errors.Wrap(err, "minio.Setup_Config_FT_arm64")
+				return
+			}
+		/// Manifests
+		case "manifest:qnib/featuretest:arm64":
+			err = sqlite.Setup_Manifest_QNIB_FeatureTest_arm(&sq, &br)
+			if err != nil {
+				return
+			}
+		case "manifest:qnib/featuretest:amd64":
+			err = sqlite.Setup_Manifest_QNIB_FeatureTest_amd(&sq, &br)
+			if err != nil {
+				err = errors.Wrap(err, "Setup_Manifest_QNIB_FeatureTest_amd")
+				return
+			}
+		/// ManifestLists
+		case "manifestlist:qnib/featuretest:amd64":
+			err = sqlite.Setup_Manifestlist_FTamd64(&sq, &br)
+			if err != nil {
+				err = errors.Wrap(err, "Setup_Manifestlist_FTamd64")
+				return
+			}
 		case "manifestlist:qnib/featuretest:arm64":
 			err = sqlite.Setup_Manifestlist_FTarm(&sq, &br)
 			if err != nil {
 				return
 			}
-		case "manifestlist:qnib/featuretest:generic":
-			err = sqlite.Setup_Manifestlist_FT_generic(&sq, &br)
+		/// Collections
+		case "collection:qnib/featuretest:amd64":
+			err = sqlite.Setup_Collection_QNIB_FeatureTest_amd64(&sq, &br)
 			if err != nil {
+				err = errors.Wrap(err, "Setup_Collection_QNIB_FeatureTest_amd64")
+				return
+			}
+		case "collection:qnib/featuretest:generic":
+			err = sqlite.Setup_Collection_QNIB_FeatureTest_Generic(&sq, &br)
+			if err != nil {
+				err = errors.Wrap(err, "Setup_Collection_QNIB_FeatureTest_Generic")
 				return
 			}
 
@@ -166,7 +215,6 @@ func SetupTest(bs utils.Bootstrap) (br utils.BootstrapResult, err error) {
 			if err != nil {
 				return
 			}
-
 		case "filter:generic":
 			err = sqlite.Setup_Filter_Generic(&sq, &br)
 			if err != nil {
