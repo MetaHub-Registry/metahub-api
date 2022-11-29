@@ -34,8 +34,9 @@ func (h Handlers) BlobUploadPutHandler(w http.ResponseWriter, r *http.Request) {
 		bu.Digest = dig.String()
 		err = h.mag.StoreBlobUpload(ctx, &bu, buf)
 		if err != nil {
-			logrus.Error(err)
 			msg := "failed to store blob upload"
+			err = errors.Wrap(err, msg)
+			logrus.Error(err)
 			det := helper.NewDetailFromReq(req)
 			e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
 			helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
@@ -43,8 +44,9 @@ func (h Handlers) BlobUploadPutHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		err = h.mag.SQlite.BlobUpload.UpdateDigestByUUID(&bu)
 		if err != nil {
-			logrus.Error(err)
 			msg := "failed to update blob upload"
+			err = errors.Wrap(err, msg)
+			logrus.Error(err)
 			det := helper.NewDetailFromReq(req)
 			e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
 			helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
@@ -52,18 +54,12 @@ func (h Handlers) BlobUploadPutHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 	}
-	if bu.Digest != req.Digest {
-		msg := fmt.Sprintf("digest in DB (by UUID) and provided URL digest are not equal: %s != %s", bu.Digest, req.Digest)
-		logrus.Error(msg)
-		det := helper.NewDetailFromReq(req)
-		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
-		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
-	}
 	// Finish the upload
 	err = h.mag.SQlite.BlobUpload.CompleteByUUID(&bu)
 	if err != nil {
-		logrus.Error(err)
 		msg := "failed to update blob in DB"
+		err = errors.Wrap(err, msg)
+		logrus.Error(err)
 		det := helper.NewDetailFromReq(req)
 		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
 		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
@@ -78,8 +74,9 @@ func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request)
 	logrus.Infof("%-5s BlobUploadPatchHandler(%s, %s) Len:%d", r.Method, req.Repo, req.UUID, req.Length)
 	bu, err := h.mag.SQlite.BlobUpload.GetByUUID(req.UUID)
 	if err != nil {
-		logrus.Error(err)
 		msg := "failed to fetch blob upload"
+		err = errors.Wrap(err, msg)
+		logrus.Error(err)
 		det := helper.NewDetailFromReq(req)
 		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
 		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
@@ -88,8 +85,9 @@ func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request)
 	// Fetch all chunks already uploaded
 	chunks, err := h.mag.SQlite.BlobUpload.GetChunkUploadsByUUID(bu.SqlID)
 	if err != nil {
-		logrus.Error(err)
 		msg := "failed to fetch blob upload"
+		err = errors.Wrap(err, msg)
+		logrus.Error(err)
 		det := helper.NewDetailFromReq(req)
 		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
 		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
@@ -104,6 +102,18 @@ func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request)
 			helper.WriteOCIErrror(w, http.StatusRequestedRangeNotSatisfiable, e)
 		}
 	}
+	/// Create New Chunk
+	chunk, err := h.mag.SQlite.BlobUpload.CreateUploadChunk(bu.SqlID, req.RangeStartByte, req.RangeBytes)
+	if err != nil {
+		msg := "failed to create chunk upload"
+		err = errors.Wrap(err, msg)
+		logrus.Error(err)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
+		return
+	}
+	_ = chunk
 	buf, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		log.Fatal("request", err)
@@ -112,8 +122,9 @@ func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request)
 	bu.Digest = dig.String()
 	err = h.mag.StoreBlobUpload(ctx, &bu, buf)
 	if err != nil {
-		logrus.Error(err)
 		msg := "failed to store blob upload"
+		err = errors.Wrap(err, msg)
+		logrus.Error(err)
 		det := helper.NewDetailFromReq(req)
 		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
 		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
@@ -121,8 +132,9 @@ func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request)
 	}
 	err = h.mag.SQlite.BlobUpload.UpdateDigestByUUID(&bu)
 	if err != nil {
-		logrus.Error(err)
 		msg := "failed to update blob upload"
+		err = errors.Wrap(err, msg)
+		logrus.Error(err)
 		det := helper.NewDetailFromReq(req)
 		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
 		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
