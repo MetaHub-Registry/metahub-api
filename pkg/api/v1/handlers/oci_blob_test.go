@@ -204,6 +204,99 @@ func Test_Upload_UploadBlobSequence(t *testing.T) {
 	assert.Equal(t, fmt.Sprintf("/v2/qnib/alpine/blobs/uploads/%s", uuid), gotPutLoc)
 }
 
+func Test_Upload_UploadBlobSequence_Split(t *testing.T) {
+	bs := utils.NewBootstrap()
+	bs.SetSqlEmptyAll()
+	bs.AddBootstrap("users")
+	bs.AddBootstrap("profiles")
+	//bs.SetSqlite("Desktop/metahub.db")
+	br, err := SetupTest(bs)
+	assert.NoError(t, err)
+	_ = br
+	defer TeardownTest(bs)
+	/// Request
+	token, err := br.Get("user:test#bearer")
+	assert.NoError(t, err)
+	// POST with Data
+	w := httptest.NewRecorder()
+	l0bytes := types.FT_arm_Layer0Byte()
+	l0bytePart1 := l0bytes[:len(l0bytes)/2]
+	l0bytePart2 := l0bytes[len(l0bytes)/2:]
+	l0ref := types.FT_arm_Layer0Reference()
+	_ = l0ref
+	r := httptest.NewRequest(http.MethodPost, "/{repo}/{image}/blobs/uploads/", bytes.NewReader(l0bytes))
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("repo", "qnib")
+	rctx.URLParams.Add("image", "alpine")
+	r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
+	gCtx.Set(r, "accountName", token)
+	gCtx.Set(r, "userName", "test")
+	gCtx.Set(r, "profileName", "generic")
+	r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	h.BlobUploadPostHandler(w, r)
+	assert.Equal(t, http.StatusAccepted, w.Code)
+	// Fetch Upload from DB
+	gotLoc := w.Header().Get("Location")
+	q := fmt.Sprintf(`SELECT uuid,uploaded_by FROM main.blob_uploads WHERE location="%s";`, gotLoc)
+	rows, err := h.mag.SQlite.Query(q)
+	assert.NoError(t, err)
+	defer rows.Close()
+	var uuid, uploadedBy string
+	for rows.Next() {
+		err = rows.Scan(&uuid, &uploadedBy)
+		assert.NoError(t, err)
+	}
+	assert.Equal(t, "test", uploadedBy)
+	assert.Equal(t, fmt.Sprintf("/v2/qnib/alpine/blobs/uploads/%s", uuid), gotLoc)
+	// Next we do a PATCH request with Part1
+	wPatchPart1 := httptest.NewRecorder()
+	rPatchPart1 := httptest.NewRequest(http.MethodPost, "/{repo}/{image}/blobs/uploads/{uuid}", bytes.NewReader(l0bytePart1))
+	rctxPatch := chi.NewRouteContext()
+	rctxPatch.URLParams.Add("repo", "qnib")
+	rctxPatch.URLParams.Add("image", "alpine")
+	rctxPatch.URLParams.Add("uuid", uuid)
+	rPatchPart1 = rPatchPart1.WithContext(context.WithValue(rPatchPart1.Context(), chi.RouteCtxKey, rctxPatch))
+	gCtx.Set(rPatchPart1, "accountName", token)
+	gCtx.Set(rPatchPart1, "userName", "test")
+	gCtx.Set(rPatchPart1, "profileName", "generic")
+	rPatchPart1.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	rPatchPart1.Header.Set("Content-Type", "application/octet-stream")
+	rPatchPart1.Header.Set("Content-Range", fmt.Sprintf("0-%d", len(l0bytePart1)-1))
+	rPatchPart1.Header.Set("Content-Length", fmt.Sprintf("%d", len(l0bytePart1)))
+	h.BlobUploadPatchHandler(wPatchPart1, rPatchPart1)
+	assert.Equal(t, http.StatusAccepted, wPatchPart1.Code)
+	// Next we do a PATCH request with Part2
+	wPatchPart2 := httptest.NewRecorder()
+	rPatchPart2 := httptest.NewRequest(http.MethodPost, "/{repo}/{image}/blobs/uploads/{uuid}", bytes.NewReader(l0bytePart2))
+	rPatchPart2 = rPatchPart2.WithContext(context.WithValue(rPatchPart2.Context(), chi.RouteCtxKey, rctxPatch))
+	gCtx.Set(rPatchPart2, "accountName", token)
+	gCtx.Set(rPatchPart2, "userName", "test")
+	gCtx.Set(rPatchPart2, "profileName", "generic")
+	rPatchPart2.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	rPatchPart2.Header.Set("Content-Type", "application/octet-stream")
+	rPatchPart2.Header.Set("Content-Range", fmt.Sprintf("%d-%d", len(l0bytePart1), len(l0bytePart1)+len(l0bytePart1)))
+	rPatchPart2.Header.Set("Content-Length", fmt.Sprintf("%d", len(l0bytePart2)))
+	h.BlobUploadPatchHandler(wPatchPart2, rPatchPart2)
+	assert.Equal(t, http.StatusAccepted, wPatchPart2.Code)
+	// Final PUT request
+	wPut := httptest.NewRecorder()
+	putUrl := fmt.Sprintf("/{repo}/{image}/blobs/uploads/{uuid}?digest=%s", l0ref.Digest)
+	rPut := httptest.NewRequest(http.MethodPost, putUrl, bytes.NewReader(l0bytes))
+	rctxPut := chi.NewRouteContext()
+	rctxPut.URLParams.Add("repo", "qnib")
+	rctxPut.URLParams.Add("image", "alpine")
+	rctxPut.URLParams.Add("uuid", uuid)
+	rPut = rPut.WithContext(context.WithValue(rPut.Context(), chi.RouteCtxKey, rctxPut))
+	gCtx.Set(rPut, "accountName", token)
+	gCtx.Set(rPut, "userName", "test")
+	gCtx.Set(rPut, "profileName", "generic")
+	rPut.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	h.BlobUploadPutHandler(wPut, rPut)
+	assert.Equal(t, http.StatusCreated, wPut.Code)
+	gotPutLoc := wPut.Header().Get("Location")
+	assert.Equal(t, fmt.Sprintf("/v2/qnib/alpine/blobs/uploads/%s", uuid), gotPutLoc)
+}
+
 func createNewHTTPTest(meth string, p, c, h map[string]string, url string, b []byte) (w httptest.ResponseRecorder, r *http.Request) {
 	w = *httptest.NewRecorder()
 	r = httptest.NewRequest(meth, url, bytes.NewReader(b))

@@ -150,6 +150,7 @@ func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) 
 	}
 	code, pl, err := h.mag.SQlite.LoginUserScope(username, password, req)
 	if err != nil {
+		err = errors.Wrap(err, "error logging in user")
 		logrus.Error(err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return err
