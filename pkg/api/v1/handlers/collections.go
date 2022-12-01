@@ -31,7 +31,7 @@ func (h Handlers) CollectionGetOne(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	col, err := h.mag.SQlite.Collection.GetCollectionByID(pl.ColID)
-	logrus.Infof("CollectionGetOne(%d): %s:%s", pl.ColID, col.Repo, col.Tag.Tag)
+	logrus.Infof("CollectionGetOne(%d): %s:%s", pl.ColID, col.Repo, col.Tag)
 	if err != nil {
 		h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
 		return
@@ -59,7 +59,7 @@ func (h Handlers) CollectionGetOne(w http.ResponseWriter, r *http.Request) {
 		col.Manifests[key] = mani
 	}
 	payload := envelope{
-		"repos":        reps,
+		"repos":        reps.AsSlice(),
 		"bread_crumbs": breadCrumbs,
 		"collection":   col,
 	}
@@ -93,9 +93,9 @@ func (h Handlers) CollectionGetAll(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case len(repoSlug) == len(colSlug):
 			// Add Tags to next with the complete n
-			next[col.Tag.Tag] = Next{
+			next[col.Tag] = Next{
 				Repo:      col.Repo,
-				Tag:       col.Tag.Tag,
+				Tag:       col.Tag,
 				ID:        col.ID,
 				ColCount:  1,
 				ManiCount: col.ManifestCount,
