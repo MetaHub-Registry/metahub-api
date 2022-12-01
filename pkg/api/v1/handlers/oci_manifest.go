@@ -124,7 +124,7 @@ func (h Handlers) ManifestGetHandler(w http.ResponseWriter, r *http.Request) {
 		m.WriteWWWBody(w)
 		return
 	} else {
-		msg := "no such manifest"
+		msg := fmt.Sprintf("no manifest '%s:%s' found for profile '%s'", req.Repo, req.Tag, req.Profile)
 		det := helper.NewDetailFromReq(req)
 		e := helper.NewErrPayload("MANIFEST_UNKNOWN", msg, det)
 		helper.WriteOCIErrror(w, http.StatusNotFound, e)
