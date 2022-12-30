@@ -1,0 +1,9 @@
+profile:
+  name: zen4
+  actions:
+    - name: manifest-filter
+      event: post-manifest-list-get
+      args:
+        select: .manifests .[] .platform .features
+        value: cpu:zen4
+

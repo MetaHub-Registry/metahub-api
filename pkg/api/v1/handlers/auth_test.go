@@ -14,7 +14,7 @@ import (
 func Test_Auth_AuthHandler_Success(t *testing.T) {
 	bs := utils.NewBootstrap()
 	bs.AddBootstrap("users")
-	bs.SetSqlEmptyAll()
+	bs.SetEmptyAll()
 	br, err := SetupTest(bs)
 	assert.NoError(t, err)
 	defer TeardownTest(bs)
@@ -36,7 +36,7 @@ func Test_Auth_AuthHandler_Success(t *testing.T) {
 
 func Test_Auth_AuthHandler_Fail(t *testing.T) {
 	bs := utils.NewBootstrap()
-	bs.SetSqlEmptyAll()
+	bs.SetEmptyAll()
 	_, err := SetupTest(bs)
 	assert.NoError(t, err)
 	defer TeardownTest(bs)
@@ -62,7 +62,7 @@ func Test_Auth_AuthHandler_Fail(t *testing.T) {
 func Test_Auth_AuthMiddlewareHandler_WithUser(t *testing.T) {
 	bs := utils.NewBootstrap()
 	bs.AddBootstrap("users")
-	bs.SetSqlEmptyAll()
+	bs.SetEmptyAll()
 	br, err := SetupTest(bs)
 	assert.NoError(t, err)
 	defer TeardownTest(bs)
@@ -101,7 +101,7 @@ func Test_Auth_AuthMiddlewareHandler_WithScope(t *testing.T) {
 	bs := utils.NewBootstrap()
 	bs.AddBootstrap("users")
 	//bs.SetSqlite("Desktop/metahub.db")
-	bs.SetSqlEmptyAll()
+	bs.SetEmptyAll()
 	br, err := SetupTest(bs)
 	assert.NoError(t, err)
 	defer TeardownTest(bs)

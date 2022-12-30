@@ -103,7 +103,7 @@ func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) 
 	}
 	accessTokenString := bearerToken[1]
 
-	at, err := h.mag.SQlite.User.GetAccessToken(accessTokenString)
+	at, err := h.mag.UserManagement.User.GetAccessToken(accessTokenString)
 	if err != nil {
 		logrus.Infof("error getting access token: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -148,7 +148,7 @@ func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) 
 		w.WriteHeader(http.StatusBadRequest)
 		return fmt.Errorf(msg)
 	}
-	code, pl, err := h.mag.SQlite.LoginUserScope(username, password, req)
+	code, pl, err := h.mag.UserManagement.LoginUserScope(username, password, req)
 	if err != nil {
 		err = errors.Wrap(err, "error logging in user")
 		logrus.Error(err)

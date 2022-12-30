@@ -3,7 +3,7 @@ package handlers
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 
@@ -20,13 +20,22 @@ func (h Handlers) BlobUploadPutHandler(w http.ResponseWriter, r *http.Request) {
 	// Complete the upload specified by uuid, optionally appending the body as the final chunk.
 	req := types.NewRequest(r)
 	logrus.Infof("%-5s BlobUploadPutHandler(%s, %s)", r.Method, req.Repo, req.UUID)
-	buf, err := ioutil.ReadAll(r.Body)
+	buf, err := io.ReadAll(r.Body)
 	if err != nil {
 		log.Fatal("request", err)
 	}
-	bu, err := h.mag.SQlite.BlobUpload.GetByUUID(req.UUID)
+	bu, found, err := h.mag.Database.BlobUpload_GetOCI_ByUUID(req.UUID)
 	if err != nil {
 		log.Fatal("request", err)
+	}
+	if !found {
+		msg := fmt.Sprintf("BlobUpload with UUID %s not found", req.UUID)
+		err = errors.Wrap(err, msg)
+		logrus.Error(err)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("BLOB_UPLOAD_UNKNOWN", msg, det)
+		helper.WriteOCIErrror(w, http.StatusNotFound, e)
+		return
 	}
 	if req.Length > 0 {
 		// We do not have a PATH but directly a PUT request with the data
@@ -42,7 +51,7 @@ func (h Handlers) BlobUploadPutHandler(w http.ResponseWriter, r *http.Request) {
 			helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 			return
 		}
-		err = h.mag.SQlite.BlobUpload.UpdateDigestByUUID(&bu)
+		err = h.mag.Database.BlobUpload_Update_ByUUID(&bu)
 		if err != nil {
 			msg := "failed to update blob upload"
 			err = errors.Wrap(err, msg)
@@ -55,7 +64,7 @@ func (h Handlers) BlobUploadPutHandler(w http.ResponseWriter, r *http.Request) {
 
 	}
 	// Finish the upload
-	err = h.mag.SQlite.BlobUpload.CompleteByUUID(&bu)
+	err = h.mag.Database.BlobUpload_Complete(&bu)
 	if err != nil {
 		msg := "failed to update blob in DB"
 		err = errors.Wrap(err, msg)
@@ -65,15 +74,15 @@ func (h Handlers) BlobUploadPutHandler(w http.ResponseWriter, r *http.Request) {
 		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 		return
 	}
-	h.mag.SQlite.BlobUpload.WriteOCIPutResponse(w, &bu)
+	bu.WriteOCIPutResponse(w)
 }
 
 func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := context.Background()
 	req := types.NewRequest(r)
 	logrus.Infof("%-5s BlobUploadPatchHandler(%s, %s) Len:%d", r.Method, req.Repo, req.UUID, req.Length)
-	bu, err := h.mag.SQlite.BlobUpload.GetByUUID(req.UUID)
-	if err != nil {
+	bu, found, err := h.mag.Database.BlobUpload_GetOCI_ByUUID(req.UUID)
+	if err != nil || !found {
 		msg := "failed to fetch blob upload"
 		err = errors.Wrap(err, msg)
 		logrus.Error(err)
@@ -83,7 +92,7 @@ func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	// Fetch all chunks already uploaded
-	chunks, err := h.mag.SQlite.BlobUpload.GetChunkUploadsByUUID(bu.SqlID)
+	chunks, err := h.mag.Database.UploadChunk_Get_ByUUID(bu.ID)
 	if err != nil {
 		msg := "failed to fetch blob upload"
 		err = errors.Wrap(err, msg)
@@ -103,7 +112,7 @@ func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request)
 		}
 	}
 	/// Create New Chunk
-	chunk, err := h.mag.SQlite.BlobUpload.CreateUploadChunk(bu.SqlID, req.RangeStartByte, req.RangeBytes)
+	chunk, err := h.mag.Database.UploadChunk_Create(bu.ID, req.RangeStartByte, req.RangeBytes)
 	if err != nil {
 		msg := "failed to create chunk upload"
 		err = errors.Wrap(err, msg)
@@ -114,7 +123,7 @@ func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	_ = chunk
-	buf, err := ioutil.ReadAll(r.Body)
+	buf, err := io.ReadAll(r.Body)
 	if err != nil {
 		log.Fatal("request", err)
 	}
@@ -130,7 +139,7 @@ func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request)
 		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 		return
 	}
-	err = h.mag.SQlite.BlobUpload.UpdateDigestByUUID(&bu)
+	err = h.mag.Database.BlobUpload_Update_ByUUID(&bu)
 	if err != nil {
 		msg := "failed to update blob upload"
 		err = errors.Wrap(err, msg)
@@ -140,7 +149,7 @@ func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request)
 		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 		return
 	}
-	h.mag.SQlite.BlobUpload.WriteOCIPatchResponse(w, &bu)
+	bu.WriteOCIPatchResponse(w)
 }
 
 func (h Handlers) BlobUploadPostHandler(w http.ResponseWriter, r *http.Request) {
@@ -162,7 +171,7 @@ func (h Handlers) BlobUploadPostHandler(w http.ResponseWriter, r *http.Request) 
 		Digest:     req.Digest,
 		Repo:       req.Repo,
 	}
-	err := h.mag.SQlite.BlobUpload.Create(&bu)
+	err := h.mag.Database.BlobUpload_Create_ByOCI(&bu)
 	if err != nil {
 		logrus.Error(err)
 		msg := "failed to create blob upload"
@@ -173,9 +182,9 @@ func (h Handlers) BlobUploadPostHandler(w http.ResponseWriter, r *http.Request) 
 	}
 	if req.Length > 0 {
 		// Successful completion of the request MUST return a 201 Created and MUST include the following header:
-		buf, err := ioutil.ReadAll(r.Body)
+		buf, err := io.ReadAll(r.Body)
 		if err != nil {
-			err = errors.Wrap(err, "while ioutil.ReadAll(Body)")
+			err = errors.Wrap(err, "while io.ReadAll(Body)")
 			logrus.Error(err)
 			return
 		}
@@ -190,12 +199,12 @@ func (h Handlers) BlobUploadPostHandler(w http.ResponseWriter, r *http.Request) 
 			helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 			return
 		}
-		h.mag.SQlite.BlobUpload.WriteOCICreateResponse(w, &bu)
+		bu.WriteOCICreateResponse(w)
 	} else {
 		// Registries that do not support single request monolithic uploads SHOULD return
 		// a 202 Accepted status code and Location header and clients SHOULD proceed with a subsequent PUT request
 		// TODO: Send presigned upload URL
-		h.mag.SQlite.BlobUpload.WriteOCIAcceptedResponse(w, &bu)
+		bu.WriteOCIAcceptedResponse(w)
 	}
 }
 

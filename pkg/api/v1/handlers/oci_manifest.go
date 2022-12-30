@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 
 	"github.com/sirupsen/logrus"
@@ -41,20 +41,22 @@ func (h Handlers) ManifestHeadHandler(w http.ResponseWriter, r *http.Request) {
 		ml.WriteWWWHeader(w)
 		return
 	}
-	m, found, err = h.mag.Manifest_GetByHTTPRequest(r)
-	if err != nil {
-		// 1. FALSE
-		msg := fmt.Sprintf("failed to fetch ManifestList: %v", err)
-		logrus.Error(msg)
-		det := helper.NewDetailFromReq(req)
-		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
-		helper.WriteOCIErrror(w, http.StatusNotFound, e)
-		return
-	}
-	if found {
-		m.WriteWWWHeader(w)
-		return
-	}
+	/*
+		m, found, err = h.mag.Manifest_GetByHTTPRequest(r)
+		if err != nil {
+			// 1. FALSE
+			msg := fmt.Sprintf("failed to fetch ManifestList: %v", err)
+			logrus.Error(msg)
+			det := helper.NewDetailFromReq(req)
+			e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+			helper.WriteOCIErrror(w, http.StatusNotFound, e)
+			return
+		}
+		if found {
+			m.WriteWWWHeader(w)
+			return
+		}
+	*/
 	imgName := fmt.Sprintf("%s/%s", req.Repo, req.Tag)
 	msg := fmt.Sprintf("failed to fetch ManifestList for collection '%s'", imgName)
 	logrus.Error(msg)
@@ -82,7 +84,7 @@ func (h Handlers) ManifestGetHandler(w http.ResponseWriter, r *http.Request) {
 	m, found, err := h.mag.Manifest_GetByHTTPRequest(r)
 	if err != nil {
 		// 1. FALSE
-		msg := fmt.Sprintf("failed to fetch ManifestList: %v", err)
+		msg := fmt.Sprintf("failed to fetch Manifest: %v", err)
 		logrus.Error(msg)
 		det := helper.NewDetailFromReq(req)
 		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
@@ -108,8 +110,13 @@ func (h Handlers) ManifestGetHandler(w http.ResponseWriter, r *http.Request) {
 		ml.WriteWWWHeader(w)
 		ml.WriteWWWBody(w)
 		return
+	} else {
+		msg := fmt.Sprintf("no manifest '%s:%s' found for profile '%s'", req.Repo, req.Tag, req.Profile)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("MANIFEST_UNKNOWN", msg, det)
+		helper.WriteOCIErrror(w, http.StatusNotFound, e)
 	}
-	m, found, err = h.mag.Manifest_GetByHTTPRequest(r)
+	/*m, found, err = h.mag.Manifest_GetByHTTPRequest(r)
 	if err != nil {
 		// 1. FALSE
 		msg := fmt.Sprintf("failed to fetch ManifestList: %v", err)
@@ -128,13 +135,13 @@ func (h Handlers) ManifestGetHandler(w http.ResponseWriter, r *http.Request) {
 		det := helper.NewDetailFromReq(req)
 		e := helper.NewErrPayload("MANIFEST_UNKNOWN", msg, det)
 		helper.WriteOCIErrror(w, http.StatusNotFound, e)
-	}
+	} */
 }
 
 func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 	req := types.NewRequest(r)
 	logrus.Infof("%-5s ManifestPutHandler(%s, %s)", r.Method, req.Repo, req.Tag)
-	buf, err := ioutil.ReadAll(r.Body)
+	buf, err := io.ReadAll(r.Body)
 	if err != nil {
 		logrus.Fatal("request", err)
 	}

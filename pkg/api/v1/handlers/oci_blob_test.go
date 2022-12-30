@@ -17,8 +17,7 @@ import (
 )
 
 var (
-	ctx = context.Background()
-	l1  = types.Layer{
+	l1 = types.Layer{
 		Digest:    "sha256:1234567890",
 		MediaType: "application/vnd.docker.image.rootfs.diff.tar.gzip",
 		Size:      1234,
@@ -29,10 +28,14 @@ var (
 func Test_BlobHandler_DirectPost(t *testing.T) {
 	l0up, l0byte := types.FT_arm_BlobUpload_Layer0()
 	bs := utils.NewBootstrap()
-	bs.SetSqlEmptyAll()
+	bs.SetEmptyAll()
 	bs.AddBootstrap("users")
+	bs.AddBootstrap("filter")
+	bs.AddBootstrap("platforms:generic")
+	bs.AddBootstrap("platforms:amd64")
+	bs.AddBootstrap("platforms:arm64")
 	bs.AddBootstrap("profiles")
-	bs.AddBootstrap("layer:qnib/test")
+	//bs.AddBootstrap("layer:qnib/test")
 	br, err := SetupTest(bs)
 	assert.NoError(t, err)
 	defer TeardownTest(bs)
@@ -68,10 +71,16 @@ func Test_BlobHandler_DirectPost(t *testing.T) {
 
 func Test_BlobHandler_LayerTest(t *testing.T) {
 	bs := utils.NewBootstrap()
-	bs.SetSqlEmptyAll()
+	bs.SetEmptyAll()
+	bs.SetYAMLPrefix("../../../../misc/yaml")
 	bs.AddBootstrap("users")
+	bs.AddBootstrap("filter")
+	bs.AddBootstrap("platforms:generic")
+	bs.AddBootstrap("platforms:amd64")
+	bs.AddBootstrap("platforms:arm64")
 	bs.AddBootstrap("profiles")
-	bs.AddBootstrap("layer:qnib/test")
+	bs.AddBootstrap("layer0:ft_arm64")
+	//bs.PostTestSleep = 60
 	br, err := SetupTest(bs)
 	assert.NoError(t, err)
 	defer TeardownTest(bs)
@@ -80,32 +89,51 @@ func Test_BlobHandler_LayerTest(t *testing.T) {
 	assert.NoError(t, err)
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodHead, "/{repo}/{image}/blobs/{reference}", nil)
+	ftArm64L0Dig, err := br.Get("layer0:ft_arm64#digest")
+	assert.NoError(t, err)
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("repo", "qnib")
-	rctx.URLParams.Add("image", "test")
-	rctx.URLParams.Add("reference", l1.Digest)
+	rctx.URLParams.Add("image", "featuretest")
+	rctx.URLParams.Add("reference", ftArm64L0Dig)
 	r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
 	r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	_, found, err := h.mag.ConfigBlob_GetByHTTPRequest(r)
+	assert.NoError(t, err)
+	assert.False(t, found)
 	/// HEAD
 	h.BlobHandler(w, r)
 	assert.Equal(t, http.StatusOK, w.Code)
-	if assert.Equal(t, 0, w.Body.Len()) {
-		t.Log(w.Body.String())
-	}
+	assert.Equal(t, 0, w.Body.Len())
 	// GET (with data)
 	r.Method = http.MethodGet
 	h.BlobHandler(w, r)
 	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, 10, w.Body.Len())
-
+	assert.GreaterOrEqual(t, w.Body.Len(), 411)
+	assert.LessOrEqual(t, w.Body.Len(), 412)
 }
 
 func Test_BlobHandler_Redirect_LayerTest(t *testing.T) {
 	bs := utils.NewBootstrap()
-	bs.SetSqlEmptyAll()
+	bs.SetEmptyAll()
+	bs.SetYAMLPrefix("../../../../misc/yaml")
 	bs.AddBootstrap("users")
+	bs.AddBootstrap("filter")
+	bs.AddBootstrap("platforms:generic")
+	bs.AddBootstrap("platforms:amd64")
+	bs.AddBootstrap("platforms:arm64")
 	bs.AddBootstrap("profiles")
-	bs.AddBootstrap("layer-redirect:qnib/test")
+	bs.AddBootstrap("config:ft_arm")
+	bs.AddBootstrap("config:ft_amd64")
+	bs.AddBootstrap("upstream:ft_arm64")
+	bs.AddBootstrap("upstream:ft_amd64")
+	bs.AddBootstrap("layer0:ft_arm64")
+	bs.AddBootstrap("layer1:ft_arm64")
+	bs.AddBootstrap("layer0:ft_amd64")
+	bs.AddBootstrap("layer1:ft_amd64")
+	bs.AddBootstrap("manifest:ft_arm64")
+	bs.AddBootstrap("manifest:ft_amd64")
+	bs.AddBootstrap("collection:ft_amd64")
+	bs.AddBootstrap("collection:ft_arm64")
 	br, err := SetupTest(bs)
 	assert.NoError(t, err)
 	_ = br
@@ -116,9 +144,11 @@ func Test_BlobHandler_Redirect_LayerTest(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodHead, "/{repo}/{image}/blobs/{reference}", nil)
 	rctx := chi.NewRouteContext()
+	ftArm64L0Dig, err := br.Get("layer0:ft_arm64#digest")
+	assert.NoError(t, err)
 	rctx.URLParams.Add("repo", "qnib")
-	rctx.URLParams.Add("image", "test")
-	rctx.URLParams.Add("reference", l1.Digest)
+	rctx.URLParams.Add("image", "featuretest")
+	rctx.URLParams.Add("reference", ftArm64L0Dig)
 	r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
 	r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	// GET (with redirect)
@@ -129,10 +159,15 @@ func Test_BlobHandler_Redirect_LayerTest(t *testing.T) {
 
 func Test_Upload_UploadBlobSequence(t *testing.T) {
 	bs := utils.NewBootstrap()
-	bs.SetSqlEmptyAll()
+	bs.SetEmptyAll()
+	bs.SetYAMLPrefix("../../../../misc/yaml")
 	bs.AddBootstrap("users")
+	bs.AddBootstrap("filter")
+	bs.AddBootstrap("platforms:generic")
+	bs.AddBootstrap("platforms:amd64")
+	bs.AddBootstrap("platforms:arm64")
 	bs.AddBootstrap("profiles")
-	//bs.SetSqlite("Desktop/metahub.db")
+	//bs.PostTestSleep = 300
 	br, err := SetupTest(bs)
 	assert.NoError(t, err)
 	_ = br
@@ -157,17 +192,8 @@ func Test_Upload_UploadBlobSequence(t *testing.T) {
 	assert.Equal(t, http.StatusAccepted, w.Code)
 	// Fetch Upload from DB
 	gotLoc := w.Header().Get("Location")
-	q := fmt.Sprintf(`SELECT uuid,uploaded_by FROM main.blob_uploads WHERE location="%s";`, gotLoc)
-	rows, err := h.mag.SQlite.Query(q)
-	assert.NoError(t, err)
-	defer rows.Close()
-	var uuid, uploadedBy string
-	for rows.Next() {
-		err = rows.Scan(&uuid, &uploadedBy)
-		assert.NoError(t, err)
-	}
-	assert.Equal(t, "test", uploadedBy)
-	assert.Equal(t, fmt.Sprintf("/v2/qnib/alpine/blobs/uploads/%s", uuid), gotLoc)
+	uuid := w.Header().Get("Docker-Upload-UUID")
+	assert.Regexp(t, fmt.Sprintf(`/v2/qnib/alpine/blobs/uploads/%s$`, uuid), gotLoc)
 	// Next we do a PATCH request
 	wPatch := httptest.NewRecorder()
 	rPatch := httptest.NewRequest(http.MethodPost, "/{repo}/{image}/blobs/uploads/{uuid}", bytes.NewReader(l0bytes))
@@ -201,12 +227,12 @@ func Test_Upload_UploadBlobSequence(t *testing.T) {
 	h.BlobUploadPutHandler(wPut, rPut)
 	assert.Equal(t, http.StatusCreated, wPut.Code)
 	gotPutLoc := wPut.Header().Get("Location")
-	assert.Equal(t, fmt.Sprintf("/v2/qnib/alpine/blobs/uploads/%s", uuid), gotPutLoc)
+	assert.Regexp(t, fmt.Sprintf(`/v2/qnib/alpine/blobs/uploads/%s$`, uuid), gotPutLoc)
 }
 
 func Test_Upload_UploadBlobSequence_Split(t *testing.T) {
 	bs := utils.NewBootstrap()
-	bs.SetSqlEmptyAll()
+	bs.SetEmptyAll()
 	bs.AddBootstrap("users")
 	bs.AddBootstrap("profiles")
 	//bs.SetSqlite("Desktop/metahub.db")
@@ -237,16 +263,7 @@ func Test_Upload_UploadBlobSequence_Split(t *testing.T) {
 	assert.Equal(t, http.StatusAccepted, w.Code)
 	// Fetch Upload from DB
 	gotLoc := w.Header().Get("Location")
-	q := fmt.Sprintf(`SELECT uuid,uploaded_by FROM main.blob_uploads WHERE location="%s";`, gotLoc)
-	rows, err := h.mag.SQlite.Query(q)
-	assert.NoError(t, err)
-	defer rows.Close()
-	var uuid, uploadedBy string
-	for rows.Next() {
-		err = rows.Scan(&uuid, &uploadedBy)
-		assert.NoError(t, err)
-	}
-	assert.Equal(t, "test", uploadedBy)
+	uuid := w.Header().Get("Docker-Upload-UUID")
 	assert.Equal(t, fmt.Sprintf("/v2/qnib/alpine/blobs/uploads/%s", uuid), gotLoc)
 	// Next we do a PATCH request with Part1
 	wPatchPart1 := httptest.NewRecorder()
