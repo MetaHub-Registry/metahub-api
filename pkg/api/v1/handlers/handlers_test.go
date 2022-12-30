@@ -7,14 +7,18 @@ import (
 	"os"
 	"testing"
 
-	"github.com/google/uuid"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/metahub-registry/metahub-core/pkg/backends/magazine"
 	"github.com/metahub-registry/metahub-core/pkg/backends/minio"
+	"github.com/metahub-registry/metahub-core/pkg/backends/neo"
 	"github.com/metahub-registry/metahub-core/pkg/backends/sqlite"
-	"github.com/metahub-registry/metahub-core/pkg/types"
 	"github.com/metahub-registry/metahub-core/pkg/utils"
+)
+
+const (
+	neoDb     = "test"
+	neoUser   = "neo4j"
+	neoPasswd = "test"
 )
 
 var h Handlers
@@ -22,18 +26,43 @@ var h Handlers
 func TestMain(m *testing.M) {
 	logrus.Info("Start TestMain")
 	ctx := context.Background()
+	/// Neo4j
+	neoC, err := neo.SetupNeo4j(ctx)
+	if err != nil {
+		logrus.Fatal(err)
+	}
+	defer neoC.Terminate(ctx)
+	ncfg := neo.NeoConfig{
+		DbName: neoDb,
+		User:   neoUser,
+		Passwd: neoPasswd,
+		URL:    neoC.BoltURI,
+		HTTP:   neoC.HttpURI,
+	}
+	gdb := neo.NewNeo(ncfg)
+	err = gdb.Connect()
+	if err != nil {
+		logrus.Fatal(err)
+	}
+	err = gdb.Setup()
+	if err != nil {
+		logrus.Fatal(err)
+	}
 	/// Minio
 	minioC, err := minio.SetupMinio(ctx)
 	if err != nil {
 		logrus.Fatal(err)
 	}
+	defer minioC.Terminate(ctx)
 	configsBucketKey := minio.GetConfigsBucketKey()
 	layersBucketKey := minio.GetLayersBucketKey()
 	manifestsBucketKey := minio.GetManifestsBucketKey()
+	layerCfg := minio.NewBucketConfig(layersBucketKey, minioC.HttpURI, minioC.ConsoleURI)
+	layerCfg.Redirect = true
 	bc := map[string]minio.BucketConfig{
-		configsBucketKey:   minio.NewBucketConfig(configsBucketKey, minioC.HttpURI),
-		layersBucketKey:    minio.NewBucketConfig(layersBucketKey, minioC.HttpURI),
-		manifestsBucketKey: minio.NewBucketConfig(manifestsBucketKey, minioC.HttpURI),
+		configsBucketKey:   minio.NewBucketConfig(configsBucketKey, minioC.HttpURI, minioC.ConsoleURI),
+		layersBucketKey:    layerCfg,
+		manifestsBucketKey: minio.NewBucketConfig(manifestsBucketKey, minioC.HttpURI, minioC.ConsoleURI),
 	}
 	min, err := minio.NewMiniWithCfg(bc)
 	if err != nil {
@@ -45,64 +74,51 @@ func TestMain(m *testing.M) {
 	}
 	min.BucketCheck()
 	/// SQLite
-	f, err := os.CreateTemp("", "sqlite_*.db")
+	f, err := os.CreateTemp("", "sqlite-test")
 	if err != nil {
 		logrus.Fatal(err)
 	}
+
+	logrus.Infof("Start TestMain: %s", f.Name())
 	defer os.Remove(f.Name())
-	_, err = copy("../../../../misc/sqlite/metahub_base.db", f.Name())
-	if err != nil {
-		logrus.Fatal(err)
-	}
 	sq, err := sqlite.New(f.Name(), "")
 	if err != nil {
 		logrus.Fatal(err)
 	}
 	mag := magazine.Magazine{
-		Minio:  min,
-		SQlite: sq,
+		Minio:          min,
+		Database:       gdb,
+		UserManagement: sq,
 	}
-	h = Handlers{
-		mag: mag,
-	}
+	h = NewHandlers("test", mag)
 	code := m.Run()
-	defer minioC.Terminate(ctx)
-	logrus.Info("End TestMain")
 	os.Exit(code)
+	logrus.Info("End TestMain")
 }
 
 func TeardownTest(bs utils.Bootstrap) {
 	logrus.Info("> TeardownTest")
-	if bs.CopySqlite != "" {
-		logrus.Infof("Copy SQlite DB to '%s'", bs.CopySqlite)
-		h.mag.SQlite.Close()
-		utils.CopyFile(h.mag.SQlite.MhFile, bs.CopySqlite)
-		err := h.mag.SQlite.ReOpenDB()
-		if err != nil {
-			logrus.Fatal(err)
-		}
-	}
+	h.mag.Minio.PreTearDown(bs)
+	h.mag.Database.TeardownTest(bs)
 	err := h.mag.Minio.EmptyAll()
 	if err != nil {
 		logrus.Fatal(err)
 	}
-	err = h.mag.SQlite.EmptyData(bs.SqlEmptyAll)
+	err = h.mag.UserManagement.EmptyData(bs.EmptyAll)
 	if err != nil {
 		logrus.Fatal(err)
-	}
-	for _, b := range bs.Bootstraps {
-		switch b {
-		case "layer-redirect:qnib/test":
-			lBc := h.mag.Minio.BucketConfig["layers"]
-			lBc.Redirect = false
-			h.mag.Minio.BucketConfig["layers"] = lBc
-		}
 	}
 }
 
 func SetupTest(bs utils.Bootstrap) (br utils.BootstrapResult, err error) {
+	return h.mag.SetupTest(bs)
+}
+
+/*
+func SetupTestOLD(bs utils.Bootstrap) (br utils.BootstrapResult, err error) {
 	logrus.Debug("> SetupTest")
 	br = utils.NewBootstrapResult()
+
 	for _, b := range bs.Bootstraps {
 		sq := h.mag.SQlite
 		min := h.mag.Minio
@@ -259,6 +275,7 @@ func SetupTest(bs utils.Bootstrap) (br utils.BootstrapResult, err error) {
 	}
 	return
 }
+*/
 
 func copy(src, dst string) (int64, error) {
 	sourceFileStat, err := os.Stat(src)

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
-	"time"
 
 	"github.com/opencontainers/go-digest"
 	"github.com/sirupsen/logrus"
@@ -17,20 +16,26 @@ func Test_UploadManifest_FTarm_Short(t *testing.T) {
 	testRepo := "qnib"
 	testImage := "featuretest"
 	testTag := "arm64"
-	bs := utils.NewBootstrap()
-	bs.SetSqlEmptyAll()
 	err := h.mag.Minio.EmptyAll()
 	assert.NoError(t, err)
-	err = h.mag.SQlite.EmptyData(true)
-	assert.NoError(t, err)
+	bs := utils.NewBootstrap()
+	bs.SetEmptyAll()
+	bs.SetYAMLPrefix("../../../../misc/yaml")
 	bs.AddBootstrap("users")
+	bs.AddBootstrap("filter")
+	bs.AddBootstrap("platforms:generic")
+	bs.AddBootstrap("platforms:amd64")
+	bs.AddBootstrap("platforms:arm64")
 	bs.AddBootstrap("profiles")
-	bs.AddBootstrap("platforms")
-	bs.AddBootstrap("upstreams:qnib/featuretest:arm64")
-	bs.AddBootstrap("layers:qnib/featuretest:arm64")
-	bs.AddBootstrap("config:qnib/featuretest:arm64")
-	// TODO: REMOVE
-	//bs.SetSqlite("Desktop/metahub.db")
+	bs.AddBootstrap("config:ft_arm")
+	bs.AddBootstrap("config:ft_amd64")
+	bs.AddBootstrap("upstream:ft_arm64")
+	bs.AddBootstrap("upstream:ft_amd64")
+	bs.AddBootstrap("layer0:ft_arm64")
+	bs.AddBootstrap("layer1:ft_arm64")
+	bs.AddBootstrap("layer0:ft_amd64")
+	bs.AddBootstrap("layer1:ft_amd64")
+	//bs.PostTestSleep = 120
 	br, err := SetupTest(bs)
 	assert.NoError(t, err)
 	defer TeardownTest(bs)
@@ -53,35 +58,7 @@ func Test_UploadManifest_FTarm_Short(t *testing.T) {
 	}, "/{repo}/{image}/manifests/{reference}", mani.Data)
 	h.ManifestPutHandler(&wManiPut, rManiPut)
 	assert.Equal(t, http.StatusCreated, wManiPut.Code)
-	/*
-		// Check DB
-		// Upstream
-		q := fmt.Sprintf(`SELECT id,repo,tag FROM main.upstreams WHERE digest="%s";`, mani.Digest)
-		rows, err := h.mag.SQlite.Query(q)
-		assert.NoError(t, err)
-		defer rows.Close()
-		var id int
-		var repo, tag string
-		if rows.Next() {
-			err = rows.Scan(&id, &repo, &tag)
-			assert.NoError(t, err)
-		} else {
-			t.Fatal("No upstream found")
-		}
-		rows.Close()
-		assert.Equal(t, "qnib/featuretest", repo)
-		assert.Equal(t, "arm64", tag)
-		////// FETCH MANIFEST_LIST via Collection
-		/// Direct DB
-		req := types.Request{
-			Repo:    fmt.Sprintf("%s/%s", testRepo, testImage),
-			Tag:     testTag,
-			Profile: "generic",
-		}
-		_, found, err := h.mag.SQlite.GetTypesManifestListByRequest(req)
-		assert.NoError(t, err)
-		assert.True(t, found)
-	*/
+	// TODO: Check result
 
 }
 
@@ -89,15 +66,18 @@ func Test_UploadManifest_FTarm(t *testing.T) {
 	testRepo := "qnib"
 	testImage := "featuretest"
 	testTag := "latest"
-	bs := utils.NewBootstrap()
-	bs.SetSqlEmptyAll()
 	err := h.mag.Minio.EmptyAll()
 	assert.NoError(t, err)
-	err = h.mag.SQlite.EmptyData(true)
-	assert.NoError(t, err)
+	bs := utils.NewBootstrap()
+	bs.SetEmptyAll()
+	bs.SetYAMLPrefix("../../../../misc/yaml")
 	bs.AddBootstrap("users")
+	bs.AddBootstrap("filter")
+	bs.AddBootstrap("platforms:generic")
+	bs.AddBootstrap("platforms:amd64")
+	bs.AddBootstrap("platforms:arm64")
 	bs.AddBootstrap("profiles")
-	//bs.SetSqlite("Desktop/metahub.db")
+	//bs.PostTestSleep = 180
 	br, err := SetupTest(bs)
 	assert.NoError(t, err)
 	defer TeardownTest(bs)
@@ -123,16 +103,7 @@ func Test_UploadManifest_FTarm(t *testing.T) {
 	assert.Equal(t, http.StatusAccepted, wL0.Code)
 	// Fetch Upload from DB
 	gotLoc := wL0.Header().Get("Location")
-	q := fmt.Sprintf(`SELECT uuid,uploaded_by FROM main.blob_uploads WHERE location="%s";`, gotLoc)
-	rows, err := h.mag.SQlite.Query(q)
-	assert.NoError(t, err)
-	defer rows.Close()
-	var uuid, uploadedBy string
-	for rows.Next() {
-		err = rows.Scan(&uuid, &uploadedBy)
-		assert.NoError(t, err)
-	}
-	assert.Equal(t, "test", uploadedBy)
+	uuid := wL0.Header().Get("Docker-Upload-UUID")
 	assert.Equal(t, fmt.Sprintf("/v2/qnib/featuretest/blobs/uploads/%s", uuid), gotLoc)
 	// Next we do a PATCH request
 	wL0Patch, rL0Patch := createNewHTTPTest(http.MethodPost, map[string]string{
@@ -151,18 +122,8 @@ func Test_UploadManifest_FTarm(t *testing.T) {
 	}, "/{repo}/{image}/blobs/uploads/{uuid}", l0bytes)
 	h.BlobUploadPatchHandler(&wL0Patch, rL0Patch)
 	assert.Equal(t, http.StatusAccepted, wL0Patch.Code)
-	q = fmt.Sprintf(`SELECT uuid FROM main.blob_uploads WHERE digest="%s";`, l0ref.Digest)
-	rows, err = h.mag.SQlite.Query(q)
-	assert.NoError(t, err)
-	defer rows.Close()
-	var gotUuid string
-	for rows.Next() {
-		err = rows.Scan(&gotUuid)
-		assert.NoError(t, err)
-	}
-	assert.Equal(t, uuid, gotUuid)
 	// Final PUT request
-	startPut := time.Now()
+	//startPut := time.Now()
 	wL0Put, rL0Put := createNewHTTPTest(http.MethodPut, map[string]string{
 		"repo":  testRepo,
 		"image": testImage,
@@ -175,21 +136,12 @@ func Test_UploadManifest_FTarm(t *testing.T) {
 		"Authorization": fmt.Sprintf("Bearer %s", token),
 	}, fmt.Sprintf("/{repo}/{image}/blobs/uploads/{uuid}?digest=%s", l0ref.Digest), nil)
 	h.BlobUploadPutHandler(&wL0Put, rL0Put)
-	endPut := time.Now()
+	//endPut := time.Now()
 	assert.Equal(t, http.StatusCreated, wL0Put.Code)
 	gotPutLoc := wL0Put.Header().Get("Location")
+	uuid = wL0Put.Header().Get("Docker-Upload-UUID")
+	assert.NotNil(t, uuid)
 	assert.Equal(t, fmt.Sprintf("/v2/qnib/featuretest/blobs/uploads/%s", uuid), gotPutLoc)
-	q = fmt.Sprintf(`SELECT finished_at FROM main.blob_uploads WHERE digest="%s";`, l0ref.Digest)
-	rows, err = h.mag.SQlite.Query(q)
-	assert.NoError(t, err)
-	defer rows.Close()
-	var gotFinished time.Time
-	for rows.Next() {
-		err = rows.Scan(&gotFinished)
-		assert.NoError(t, err)
-	}
-	assert.Greater(t, gotFinished, startPut)
-	assert.Greater(t, endPut, gotFinished)
 	///// LAYER1
 	l1bytes := types.FT_arm_Layer1Byte()
 	l1ref := types.FT_arm_Layer1Reference()
@@ -209,16 +161,7 @@ func Test_UploadManifest_FTarm(t *testing.T) {
 	assert.Equal(t, http.StatusAccepted, wL1.Code)
 	// Fetch Upload from DB
 	gotLocL1 := wL1.Header().Get("Location")
-	q = fmt.Sprintf(`SELECT uuid, uploaded_by FROM main.blob_uploads WHERE location="%s";`, gotLocL1)
-	rows, err = h.mag.SQlite.Query(q)
-	assert.NoError(t, err)
-	defer rows.Close()
-	var uuidL1, uploadedByL1 string
-	for rows.Next() {
-		err = rows.Scan(&uuidL1, &uploadedByL1)
-		assert.NoError(t, err)
-	}
-	assert.Equal(t, "test", uploadedByL1)
+	uuidL1 := wL1.Header().Get("Docker-Upload-UUID")
 	assert.Equal(t, fmt.Sprintf("/v2/%s/%s/blobs/uploads/%s", testRepo, testImage, uuidL1), gotLocL1)
 	// Next we do a PATCH request
 	wL1Patch, rL1Patch := createNewHTTPTest(http.MethodPatch, map[string]string{
@@ -271,18 +214,7 @@ func Test_UploadManifest_FTarm(t *testing.T) {
 	assert.Equal(t, http.StatusAccepted, wCfgPost.Code)
 	// Fetch Upload from DB
 	gotLocCfg := wCfgPost.Header().Get("Location")
-	q = fmt.Sprintf(`SELECT uuid, blob_type, uploaded_by FROM main.blob_uploads WHERE location="%s";`, gotLocCfg)
-	rows, err = h.mag.SQlite.Query(q)
-	assert.NoError(t, err)
-	defer rows.Close()
-	var uuidCfg, uploadedByCfg, blobType string
-	for rows.Next() {
-		err = rows.Scan(&uuidCfg, &blobType, &uploadedByCfg)
-		assert.NoError(t, err)
-	}
-	rows.Close()
-	assert.Equal(t, "", blobType)
-	assert.Equal(t, "test", uploadedByCfg)
+	uuidCfg := wCfgPost.Header().Get("Docker-Upload-UUID")
 	assert.Equal(t, fmt.Sprintf("/v2/qnib/featuretest/blobs/uploads/%s", uuidCfg), gotLocCfg)
 	/// PATCH with config
 	wCfgPatch, rCfgPatch := createNewHTTPTest(http.MethodPatch, map[string]string{
@@ -301,16 +233,6 @@ func Test_UploadManifest_FTarm(t *testing.T) {
 	}, "/{repo}/{image}/blobs/uploads/{uuid}", cfgBytes)
 	h.BlobUploadPatchHandler(&wCfgPatch, rCfgPatch)
 	assert.Equal(t, http.StatusAccepted, wCfgPatch.Code)
-	q = fmt.Sprintf(`SELECT blob_type FROM main.blob_uploads WHERE location="%s";`, gotLocCfg)
-	rows, err = h.mag.SQlite.Query(q)
-	assert.NoError(t, err)
-	defer rows.Close()
-	for rows.Next() {
-		err = rows.Scan(&blobType)
-		assert.NoError(t, err)
-	}
-	rows.Close()
-	assert.Equal(t, "config", blobType)
 	// Final PUT request
 	wCfgPut, rCfgPut := createNewHTTPTest(http.MethodPut, map[string]string{
 		"repo":  testRepo,
@@ -343,24 +265,8 @@ func Test_UploadManifest_FTarm(t *testing.T) {
 	}, "/{repo}/{image}/manifests/{reference}", mani.Data)
 	h.ManifestPutHandler(&wManiPut, rManiPut)
 	assert.Equal(t, http.StatusCreated, wManiPut.Code)
-	// Check DB
+	// TODO: Check DB
 	// Upstream
-	q = fmt.Sprintf(`SELECT id,repo,tag FROM main.upstreams WHERE digest="%s";`, mani.Digest)
-	rows, err = h.mag.SQlite.Query(q)
-	assert.NoError(t, err)
-	defer rows.Close()
-	var id int
-	var repo, tag string
-	if rows.Next() {
-		err = rows.Scan(&id, &repo, &tag)
-		assert.NoError(t, err)
-	} else {
-		t.Fatal("No upstream found")
-	}
-	rows.Close()
-	assert.Equal(t, "qnib/featuretest", repo)
-	//assert.Equal(t, "latest-linux.arm64", tag)
-	assert.Equal(t, "latest", tag)
 	////// FETCH MANIFEST_LIST via Collection
 	/// Direct DB
 	req := types.Request{
@@ -368,7 +274,7 @@ func Test_UploadManifest_FTarm(t *testing.T) {
 		Tag:     testTag,
 		Profile: "generic",
 	}
-	_, found, err := h.mag.SQlite.GetTypesManifestListByRequest(req)
+	_, found, err := h.mag.Database.ManifestList_Get_ByRequest(req)
 	assert.NoError(t, err)
 	assert.True(t, found)
 	//assert.Len(t, ml.Manifests, 1)
@@ -427,14 +333,15 @@ func Test_UploadManifest_FTarm(t *testing.T) {
 
 func Test_Manifest_OCITest(t *testing.T) {
 	bs := utils.NewBootstrap()
-	bs.SetSqlEmptyAll()
+	bs.SetEmptyAll()
+	bs.SetYAMLPrefix("../../../../misc/yaml")
 	bs.AddBootstrap("users")
+	bs.AddBootstrap("filter")
+	bs.AddBootstrap("platforms:generic")
+	bs.AddBootstrap("platforms:amd64")
+	bs.AddBootstrap("platforms:arm64")
 	bs.AddBootstrap("profiles")
-	bs.AddBootstrap("platforms")
-	//bs.SetSqlite("Desktop/metahub.db")
 	err := h.mag.Minio.EmptyAll()
-	assert.NoError(t, err)
-	err = h.mag.SQlite.EmptyData(true)
 	assert.NoError(t, err)
 	br, err := SetupTest(bs)
 	assert.NoError(t, err)
@@ -481,7 +388,7 @@ func Test_Manifest_OCITest(t *testing.T) {
 			"schemaVersion": 2,
 			"config": {
 				"mediaType": "application/vnd.oci.image.config.v1+json",
-				"digest": "sha256:b9720327d8aaf6b8896095a1630f3828c3912177a4e961171c203081a1b86de9",
+				"digest": "sha256:22f68afca98941fc10a8c6c87f881065b075c1c2f4678b8f579d1b77bc060ef0",
 				"size": 129,
 				"data": "ewoJImF1dGhvciI6ICJUbmVLZFFYSFhJQ3NTWHdSIiwKCSJhcmNoaXRlY3R1cmUiOiAiYW1kNjQiLAoJIm9zIjogImxpbnV4IiwKCSJyb290ZnMiOiB7CgkJInR5cGUiOiAibGF5ZXJzIiwKCQkiZGlmZl9pZHMiOiBbXQoJfQp9",
 				"newUnspecifiedField": "aGVsbG8gd29ybGQ="
@@ -513,36 +420,37 @@ func Test_Manifest_OCITest(t *testing.T) {
 	h.ManifestPutHandler(&wManiPut, rManiPut)
 	assert.Equal(t, http.StatusCreated, wManiPut.Code)
 	maniDigest := wManiPut.Header().Get("Docker-Content-Digest")
-	assert.Equal(t, "sha256:f6db1c89670168c92e83c9954f680129f08d3e5b0e97d3951a07553c005139a7", maniDigest)
+	assert.Equal(t, "sha256:f35709186bc7bee71fa434c4197a70fc70a7d66419d08071eafcf8393a465ee4", maniDigest)
 	// Remove
-	/*
-		wManiDel, rManiDel := createNewHTTPTest(http.MethodDelete, map[string]string{
-			"repo":      testRepo,
-			"image":     testImage,
-			"reference": maniDigest,
-		}, map[string]string{
-			"accountName": token,
-			"userName":    "oci",
-			"profileName": "generic",
-		}, map[string]string{
-			"Authorization": fmt.Sprintf("Bearer %s", token),
-		}, "/{repo}/{image}/manifests/{reference}", nil)
-		err = h.mag.Manifest_DeleteByHTTPRequest(rManiDel)
-		assert.NoError(t, err)
-		assert.Equal(t, http.StatusOK, wManiDel.Code)
-	*/
+	wManiDel, rManiDel := createNewHTTPTest(http.MethodDelete, map[string]string{
+		"repo":      testRepo,
+		"image":     testImage,
+		"reference": maniDigest,
+	}, map[string]string{
+		"accountName": token,
+		"userName":    "oci",
+		"profileName": "generic",
+	}, map[string]string{
+		"Authorization": fmt.Sprintf("Bearer %s", token),
+	}, "/{repo}/{image}/manifests/{reference}", nil)
+	assert.NotNil(t, rManiDel)
+	err = h.mag.Manifest_DeleteByHTTPRequest(rManiDel)
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, wManiDel.Code)
+
 }
 
 func Test_Manifest_OCITest_NoLayers(t *testing.T) {
 	bs := utils.NewBootstrap()
-	bs.SetSqlEmptyAll()
+	bs.SetEmptyAll()
 	bs.AddBootstrap("users")
+	bs.AddBootstrap("filter")
+	bs.AddBootstrap("platforms:generic")
+	bs.AddBootstrap("platforms:amd64")
+	bs.AddBootstrap("platforms:arm64")
 	bs.AddBootstrap("profiles")
-	bs.AddBootstrap("platforms")
 	//bs.SetSqlite("Desktop/metahub.db")
 	err := h.mag.Minio.EmptyAll()
-	assert.NoError(t, err)
-	err = h.mag.SQlite.EmptyData(true)
 	assert.NoError(t, err)
 	br, err := SetupTest(bs)
 	assert.NoError(t, err)
@@ -619,19 +527,20 @@ func Test_Manifest_OCITest_NoLayers(t *testing.T) {
 	assert.Equal(t, "http://example.com/v2/oci/conformance/manifests/tagtest0", wManiPut.Header().Get("Location"))
 }
 
-func Test_Manifest_Remove(t *testing.T) {
+/*func Test_Manifest_Remove(t *testing.T) {
 	testRepo := "qnib"
 	testImage := "featuretest"
 	//testTag := "latest"
 	bs := utils.NewBootstrap()
-	bs.SetSqlEmptyAll()
+	bs.SetEmptyAll()
 	err := h.mag.Minio.EmptyAll()
 	assert.NoError(t, err)
-	err = h.mag.SQlite.EmptyData(true)
-	assert.NoError(t, err)
 	bs.AddBootstrap("users")
+	bs.AddBootstrap("filter")
+	bs.AddBootstrap("platforms:generic")
+	bs.AddBootstrap("platforms:amd64")
+	bs.AddBootstrap("platforms:arm64")
 	bs.AddBootstrap("profiles")
-	bs.AddBootstrap("platforms")
 	bs.AddBootstrap("upstreams:qnib/featuretest:arm64")
 	bs.AddBootstrap("layers:qnib/featuretest:arm64")
 	bs.AddBootstrap("config:qnib/featuretest:arm64")
@@ -674,4 +583,4 @@ func Test_Manifest_Remove(t *testing.T) {
 	}, "/{repo}/{image}/manifests/{reference}", nil)
 	err = h.mag.Manifest_DeleteByHTTPRequest(rManiDel2)
 	assert.Error(t, err)
-}
+}*/

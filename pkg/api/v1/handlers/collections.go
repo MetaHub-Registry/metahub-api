@@ -21,6 +21,7 @@ type Next struct {
 func (h Handlers) CollectionGetOne(w http.ResponseWriter, r *http.Request) {
 	type Payload struct {
 		ColID int64 `json:"collection_id"`
+		TagID int64 `json:"tag_id"`
 	}
 	pl := Payload{}
 	breadCrumbs := []utils.BreadCrumb{}
@@ -30,8 +31,9 @@ func (h Handlers) CollectionGetOne(w http.ResponseWriter, r *http.Request) {
 		h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
 		return
 	}
-	col, err := h.mag.SQlite.Collection.GetCollectionByID(pl.ColID)
-	logrus.Infof("CollectionGetOne(%d): %s:%s", pl.ColID, col.Repo, col.Tag)
+	col, err := h.mag.Database.CollectionListing_Get_ByID(pl.ColID, pl.TagID)
+
+	logrus.Infof("CollectionGetOne(%d,%d): %s:%s", pl.ColID, pl.TagID, col.Repo, col.Tag)
 	if err != nil {
 		h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
 		return
@@ -49,7 +51,7 @@ func (h Handlers) CollectionGetOne(w http.ResponseWriter, r *http.Request) {
 			breadCrumbs = append(breadCrumbs, bc)
 		}
 	}
-	manis, err := h.mag.SQlite.Manifest.GetByCollectionId(pl.ColID)
+	manis, err := h.mag.Database.Manifest_GetByCollectionTag(pl.ColID, pl.TagID)
 	if err != nil {
 		h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
 		return
@@ -79,7 +81,7 @@ func (h Handlers) CollectionGetAll(w http.ResponseWriter, r *http.Request) {
 	}
 	logrus.Infof("CollectionGetAll: '%s'", pl.Repo)
 	repoSlug := strings.Split(pl.Repo, "/")
-	cols, err := h.mag.SQlite.Collection.GetCollectionsByRepoLike(pl.Repo)
+	cols, err := h.mag.Database.CollectionListing_Get_ByRepoLike(pl.Repo)
 	if err != nil {
 		h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
 		return
