@@ -33,8 +33,7 @@ func init() {
 	// is called directly, e.g.:
 	// parseCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 	serveCmd.Flags().Int("port", 80, "The API port")
-	serveCmd.Flags().String("metahub-db", "", "The metahub database file to use - will be overwritten")
-
+	serveCmd.Flags().String("user-db", "", "The user database file to use - will be overwritten")
 }
 
 func sCmd(cmd *cobra.Command, args []string) {
