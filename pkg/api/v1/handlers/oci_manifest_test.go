@@ -341,6 +341,7 @@ func Test_Manifest_OCITest(t *testing.T) {
 	bs.AddBootstrap("platforms:amd64")
 	bs.AddBootstrap("platforms:arm64")
 	bs.AddBootstrap("profiles")
+	//bs.PostTestSleep = 60
 	err := h.mag.Minio.EmptyAll()
 	assert.NoError(t, err)
 	br, err := SetupTest(bs)
@@ -437,7 +438,35 @@ func Test_Manifest_OCITest(t *testing.T) {
 	err = h.mag.Manifest_DeleteByHTTPRequest(rManiDel)
 	assert.NoError(t, err)
 	assert.Equal(t, http.StatusOK, wManiDel.Code)
-
+	// Check Collections
+	cols, err := h.mag.Database.CollectionListing_Get_ByRepoLike(testRepo)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(cols))
+	ct := cols[0].ColTag
+	// remove collectiontag
+	wCTDel, rCTDel := createNewHTTPTest(http.MethodDelete, map[string]string{
+		"repo":      testRepo,
+		"image":     testImage,
+		"reference": testTag,
+	}, map[string]string{
+		"accountName": token,
+		"userName":    "oci",
+		"profileName": "generic",
+	}, map[string]string{
+		"Authorization": fmt.Sprintf("Bearer %s", token),
+	}, "/{repo}/{image}/manifests/{reference}", nil)
+	assert.NotNil(t, rCTDel)
+	err = h.mag.Manifest_DeleteByHTTPRequest(rCTDel)
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, wCTDel.Code)
+	// Check Collections
+	cols, err = h.mag.Database.CollectionListing_Get_ByRepoLike(testRepo)
+	assert.NoError(t, err)
+	assert.Equal(t, 0, len(cols))
+	/// Count CollectionTag
+	cnt, err := h.mag.Database.CollectionTag_CountRelationships(ct.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(0), cnt)
 }
 
 func Test_Manifest_OCITest_NoLayers(t *testing.T) {

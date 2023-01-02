@@ -19,7 +19,6 @@ go mod edit -replace github.com/metahub-registry/metahub-core/pkg/backends/sqlit
 go mod edit -replace github.com/metahub-registry/metahub-core/pkg/backends/neo=/go/metahub-api/ext/metalib/pkg/backends/neo
 
 ARCHS="aarch64,amd64"
-ARCHS="aarch64"
 for x in $(echo ${ARCHS}|tr , ' '); do 
     docker build --platform linux/${x} -t qnib/metahub-api:$1-${x} .
 done

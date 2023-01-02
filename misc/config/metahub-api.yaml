@@ -12,3 +12,8 @@ minio:
   layers:
     bucket: layers
     redirect: false
+neo4j:
+  dbname: neo4j
+  user: neo4j
+  password: test
+  url: bolt://neo4j:7687

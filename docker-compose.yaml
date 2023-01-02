@@ -32,14 +32,14 @@ services:
       CE_URL: ce:80
       PS1: 'dind > '
   #  start mailhog
-  mailhog:
-    image: 'mailhog/mailhog:latest'
-    ports:
-      - "1025:1025"
-      - "8025:8025"
-    networks:
-      - api-internal
-    restart: always
+  #mailhog:
+  #  image: 'mailhog/mailhog:latest'
+  #  ports:
+  #    - "1025:1025"
+  #    - "8025:8025"
+  #  networks:
+  #    - api-internal
+  #  restart: always
 
 networks:
   api-internal:

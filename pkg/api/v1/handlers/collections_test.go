@@ -131,7 +131,6 @@ func Test_CollectionGetAll(t *testing.T) {
 	bs.AddBootstrap("manifest:ft_amd64")
 	bs.AddBootstrap("collection:ft_amd64")
 	bs.AddBootstrap("collection:ft_arm64")
-	//bs.SetSqlite("Desktop/metahub.db")
 	br, err := SetupTest(bs)
 	assert.NoError(t, err)
 	defer TeardownTest(bs)

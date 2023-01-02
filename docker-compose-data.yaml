@@ -1,0 +1,34 @@
+version: '3.9'
+services:
+  minio:
+    image: quay.io/minio/minio
+    ports:
+      - 9000:9000
+      - 9001:9001
+    networks:
+     - mh-data
+    volumes:
+      - minio:/minio
+    environment:
+      MINIO_ROOT_USER: "minio"
+      MINIO_ROOT_PASSWORD: "miniominio"
+    command: ["server", "/minio", "--console-address=0.0.0.0:9001"]
+  neo4j:
+    image: neo4j:4.4.9
+    hostname: neo4j
+    ports:
+      - 7474:7474
+      - 7687:7687
+    networks:
+     - mh-data
+    environment:
+      NEO4J_AUTH: neo4j/test
+    volumes:
+     - neo4j:/data
+volumes:
+  minio:
+  neo4j:
+
+networks:
+  mh-data:
+    external: true
