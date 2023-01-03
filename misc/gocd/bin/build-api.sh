@@ -1,9 +1,9 @@
 #!/bin/bash
 set -e
 
-if [[ ! -z ${GO_PIPELINE_LABEL} ]];then
-    env |sort >> gocd.env 
-fi
+source ~/gocd_func.sh
+dumpEnv
+
 
 #if [[ -f /run/secrets/gocd-token ]];then
 #    export GOCD_TOKEN=$(cat /run/secrets/gocd-token)
