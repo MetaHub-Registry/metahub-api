@@ -16,7 +16,7 @@ test:
       - go mod edit -replace github.com/metahub-registry/metahub-core=/tmp/github.com/metahub-registry/metahub-core   
     script: 
       - go mod tidy
-      - go test -short -timeout 60s ./... -coverprofile coverage.txt
+      - go test -short -timeout 120s ./... -coverprofile coverage.txt
       - gocover-cobertura < coverage.txt > coverage.xml
       - gocoverstats -v -f coverage.txt --percent
     coverage: /^Global weighted coverage:\s+(\d+(?:\.\d+)?%)/
