@@ -1,5 +1,6 @@
 {
     "insecure-registries": [
+        "api:80",
         "localhost:80",
         "metahub:80",
         "dev:80",

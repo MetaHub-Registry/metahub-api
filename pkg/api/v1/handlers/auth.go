@@ -67,10 +67,14 @@ func (h Handlers) AuthHandler(w http.ResponseWriter, r *http.Request) {
 
 func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) (err error) {
 	req := types.NewRequest(r)
+
 	var realm string
-	if r.Host == "metahub-registry.org" {
+	switch r.Host {
+	case "metahub-registry.org":
 		realm = "https://metahub-registry.org"
-	} else {
+	case "metahub.qnib.org":
+		realm = "https://metahub.qnib.org"
+	default:
 		switch r.Proto {
 		case "HTTP/1.0":
 			realm = "http://" + r.Host
@@ -98,6 +102,7 @@ func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) 
 		}
 		det := helper.NewDetail("repository", repo, "pull")
 		w.WriteHeader(http.StatusUnauthorized)
+		logrus.Infof("Realm: %s", realm)
 		unauthorized(w, realm, det, invalidRequest, "invalid authorization header: %q", authorizationHeader)
 		return fmt.Errorf("valid authorization header")
 	}
@@ -113,6 +118,7 @@ func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) 
 		logrus.Error("unknown access token")
 		det := helper.NewDetailFromReq(req)
 		w.WriteHeader(http.StatusUnauthorized)
+		logrus.Infof("Realm: %s", realm)
 		unauthorized(w, realm, det, invalidToken, "unknown access token")
 		return fmt.Errorf("error getting token")
 	}
@@ -189,7 +195,7 @@ func unauthorized(w http.ResponseWriter, realm string, det helper.Detail, err oa
 	authUrl := realm + "/auth"
 	authenticateHeader := fmt.Sprintf("Bearer realm=%q,error=%q,error_description=%q", authUrl, err, description)
 	w.Header().Add("Content-Type", "application/json")
-	//l.Infof("authenticateHeader: %s", authenticateHeader)
+	l.Infof("authenticateHeader: %s", authenticateHeader)
 	w.Header().Add("WWW-Authenticate", authenticateHeader)
 	//w.Header().Del("Vary")
 	//w.Header().Add("Docker-Distribution-Api-Version", "registry/2.0")
