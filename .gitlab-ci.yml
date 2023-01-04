@@ -62,5 +62,3 @@ ecr:
   script:
     - docker build -t $IMAGE_NAME .
     - docker push $IMAGE_NAME
-  rules:
-      - if: $CI_COMMIT_BRANCH == "main"
