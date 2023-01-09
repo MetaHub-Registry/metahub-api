@@ -6,3 +6,5 @@ lcov.info
 **.sqlite3
 report.html
 exp/**
+misc/minio
+misc/backup

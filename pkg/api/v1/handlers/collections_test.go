@@ -106,7 +106,6 @@ func Test_CollectionGetOne(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "qnib/featuretest", resp.Collection.Repo)
 	assert.Equal(t, "arm64", resp.Collection.Tag)
-
 }
 
 func Test_CollectionGetAll(t *testing.T) {

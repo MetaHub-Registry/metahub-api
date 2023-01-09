@@ -12,8 +12,9 @@ import (
 
 type Next struct {
 	Repo      string `json:"repo"`
-	Tag       string `json:"tag"` // Tag is added when repo slug is exhausted
-	ID        int64  `json:"id"`  // ID is added when repo slug is exhausted
+	Tag       string `json:"tag"`           // Tag is added when repo slug is exhausted
+	ColID     int64  `json:"collection_id"` // ID is added when repo slug is exhausted
+	TagID     int64  `json:"tag_id"`        // ID is added when repo slug is exhausted
 	ColCount  int    `json:"collection_count"`
 	ManiCount int64  `json:"manifest_count"`
 }
@@ -98,7 +99,8 @@ func (h Handlers) CollectionGetAll(w http.ResponseWriter, r *http.Request) {
 			next[col.Tag] = Next{
 				Repo:      col.Repo,
 				Tag:       col.Tag,
-				ID:        col.ID,
+				ColID:     col.ID,
+				TagID:     col.ColTag.ID,
 				ColCount:  1,
 				ManiCount: col.ManifestCount,
 			}
