@@ -1,34 +1,40 @@
 version: '3.9'
 services:
   minio:
-    image: quay.io/minio/minio
+    image: quay.io/minio/minio:RELEASE.2023-01-02T09-40-09Z
     ports:
       - 9000:9000
       - 9001:9001
     networks:
-     - mh-data
+      - mh-data
     volumes:
-      - minio:/minio
+      - ${PWD}/misc/minio:/minio
     environment:
       MINIO_ROOT_USER: "minio"
       MINIO_ROOT_PASSWORD: "miniominio"
     command: ["server", "/minio", "--console-address=0.0.0.0:9001"]
+  backup:
+    image: alpine:3.16.2
+    volumes:
+      - ${PWD}/misc/minio:/minio
+      - ${PWD}/misc/backup:/backup
   neo4j:
-    image: neo4j:4.4.9
-    hostname: neo4j
+    image: registry.gitlab.com/qnib-container/database/neo4j:v0-0-3
     ports:
       - 7474:7474
       - 7687:7687
     networks:
-     - mh-data
+      - mh-data
     environment:
-      NEO4J_AUTH: neo4j/test
+      QNIB_NEO4J_PASSWORD: test
+      QNIB_NEO4J_BACKUP_DIR: /backup
     volumes:
-     - neo4j:/data
+     - neo4j:/var/lib/neo4j/data
+     - ${PWD}/misc/backup:/backup
 volumes:
-  minio:
   neo4j:
 
 networks:
+  api-internal:
   mh-data:
     external: true

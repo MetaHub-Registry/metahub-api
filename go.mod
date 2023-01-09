@@ -7,7 +7,6 @@ require (
 	github.com/go-chi/chi/v5 v5.0.7
 	github.com/go-chi/cors v1.2.1
 	github.com/go-chi/render v1.0.2
-	github.com/google/uuid v1.3.0
 	github.com/gorilla/context v1.1.1
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/neo4j/neo4j-go-driver/v4 v4.4.4
@@ -50,6 +49,7 @@ require (
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
+	github.com/google/uuid v1.3.0 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/inconshreveable/mousetrap v1.0.1 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
@@ -93,9 +93,6 @@ require (
 )
 
 replace github.com/metahub-registry/metahub-core => /Users/kniepbert/go/src/github.com/metahub-registry/metahub-core
-
 replace github.com/metahub-registry/metahub-core/pkg/backends/minio => /Users/kniepbert/go/src/github.com/metahub-registry/metahub-core/pkg/backends/minio
-
 replace github.com/metahub-registry/metahub-core/pkg/types => /Users/kniepbert/go/src/github.com/metahub-registry/metahub-core/pkg/types
-
 replace github.com/metahub-registry/metahub-core/pkg/backends/sqlite => /Users/kniepbert/go/src/github.com/metahub-registry/metahub-core/pkg/backends/sqlite

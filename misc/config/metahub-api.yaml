@@ -17,3 +17,5 @@ neo4j:
   user: neo4j
   password: test
   url: bolt://neo4j:7687
+frontend:
+  redirect: http://localhost:5173

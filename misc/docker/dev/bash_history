@@ -1,1 +1,1 @@
-go run main.go serve --config ./misc/config/metahub-api.yaml --metahub-db ./misc/sqlite/
+go run main.go serve --config ./misc/config/metahub-api.yaml --user-db ./misc/backup/metahub.db

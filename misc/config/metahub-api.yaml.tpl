@@ -16,3 +16,5 @@ neo4j:
   user: {{ NEO4J_USER |default("neo4j") }}
   password: {{ NEO4J_PASSWD |default("test") }}
   url: bolt://{{ NEO4J_HOST |default("neo4j") }}:{{ NEO_BOLT_PORT |default("7687") }}
+frontend:
+  redirect: {{ FRONTEND_REDIRECT | default("https://frontend.metahub-registry.org") }}

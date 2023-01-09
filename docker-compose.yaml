@@ -11,12 +11,13 @@ services:
     ports:
       - 8080:80
     volumes:
-      - .:/go/metahub-api
       - /Users/kniepbert/go/src/github.com/metahub-registry/metahub-core:/Users/kniepbert/go/src/github.com/metahub-registry/metahub-core
+      - /Users/kniepbert/go/src/github.com/metahub-registry/metahub-admin:/Users/kniepbert/go/src/github.com/metahub-registry/metahub-admin
+      - /Users/kniepbert/go/src/github.com/metahub-registry/metahub-api:/Users/kniepbert/go/src/github.com/metahub-registry/metahub-api
     networks:
       - api-internal
       - mh-data
-    working_dir: /go/metahub-api
+    working_dir: /Users/kniepbert/go/src/github.com/metahub-registry/metahub-api
     command: ["sleep", "inf"]
   dind:
     build: misc/docker/dind/
