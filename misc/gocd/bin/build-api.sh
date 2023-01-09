@@ -23,11 +23,11 @@ mv go.mod.tmp go.mod
 if [[ "${DEPLOYMENT}" == "dev" ]];then
    echo "> git clone --branch=develop https://gitlab-ci-token:CI_JOB_TOKEN@github.com/metahub-registry/metahub-core exp/metalib"
    git clone --branch=develop https://gitlab-ci-token:${CI_JOB_TOKEN}@github.com/metahub-registry/metahub-core exp/metalib
-elif [[ "${DEPLOYMENT}" == "main" ]];then
+elif [[ "${DEPLOYMENT}" == "prod" ]];then
    echo "> git clone --branch=main https://gitlab-ci-token:CI_JOB_TOKEN@github.com/metahub-registry/metahub-core exp/metalib"
    git clone --branch=main https://gitlab-ci-token:${CI_JOB_TOKEN}@github.com/metahub-registry/metahub-core exp/metalib
 else 
-   echo "ERROR: No DEPLOYMENT branch set"
+   echo "ERROR: DEPLOYMENT '${DEPLOYMENT} not known or not set (dev|prod)"
    exit 1
 fi
 go mod edit -replace github.com/metahub-registry/metahub-core=/go/metahub-api/exp/metalib  
