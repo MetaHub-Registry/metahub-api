@@ -38,25 +38,10 @@ func (h Handlers) ManifestHeadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if found {
+		logrus.Warnf("ManifestList found for %s/%s: \n%v", req.Repo, req.Tag, ml)
 		ml.WriteWWWHeader(w)
 		return
 	}
-	/*
-		m, found, err = h.mag.Manifest_GetByHTTPRequest(r)
-		if err != nil {
-			// 1. FALSE
-			msg := fmt.Sprintf("failed to fetch ManifestList: %v", err)
-			logrus.Error(msg)
-			det := helper.NewDetailFromReq(req)
-			e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
-			helper.WriteOCIErrror(w, http.StatusNotFound, e)
-			return
-		}
-		if found {
-			m.WriteWWWHeader(w)
-			return
-		}
-	*/
 	imgName := fmt.Sprintf("%s/%s", req.Repo, req.Tag)
 	msg := fmt.Sprintf("failed to fetch ManifestList for collection '%s'", imgName)
 	logrus.Error(msg)
@@ -107,8 +92,9 @@ func (h Handlers) ManifestGetHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if found {
-		ml.WriteWWWHeader(w)
 		ml.WriteWWWBody(w)
+		ml.WriteWWWHeader(w)
+
 		return
 	} else {
 		msg := fmt.Sprintf("no manifest '%s:%s' found for profile '%s'", req.Repo, req.Tag, req.Profile)
@@ -127,8 +113,8 @@ func (h Handlers) ManifestGetHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if found {
-		m.WriteWWWHeader(w)
 		m.WriteWWWBody(w)
+		m.WriteWWWHeader(w)
 		return
 	} else {
 		msg := fmt.Sprintf("no manifest '%s:%s' found for profile '%s'", req.Repo, req.Tag, req.Profile)

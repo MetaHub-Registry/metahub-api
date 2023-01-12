@@ -3,10 +3,12 @@ package router
 import (
 	"time"
 
+	logger "github.com/chi-middleware/logrus-logger"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/go-chi/render"
+	"github.com/sirupsen/logrus"
 	"github.com/metahub-registry/metahub-api/pkg/api/v1/handlers"
 	"github.com/metahub-registry/metahub-core/pkg/backends/magazine"
 )
@@ -16,11 +18,17 @@ func Initialize(mag magazine.Magazine) *chi.Mux {
 	h := handlers.NewHandlers("dev", mag)
 	// define router
 	router := chi.NewRouter()
-
+	log := logrus.StandardLogger().WithFields(
+		logrus.Fields{
+			"packrusage": "pkg/api/v1/router/router.go",
+			"package":    "router",
+			"middleware": "logger",
+		},
+	)
 	router.Use(
 		render.SetContentType(render.ContentTypeJSON), //forces Content-type
 		middleware.StripSlashes,
-		middleware.Logger,
+		logger.Logger("router", log),
 		middleware.Recoverer,            //middleware to recover from panics
 		middleware.Heartbeat("/health"), //for heartbeat process such as Kubernetes liveprobeness
 		cors.Handler(cors.Options{

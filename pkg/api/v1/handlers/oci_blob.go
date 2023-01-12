@@ -229,11 +229,10 @@ func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if found {
-		//logrus.Info("Found config blob")
-		cfg.WriteWWWHeader(w)
 		if r.Method == "GET" {
 			cfg.WriteWWWBody(w)
 		}
+		cfg.WriteWWWHeader(w)
 		return
 	}
 	// OK, let's check if it is a layer
@@ -262,10 +261,10 @@ func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if found {
-		layer.WriteWWWHeader(w)
 		if r.Method == "GET" {
 			layer.WriteWWWBody(w)
 		}
+		layer.WriteWWWHeader(w)
 		return
 	}
 	// Not found

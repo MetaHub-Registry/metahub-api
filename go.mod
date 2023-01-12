@@ -4,6 +4,7 @@ go 1.19
 
 require (
 	github.com/StudioSol/set v1.0.0
+	github.com/chi-middleware/logrus-logger v0.2.0
 	github.com/go-chi/chi/v5 v5.0.7
 	github.com/go-chi/cors v1.2.1
 	github.com/go-chi/render v1.0.2
@@ -44,6 +45,7 @@ require (
 	github.com/docker/libtrust v0.0.0-20160708172513-aabc10ec26b7 // indirect
 	github.com/dustin/go-humanize v1.0.0 // indirect
 	github.com/fsnotify/fsnotify v1.5.4 // indirect
+	github.com/gemnasium/logrus-graylog-hook/v3 v3.1.0 // indirect
 	github.com/go-logr/logr v1.2.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
@@ -93,6 +95,9 @@ require (
 )
 
 replace github.com/metahub-registry/metahub-core => /Users/kniepbert/go/src/github.com/metahub-registry/metahub-core
+
 replace github.com/metahub-registry/metahub-core/pkg/backends/minio => /Users/kniepbert/go/src/github.com/metahub-registry/metahub-core/pkg/backends/minio
+
 replace github.com/metahub-registry/metahub-core/pkg/types => /Users/kniepbert/go/src/github.com/metahub-registry/metahub-core/pkg/types
+
 replace github.com/metahub-registry/metahub-core/pkg/backends/sqlite => /Users/kniepbert/go/src/github.com/metahub-registry/metahub-core/pkg/backends/sqlite

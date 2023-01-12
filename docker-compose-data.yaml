@@ -19,7 +19,7 @@ services:
       - ${PWD}/misc/minio:/minio
       - ${PWD}/misc/backup:/backup
   neo4j:
-    image: registry.gitlab.com/qnib-container/database/neo4j:v0-0-3
+    image: registry.gitlab.com/qnib-container/database/neo4j:v0-0-5
     ports:
       - 7474:7474
       - 7687:7687
