@@ -10,6 +10,7 @@ import (
 	"github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/metahub-registry/metahub-core/pkg/logging"
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -36,6 +37,7 @@ func Execute() {
 
 func init() {
 	cobra.OnInitialize(initConfig)
+	cobra.OnInitialize(logging.InitLog)
 	// Here you will define your flags and configuration settings.
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
