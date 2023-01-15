@@ -1,7 +1,18 @@
 #!/bin/bash
 set -e
 
-if [[ !-f ${CFG_FILE} ]];then
+if [[ -z "${METAHUB_SHA256_DIR}" ]]; then
+    METAHUB_SHA256_DIR=/var/metahub/run/
+fi
+if [[ -z "${METAHUB_SHA256_FNAME}" ]]; then
+    METAHUB_SHA256_FNAME=metahub-api.yaml.sha256
+fi
+
+if [[ -z "${CFG_FILE}" ]]; then
+	echo "ERROR: No CFG_FILE set"
+	exit 1
+fi
+if [[ ! -f ${CFG_FILE} ]];then
 	cat /opt/metahub-api/metahub-api.yaml \
 		|wildq -M -i yaml '.minio.user = "AWSUSER"' |sed -e "s/AWSUSER/${AWS_ACCESS_KEY}/"  \
 		|wildq -M -i yaml '.minio.password = "PASSWD"' |sed -e "s#PASSWD#${AWS_SECRET_ACCESS_KEY}#"  \
@@ -13,6 +24,8 @@ if [[ !-f ${CFG_FILE} ]];then
 		|wildq -M -i yaml '.minio.manifests.bucket = "MANIFESTS_BUCKET"' | sed -e "s/MANIFESTS_BUCKET/${MANIFESTS_BUCKET}/" \
 		> ${CFG_FILE}
 fi
+echo "[INFO] sha256sum ${CFG_FILE} |awk '{print \$1}' > ${METAHUB_SHA256_DIR}/${METAHUB_SHA256_FNAME}"
+sha256sum ${CFG_FILE} |awk '{print $1}' > ${METAHUB_SHA256_DIR}/${METAHUB_SHA256_FNAME}
 
 metahub-api serve --config=${CFG_FILE} \
     --port=${METAHUB_API_PORT} \
