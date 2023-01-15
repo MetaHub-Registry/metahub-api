@@ -29,4 +29,5 @@ COPY ./metahub.db /var/lib/metahub/metahub.db
 VOLUME /var/lib/metahub
 VOLUME /etc/metahub/
 COPY ./misc/docker/bin/start.sh /usr/local/bin/start.sh
+RUN mkdir -p /var/metahub/run/
 CMD ["/usr/local/bin/start.sh"]
