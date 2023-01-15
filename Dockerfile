@@ -20,10 +20,14 @@ FROM alpine:3.16.2 AS prod
 ENV METAHUB_SERVER_PORT=80
 COPY --from=go /go/metahub-api/metahub-api /usr/bin/metahub-api
 COPY ./metahub.db /var/lib/metahub.db
-CMD ["metahub-api", "serve"]
-
+COPY --from=go /go/metahub-api/metahub-api /usr/bin/metahub-api
+RUN mkdir -p /var/metahub/run/
+CMD ["/usr/local/bin/start.sh"]
 
 FROM alpine:3.16.2
-ENV METAHUB_SERVER_PORT=80
+ENV METAHUB_SERVER_PORT=80 \
+    CFG_FILE=/etc/metahub/api.yaml 
+COPY ./misc/docker/bin/start.sh /usr/local/bin/start.sh
 COPY --from=go /go/metahub-api/metahub-api /usr/bin/metahub-api
-CMD ["metahub-api", "serve"]
+RUN mkdir -p /var/metahub/run/
+CMD ["/usr/local/bin/start.sh"]
