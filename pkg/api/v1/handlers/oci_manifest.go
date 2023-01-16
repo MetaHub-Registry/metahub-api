@@ -77,8 +77,7 @@ func (h Handlers) ManifestGetHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if found {
-		m.WriteWWWHeader(w)
-		m.WriteWWWBody(w)
+		m.WriteWWW(w)
 		return
 	}
 	ml, found, err := h.mag.ManifestList_GetByHTTPRequest(r)
@@ -92,9 +91,7 @@ func (h Handlers) ManifestGetHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if found {
-		ml.WriteWWWBody(w)
-		ml.WriteWWWHeader(w)
-
+		ml.WriteWWW(w)
 		return
 	} else {
 		msg := fmt.Sprintf("no manifest '%s:%s' found for profile '%s'", req.Repo, req.Tag, req.Profile)

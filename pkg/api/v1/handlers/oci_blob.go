@@ -230,9 +230,10 @@ func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	if found {
 		if r.Method == "GET" {
-			cfg.WriteWWWBody(w)
+			cfg.WriteWWW(w)
+		} else {
+			cfg.WriteWWWHeader(w)
 		}
-		cfg.WriteWWWHeader(w)
 		return
 	}
 	// OK, let's check if it is a layer
@@ -262,7 +263,7 @@ func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	if found {
 		if r.Method == "GET" {
-			layer.WriteWWWBody(w)
+			layer.WriteWWW(w)
 		}
 		layer.WriteWWWHeader(w)
 		return

@@ -30,7 +30,5 @@ func (h Handlers) TagGetHandler(w http.ResponseWriter, r *http.Request) {
 		helper.WriteOCIErrror(w, http.StatusNotFound, e)
 		return
 	}
-	res.WriteWWWBody(w)
-	res.WriteWWWHeader(w)
-
+	res.WriteWWW(w)
 }

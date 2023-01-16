@@ -24,7 +24,5 @@ func (h Handlers) CatalogGetHandler(w http.ResponseWriter, r *http.Request) {
 		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 		return
 	}
-	res.WriteWWWBody(w)
-	res.WriteWWWHeader(w)
-
+	res.WriteWWW(w)
 }
