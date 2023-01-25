@@ -130,6 +130,7 @@ func Test_CollectionGetAll(t *testing.T) {
 	bs.AddBootstrap("manifest:ft_amd64")
 	bs.AddBootstrap("collection:ft_amd64")
 	bs.AddBootstrap("collection:ft_arm64")
+	bs.AddBootstrap("collection:ft_generic")
 	br, err := SetupTest(bs)
 	assert.NoError(t, err)
 	defer TeardownTest(bs)
@@ -157,4 +158,44 @@ func Test_CollectionGetAll(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 0, resp.SlugEnd)
 	assert.Len(t, resp.Next, 1)
+	// qnib/featuretest
+	reqBodyFT := ReqRepo{
+		Repo: "qnib/featuretest",
+	}
+	wGetFT := httptest.NewRecorder()
+	_, rGetFT := createNewHTTPTest(http.MethodGet, map[string]string{}, map[string]string{
+		"accountName": token,
+		"userName":    "test",
+		"profileName": "generic",
+	}, map[string]string{
+		"Authorization": fmt.Sprintf("Bearer %s", token),
+		"Content-Type":  "application/octet-stream",
+	}, "/api/v1/collections", reqBodyFT.ToByte())
+	h.CollectionGetAll(wGetFT, rGetFT)
+	if wGetFT.Code != http.StatusOK {
+		t.Fatalf("Expected %d, got %d", http.StatusOK, wGetFT.Code)
+	}
+	var respFT CollectionsResponse
+	body := wGetFT.Body.Bytes()
+	err = json.Unmarshal(body, &respFT)
+	assert.NoError(t, err)
+	/*
+		var prettyJSON bytes.Buffer
+		error := json.Indent(&prettyJSON, body, "", "\t")
+		if error != nil {
+			t.Fatalf("error indenting json: %v", error)
+		}
+		fmt.Println(prettyJSON.String())
+	*/
+	if len(respFT.Next) != 3 {
+		t.Fatalf("Expected 3, got %d", len(respFT.Next))
+	}
+	_, ok := respFT.Next["generic"]
+	if !ok {
+		t.Fatalf("Expected 'latest' key in Next: %v", respFT.Next)
+	}
+	n := respFT.Next["generic"]
+	assert.Equal(t, "qnib/featuretest", n.Repo)
+	assert.Equal(t, "generic", n.Tag)
+	assert.Equal(t, int64(2), n.ManiCount)
 }
