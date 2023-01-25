@@ -2,6 +2,7 @@ db-data/**
 mh-api
 
 coverage.txt
+coverage.xml
 lcov.info
 **.sqlite3
 report.html
