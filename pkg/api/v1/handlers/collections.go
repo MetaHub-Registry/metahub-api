@@ -41,7 +41,7 @@ func (h Handlers) CollectionGetOne(w http.ResponseWriter, r *http.Request) {
 	}
 	// Create Breadcrumbs for the collection
 	reps := set.NewLinkedHashSetString()
-	for _, r := range strings.Split(col.Repo, "/") {
+	for idx, r := range strings.Split(col.Repo, "/") {
 		if !reps.InArray(r) {
 			reps.Add(r)
 			bc := utils.BreadCrumb{
@@ -50,6 +50,7 @@ func (h Handlers) CollectionGetOne(w http.ResponseWriter, r *http.Request) {
 				Link:   fmt.Sprintf("/collections/%s", strings.Join(reps.AsSlice(), "/")),
 				Repo:   strings.Join(reps.AsSlice(), "/"),
 				Tag:    col.Tag,
+				IDX:    idx,
 			}
 			breadCrumbs = append(breadCrumbs, bc)
 		}
@@ -138,6 +139,7 @@ func (h Handlers) CollectionGetAll(w http.ResponseWriter, r *http.Request) {
 						Link:   fmt.Sprintf("/collections/%s", strings.Join(reps.AsSlice(), "/")),
 						Repo:   strings.Join(reps.AsSlice(), "/"),
 						Tag:    "",
+						IDX:    i,
 					}
 					breadCrumbs = append(breadCrumbs, bc)
 				}

@@ -6,4 +6,5 @@ type BreadCrumb struct {
 	Link   string `json:"link"`
 	Tag    string `json:"tag"`
 	Repo   string `json:"repo"`
+	IDX    int    `json:"idx"`
 }
