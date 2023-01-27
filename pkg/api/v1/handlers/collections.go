@@ -48,6 +48,8 @@ func (h Handlers) CollectionGetOne(w http.ResponseWriter, r *http.Request) {
 				Crumb:  r,
 				Active: 1,
 				Link:   fmt.Sprintf("/collections/%s", strings.Join(reps.AsSlice(), "/")),
+				Repo:   strings.Join(reps.AsSlice(), "/"),
+				Tag:    col.Tag,
 			}
 			breadCrumbs = append(breadCrumbs, bc)
 		}
@@ -134,6 +136,8 @@ func (h Handlers) CollectionGetAll(w http.ResponseWriter, r *http.Request) {
 						Crumb:  r,
 						Active: 1,
 						Link:   fmt.Sprintf("/collections/%s", strings.Join(reps.AsSlice(), "/")),
+						Repo:   strings.Join(reps.AsSlice(), "/"),
+						Tag:    "",
 					}
 					breadCrumbs = append(breadCrumbs, bc)
 				}
