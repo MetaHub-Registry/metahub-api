@@ -1,0 +1,3 @@
+[submodule "ext/metalib"]
+	path = ext/metalib
+	url = git@github.com:MetaHub-Registry/metahub-core.git

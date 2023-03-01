@@ -2,9 +2,7 @@ version: '3'
 
 services:
   dev:
-    build: 
-      context: .
-      target: dev
+    image: registry.github.com/metahub-registry/metahub-api:2023-03-01-arm64-dev
     environment:
       - SQLITE_FILE=/go/metahub-api/misc/sqlite/metahub_20221017.db
       - PATH=/go/metahub:/go/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin

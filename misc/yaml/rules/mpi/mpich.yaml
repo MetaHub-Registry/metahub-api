@@ -1,0 +1,6 @@
+name: "mpi" 
+tag: "mpich"
+type: "anno"
+op: "eq"
+key: "org.supercontainers.mpi.implementation"
+value: "mpich"

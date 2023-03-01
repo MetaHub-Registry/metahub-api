@@ -1,1 +1,3 @@
-go run main.go serve --config ./misc/config/metahub-api.yaml --users-db ./misc/sqlite/user_2022-12-16.db
+go run main.go serve --config ./misc/config/metahub-api.yaml --user-db ./misc/sqlite/
+export CFG_PATH=./misc/config/compose-config.yaml
+export PROFILE_PATH=/community-edition/profiles/generic/

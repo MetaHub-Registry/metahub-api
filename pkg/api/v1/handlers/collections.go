@@ -55,7 +55,7 @@ func (h Handlers) CollectionGetOne(w http.ResponseWriter, r *http.Request) {
 			breadCrumbs = append(breadCrumbs, bc)
 		}
 	}
-	manis, err := h.mag.Database.Manifest_GetByCollectionTag(pl.ColID, pl.TagID)
+	manis, err := h.mag.Database.ManifestData_GetByCollectionTag(pl.ColID, pl.TagID)
 	if err != nil {
 		h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
 		return

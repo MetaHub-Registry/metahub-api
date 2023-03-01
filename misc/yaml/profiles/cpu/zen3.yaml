@@ -1,0 +1,6 @@
+name: "cpu" 
+tag: "zen3"
+type: "anno"
+op: "eq"
+key: "org.supercontainers.hardware.cpu.target.microarch"
+value: "zen3"
