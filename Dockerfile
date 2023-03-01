@@ -11,9 +11,9 @@ FROM golang:1.19.1-alpine3.16 AS dev
 RUN apk add --no-cache git gcc musl-dev bash vim curl wget
 WORKDIR /go/metahub-api
 COPY . ./
-RUN --mount=type=cache,target=/go/pkg/mod go mod tidy
+RUN go mod tidy
 ENV CGO_ENABLED=1 GOOS=linux
-RUN --mount=type=cache,target=/go/pkg/mod go build -a -ldflags '-extldflags "-static"' .
+ENV CFG_PATH=./misc/config/compose-config.yaml
 COPY ./misc/docker/dev/bash_history /root/.bash_history
 
 FROM alpine:3.16.2 AS prod

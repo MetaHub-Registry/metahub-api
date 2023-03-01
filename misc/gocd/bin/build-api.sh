@@ -20,6 +20,11 @@ fi
 cat go.mod|awk '!/^replace/' > go.mod.tmp
 mv go.mod.tmp go.mod
 
+if [[ -d exp/metalib ]];then
+   echo ">> rm -rf exp/metalib"
+   rm -rf exp/metalib
+fi
+
 if [[ "${DEPLOYMENT}" == "dev" ]];then
    echo "> git clone --branch=develop https://gitlab-ci-token:CI_JOB_TOKEN@github.com/metahub-registry/metahub-core exp/metalib"
    git clone --branch=develop https://gitlab-ci-token:${CI_JOB_TOKEN}@github.com/metahub-registry/metahub-core exp/metalib
@@ -36,7 +41,7 @@ rm -f metahub.db
 ## Fetch Artefact
 curl -sH "Authorization: bearer ${GOCD_TOKEN}" \
      -o metahub.db "${GO_SERVER_URL}/files/${GO_DEPENDENCY_LOCATOR_METAHUB_ADMIN}/RunQnib/misc/gocd/bin/metahub.db"
-NEW_IMAGE=metahub-api-test:gocd-${GO_PIPELINE_LABEL}
+NEW_IMAGE=metahub-api-test:${GO_PIPELINE_LABEL}
 docker build -f Dockerfile.legacy -t ${NEW_IMAGE} .
 docker save -o ${TOPDIR}/metahub-api.tar ${NEW_IMAGE}
 docker rmi ${NEW_IMAGE}

@@ -1,0 +1,6 @@
+name: "cpu" 
+tag: "generic"
+type: "anno"
+op: "eq"
+key: "org.supercontainers.hardware.cpu.target"
+value: "platform"

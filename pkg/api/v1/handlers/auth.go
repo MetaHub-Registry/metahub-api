@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/gorilla/context"
@@ -14,6 +15,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/metahub-registry/metahub-core/pkg/helper"
 	"github.com/metahub-registry/metahub-core/pkg/types"
+	"github.com/metahub-registry/metahub-core/pkg/utils"
 )
 
 type oauthError string
@@ -21,6 +23,7 @@ type oauthError string
 var (
 	invalidRequest oauthError = "invalid_request"
 	invalidToken   oauthError = "invalid_token"
+	userReg                   = regexp.MustCompile(`(?P<user>[\w\-\.\_]+)(\/(?P<profile>[\/\w\-\.\_#]+))?`)
 )
 
 func getAccessTokenFromBearerToken(r *http.Request) (at *types.AccessToken, user string, err error) {
@@ -125,34 +128,28 @@ func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) 
 	var username, profile, password string
 	// The access token is the base64 encoded username and password we need to check
 	decoded := at.GetUser()
-	// Ensure the login is correct
-	parts := strings.Split(decoded, ":")
-	switch len(parts) {
-	case 1:
-		username = "generic"
-		profile = "generic"
-	case 2:
-		password = parts[1]
-		profSplit := strings.Split(parts[0], "/")
-		switch len(profSplit) {
-		case 1:
-			username = parts[0]
-			profile = "generic"
-		case 2:
-			username = profSplit[0]
-			profile = profSplit[1]
-		default:
-			msg := "username needs to prefix with profile (defaults to generic): '<user>/<profile>'"
-			log.Print(msg)
-			w.WriteHeader(http.StatusBadRequest)
-			return fmt.Errorf(msg)
-		}
-
-	default:
+	parts := strings.Split(string(decoded), ":")
+	if len(parts) != 2 {
+		logrus.Error("unknown access token")
+		det := helper.NewDetailFromReq(req)
+		w.WriteHeader(http.StatusUnauthorized)
+		logrus.Infof("Realm: %s", realm)
+		unauthorized(w, realm, det, invalidToken, "unknown access token")
+		return fmt.Errorf("error getting token")
+	}
+	password = parts[1]
+	m := utils.ReSubMatchMap(userReg, parts[0])
+	if _, ok := m["user"]; !ok {
 		msg := "username needs to prefix with profile (defaults to generic): '<user>/<profile>'"
 		log.Print(msg)
 		w.WriteHeader(http.StatusBadRequest)
 		return fmt.Errorf(msg)
+	}
+	username = m["user"]
+	if _, ok := m["profile"]; !ok {
+		profile = "generic"
+	} else {
+		profile = m["profile"]
 	}
 	code, pl, err := h.mag.UserManagement.LoginUserScope(username, password, req)
 	if err != nil {
