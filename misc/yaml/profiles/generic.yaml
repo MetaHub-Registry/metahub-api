@@ -1,0 +1,2 @@
+## TODO: Make the second rule 'cpu.target=null' (lack of an annotation)
+rule: generic:linux=true

@@ -8,12 +8,20 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/metahub-registry/metahub-api/pkg/lib/helper"
 	"github.com/metahub-registry/metahub-core/pkg/types"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 func (h Handlers) ManifestHeadHandler(w http.ResponseWriter, r *http.Request) {
 	// Check whether it is a manifest or manifest list
 	req := types.NewRequest(r)
-	m, found, err := h.mag.Manifest_GetByHTTPRequest(r)
+	ctx := r.Context()
+	ctx, span := tracer.Start(ctx, "ManifestHeadHandler")
+	span.SetAttributes(
+		attribute.Key("method").String(r.Method),
+		attribute.Key("repo").String(req.Repo),
+	)
+	defer span.End()
+	m, found, err := h.mag.Manifest_GetByHTTPRequest(ctx, r)
 	if err != nil {
 		// 1. FALSE
 		msg := fmt.Sprintf("failed to fetch ManifestList: %v", err)
@@ -27,7 +35,7 @@ func (h Handlers) ManifestHeadHandler(w http.ResponseWriter, r *http.Request) {
 		m.WriteWWWHeader(w)
 		return
 	}
-	ml, found, err := h.mag.ManifestList_GetByHTTPRequest(r)
+	ml, found, err := h.mag.ManifestList_GetByHTTPRequest(ctx, r)
 	if err != nil {
 		// 1. FALSE
 		msg := fmt.Sprintf("failed to fetch ManifestList: %v", err)
@@ -66,7 +74,14 @@ func (h Handlers) ManifestDelHandler(w http.ResponseWriter, r *http.Request) {
 
 func (h Handlers) ManifestGetHandler(w http.ResponseWriter, r *http.Request) {
 	req := types.NewRequest(r)
-	m, found, err := h.mag.Manifest_GetByHTTPRequest(r)
+	ctx := r.Context()
+	ctx, span := tracer.Start(ctx, "ManifestGetHandler")
+	span.SetAttributes(
+		attribute.Key("method").String(r.Method),
+		attribute.Key("repo").String(req.Repo),
+	)
+	defer span.End()
+	m, found, err := h.mag.Manifest_GetByHTTPRequest(ctx, r)
 	if err != nil {
 		// 1. FALSE
 		msg := fmt.Sprintf("failed to fetch Manifest: %v", err)
@@ -80,7 +95,7 @@ func (h Handlers) ManifestGetHandler(w http.ResponseWriter, r *http.Request) {
 		m.WriteWWW(w)
 		return
 	}
-	ml, found, err := h.mag.ManifestList_GetByHTTPRequest(r)
+	ml, found, err := h.mag.ManifestList_GetByHTTPRequest(ctx, r)
 	if err != nil {
 		// 1. FALSE
 		msg := fmt.Sprintf("failed to fetch ManifestList: %v", err)
@@ -123,15 +138,24 @@ func (h Handlers) ManifestGetHandler(w http.ResponseWriter, r *http.Request) {
 
 func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 	req := types.NewRequest(r)
+	ctx := r.Context()
+	ctx, span := tracer.Start(ctx, "ManifestGetHandler")
+	defer span.End()
 	logrus.Infof("%-5s ManifestPutHandler(%s, %s)", r.Method, req.Repo, req.Tag)
 	buf, err := io.ReadAll(r.Body)
 	if err != nil {
 		logrus.Fatal("request", err)
 	}
+	span.SetAttributes(
+		attribute.Key("method").String(r.Method),
+		attribute.Key("repo").String(req.Repo),
+		attribute.Key("body-length").Int(len(buf)),
+	)
+
 	switch req.ContentType {
 	case "application/vnd.docker.distribution.manifest.v2+json":
 		// Put manifest in object store
-		m, err := h.mag.StoreManifestUpload(req, buf)
+		m, err := h.mag.StoreManifestUpload(ctx, req, buf)
 		if err != nil {
 			msg := fmt.Sprintf("failed to store manifest: %v", err)
 			logrus.Error(msg)
@@ -140,13 +164,13 @@ func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 			helper.WriteOCIErrror(w, http.StatusBadRequest, e)
 			return
 		}
-		// Put maniest in database
+		// Put manifest in database
 		m.WriteWWWHeader(w)
 		w.Header().Set("Location", fmt.Sprintf("%s://%s/v2/%s/manifests/%s", req.Protocol, req.Host, req.Repo, req.Tag))
 		w.WriteHeader(http.StatusCreated)
 	case "application/vnd.oci.image.manifest.v1+json":
 		// Put manifest in object store
-		m, err := h.mag.StoreManifestUpload(req, buf)
+		m, err := h.mag.StoreManifestUpload(ctx, req, buf)
 		if err != nil {
 			msg := fmt.Sprintf("failed to store manifest: %v", err)
 			logrus.Error(msg)
@@ -155,7 +179,7 @@ func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 			helper.WriteOCIErrror(w, http.StatusBadRequest, e)
 			return
 		}
-		// Put maniest in database
+		// Put manifest in database
 		m.WriteWWWHeader(w)
 		w.Header().Set("Location", fmt.Sprintf("%s://%s/v2/%s/manifests/%s", req.Protocol, req.Host, req.Repo, req.Tag))
 		w.WriteHeader(http.StatusCreated)

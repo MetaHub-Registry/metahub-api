@@ -21,8 +21,10 @@ cat go.mod|awk '!/^replace/' > go.mod.tmp
 mv go.mod.tmp go.mod
 
 if [[ -d exp/metalib ]];then
-   echo ">> rm -rf exp/metalib"
-   rm -rf exp/metalib
+   if [[ "${DEPLOYMENT}" == "dev" ]];then
+      echo ">> it -C exp/metalib pull origin develop"
+      git -C exp/metalib pull origin develop
+   fi
 fi
 
 if [[ "${DEPLOYMENT}" == "dev" ]];then

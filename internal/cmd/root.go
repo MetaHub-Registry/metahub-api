@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/metahub-registry/metahub-core/pkg/logging"
+	"go.opentelemetry.io/otel"
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -24,6 +25,7 @@ var (
 		// Run: func(cmd *cobra.Command, args []string) { },
 	}
 	cfgFile = ""
+	tracer  = otel.Tracer("github.com/full/path/to/mypkg")
 )
 
 // Execute adds all child commands to the root command and sets flags appropriately.

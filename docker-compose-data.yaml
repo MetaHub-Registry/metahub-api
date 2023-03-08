@@ -8,16 +8,18 @@ services:
     networks:
       - mh-data
     volumes:
-      - ${PWD}/misc/minio:/minio
+      #- ${PWD}/misc/minio:/minio
+      - /minio
     environment:
       MINIO_ROOT_USER: "minio"
       MINIO_ROOT_PASSWORD: "miniominio"
     command: ["server", "/minio", "--console-address=0.0.0.0:9001"]
-  backup:
-    image: alpine:3.16.2
-    volumes:
-      - ${PWD}/misc/minio:/minio
-      - ${PWD}/misc/backup:/backup
+  #backup:
+  #  image: alpine:3.16.2
+  #  volumes:
+  #    - ${PWD}/misc/minio:/minio
+  #    - ${PWD}/misc/backup:/backup
+  #  command: ["sleep", "inf"]
   neo4j:
     image: registry.gitlab.com/qnib-container/database/neo4j:v0-0-5
     ports:

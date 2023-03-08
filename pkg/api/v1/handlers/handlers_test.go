@@ -242,7 +242,8 @@ func SetupTestOLD(bs utils.Bootstrap) (br utils.BootstrapResult, err error) {
 			bu1 := types.OCIBlobUpload{
 				Digest:     L1.Digest,
 				UUID:       uuid.New(),
-				UploadedBy: "test",
+				UploadUser: "test",
+				UploadProfile: "generic",
 				Repo:       fmt.Sprintf("%s/%s", repo, image),
 				BlobType:   "layer",
 			}
@@ -258,7 +259,8 @@ func SetupTestOLD(bs utils.Bootstrap) (br utils.BootstrapResult, err error) {
 			bu1 := types.OCIBlobUpload{
 				Digest:     L1.Digest,
 				UUID:       uuid.New(),
-				UploadedBy: "test",
+				UploadUser: "test",
+				UploadProfile: "generic",
 				Repo:       fmt.Sprintf("%s/%s", repo, image),
 				BlobType:   "layer",
 			}
