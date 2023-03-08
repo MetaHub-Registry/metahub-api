@@ -22,3 +22,6 @@ frontend:
 logging:
   gelf: logstash:12201
   level: debug
+tracing:
+  name: "metahub-api"
+  endpoint: "http://jaeger:14268/api/traces"

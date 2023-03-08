@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -105,13 +106,13 @@ func Test_CollectionGetOne(t *testing.T) {
 	assert.Equal(t, "arm64", resp.Collection.Tag)
 }
 
-/*
 func Test_CollectionGetAll(t *testing.T) {
 	bs := utils.NewBootstrap()
 	bs.SetEmptyAll()
 	bs.SetYAMLPrefix("../../../../misc/yaml")
 	bs.AddBootstrap("users")
 	bs.AddBootstrap("platforms:generic")
+	bs.AddBootstrap("annotation:org.supercontainers.hardware.cpu.target:platform")
 	bs.AddBootstrap("rules:rules/cpu/generic.yaml")
 	bs.AddBootstrap("profile:profiles/cpu/generic.yaml")
 	bs.AddBootstrap("config:ft_arm")
@@ -126,7 +127,6 @@ func Test_CollectionGetAll(t *testing.T) {
 	bs.AddBootstrap("layer:1:ft_amd64")
 	bs.AddBootstrap("manifestdata:ft_arm64")
 	bs.AddBootstrap("manifestdata:ft_amd64")
-	bs.AddBootstrap("annotation:org.supercontainers.hardware.cpu.target:platform")
 	bs.AddBootstrap("collection:ft_amd64")
 	bs.AddBootstrap("collection:ft_arm64")
 	bs.AddBootstrap("collection:ft_generic")
@@ -148,7 +148,7 @@ func Test_CollectionGetAll(t *testing.T) {
 	_, rGet := createNewHTTPTest(http.MethodGet, map[string]string{}, map[string]string{
 		"accountName": token,
 		"userName":    "test",
-		"profileName": "generic",
+		"profileName": "cpu#generic",
 	}, map[string]string{
 		"Authorization": fmt.Sprintf("Bearer %s", token),
 		"Content-Type":  "application/octet-stream",
@@ -203,4 +203,3 @@ func Test_CollectionGetAll(t *testing.T) {
 	assert.Equal(t, "generic", n.Tag)
 	assert.Equal(t, int64(2), n.ManiCount)
 }
-*/

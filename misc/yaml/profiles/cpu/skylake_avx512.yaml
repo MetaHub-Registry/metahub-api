@@ -1,6 +1,1 @@
-name: "cpu" 
-tag: "skylake_avx512"
-type: "anno"
-op: "eq"
-key: "org.supercontainers.hardware.cpu.target.microarch"
-value: "skylake_avx512"
+rule: cpu:skylake_avx512=true

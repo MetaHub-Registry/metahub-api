@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/go-chi/render"
+	"github.com/riandyrn/otelchi"
 	"github.com/sirupsen/logrus"
 	"github.com/metahub-registry/metahub-api/pkg/api/v1/handlers"
 	"github.com/metahub-registry/metahub-core/pkg/backends/magazine"
@@ -55,6 +56,10 @@ func Initialize(mag magazine.Magazine) *chi.Mux {
 	// (even if the token is the anonymous one)
 	router.Route("/v2", func(r chi.Router) {
 		r.Use(h.AuthMiddleware)
+		if mag.Config.Tracing.Enabled {
+			logrus.Info("Tracing enabled")
+			r.Use(otelchi.Middleware("metahub-api", otelchi.WithChiRoutes(r)))
+		}
 		r.Get("/", h.HeartbeatHandler)
 		// TODO: Is there no way to match multiple lengh path?
 		r.Head("/{image}/manifests/{reference}", h.ManifestHeadHandler)

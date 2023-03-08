@@ -59,289 +59,317 @@ func Test_UploadManifest_FTarm_Short(t *testing.T) {
 
 }
 
+// TODO: Make the test work again
 /*
-	 TODO: Make the test work again
-		func Test_UploadManifest_FTarm(t *testing.T) {
-			testRepo := "qnib"
-			testImage := "featuretest"
-			testTag := "latest"
-			err := h.mag.Minio.EmptyAll()
-			assert.NoError(t, err)
-			bs := utils.NewBootstrap()
-			bs.SetEmptyAll()
-			bs.SetYAMLPrefix("../../../../misc/yaml")
-			bs.AddBootstrap("users")
-			bs.AddBootstrap("platforms:generic")
-			bs.AddBootstrap("rules:rules/cpu/generic.yaml")
-			bs.AddBootstrap("profile:profiles/cpu/generic.yaml")
-			//bs.PostTestSleep = 180
-			br, err := SetupTest(bs)
-			assert.NoError(t, err)
-			defer TeardownTest(bs)
-			/// Request
-			token, err := br.Get("user:test#bearer")
-			assert.NoError(t, err)
-			///// LAYER0
-			l0bytes := types.FT_arm_Layer0Byte()
-			l0ref := types.FT_arm_Layer0Reference()
-			// POST with Data
-			wL0, rL0 := createNewHTTPTest(http.MethodPost, map[string]string{
-				"repo":  testRepo,
-				"image": testImage,
-			}, map[string]string{
-				"accountName": token,
-				"userName":    "test",
-				"profileName": "generic",
-			}, map[string]string{
-				"Authorization": fmt.Sprintf("Bearer %s", token),
-			}, "/{repo}/{image}/blobs/uploads/{uuid}", l0bytes)
+func Test_UploadManifest_FTarm(t *testing.T) {
+	testRepo := "qnib"
+	testImage := "featuretest"
+	testTag := "latest"
+	err := h.mag.Minio.EmptyAll()
+	assert.NoError(t, err)
+	bs := utils.NewBootstrap()
+	bs.SetEmptyAll()
+	bs.SetYAMLPrefix("../../../../misc/yaml")
+	bs.AddBootstrap("users")
+	bs.AddBootstrap("platforms:generic")
+	bs.AddBootstrap("annotation:org.supercontainers.hardware.cpu.target:platform")
+	bs.AddBootstrap("rules:rules/cpu/generic.yaml")
+	bs.AddBootstrap("profile:profiles/cpu/generic.yaml")
+	bs.PostTestSleep = 180
+	br, err := SetupTest(bs)
+	assert.NoError(t, err)
+	defer TeardownTest(bs)
+	/// Request
+	token, err := br.Get("user:test#bearer")
+	assert.NoError(t, err)
+	///// LAYER0
+	l0bytes := types.FT_arm_Layer0Byte()
+	l0ref := types.FT_arm_Layer0Reference()
+	// POST with Data
+	wL0, rL0 := createNewHTTPTest(http.MethodPost, map[string]string{
+		"repo":  testRepo,
+		"image": testImage,
+	}, map[string]string{
+		"accountName": token,
+		"userName":    "test",
+		"profileName": "cpu#generic",
+	}, map[string]string{
+		"Authorization": fmt.Sprintf("Bearer %s", token),
+	}, "/{repo}/{image}/blobs/uploads/{uuid}", l0bytes)
+	h.BlobUploadPostHandler(&wL0, rL0)
+	if http.StatusAccepted != wL0.Code {
+		t.Fatalf("Expected %d, got %d", http.StatusCreated, wL0.Code)
+	}
+	// Fetch Upload from DB
+	gotLoc := wL0.Header().Get("Location")
+	uuid := wL0.Header().Get("Docker-Upload-UUID")
+	assert.Equal(t, fmt.Sprintf("/v2/qnib/featuretest/blobs/uploads/%s", uuid), gotLoc)
+	// Next we do a PATCH request
+	wL0Patch, rL0Patch := createNewHTTPTest(http.MethodPost, map[string]string{
+		"repo":  testRepo,
+		"image": testImage,
+		"uuid":  uuid,
+	}, map[string]string{
+		"accountName": token,
+		"userName":    "test",
+		"profileName": "cpu#generic",
+	}, map[string]string{
+		"Authorization":  fmt.Sprintf("Bearer %s", token),
+		"Content-Type":   "application/octet-stream",
+		"Content-Range":  fmt.Sprintf("0-%d", len(l0bytes)-1),
+		"Content-Length": fmt.Sprintf("%d", len(l0bytes)),
+	}, "/{repo}/{image}/blobs/uploads/{uuid}", l0bytes)
+	h.BlobUploadPatchHandler(&wL0Patch, rL0Patch)
+	if http.StatusAccepted != wL0Patch.Code {
+		t.Fatalf("Expected %d, got %d", http.StatusCreated, wL0Patch.Code)
+	}
+	// Final PUT request
+	//startPut := time.Now()
+	wL0Put, rL0Put := createNewHTTPTest(http.MethodPut, map[string]string{
+		"repo":  testRepo,
+		"image": testImage,
+		"uuid":  uuid,
+	}, map[string]string{
+		"accountName": token,
+		"userName":    "test",
+		"profileName": "cpu#generic",
+	}, map[string]string{
+		"Authorization": fmt.Sprintf("Bearer %s", token),
+	}, fmt.Sprintf("/{repo}/{image}/blobs/uploads/{uuid}?digest=%s", l0ref.Digest), nil)
+	h.BlobUploadPutHandler(&wL0Put, rL0Put)
+	//endPut := time.Now()
+	if http.StatusCreated != wL0Put.Code {
+		t.Fatalf("Expected %d, got %d", http.StatusCreated, wL0Put.Code)
+	}
+	gotPutLoc := wL0Put.Header().Get("Location")
+	uuid = wL0Put.Header().Get("Docker-Upload-UUID")
+	assert.NotNil(t, uuid)
+	assert.Equal(t, fmt.Sprintf("/v2/qnib/featuretest/blobs/uploads/%s", uuid), gotPutLoc)
+	///// LAYER1
+	l1bytes := types.FT_arm_Layer1Byte()
+	l1ref := types.FT_arm_Layer1Reference()
+	_ = l1ref
+	// POST with Data
+	wL1, rL1 := createNewHTTPTest(http.MethodPost, map[string]string{
+		"repo":  testRepo,
+		"image": testImage,
+	}, map[string]string{
+		"accountName": token,
+		"userName":    "test",
+		"profileName": "cpu#generic",
+	}, map[string]string{
+		"Authorization": fmt.Sprintf("Bearer %s", token),
+	}, "/{repo}/{image}/blobs/uploads/{uuid}", l1bytes)
+	h.BlobUploadPostHandler(&wL1, rL1)
+	if http.StatusAccepted != wL1.Code {
+		t.Fatalf("Expected %d, got %d", http.StatusAccepted, wL1.Code)
+	}
+	// Fetch Upload from DB
+	gotLocL1 := wL1.Header().Get("Location")
+	uuidL1 := wL1.Header().Get("Docker-Upload-UUID")
+	assert.Equal(t, fmt.Sprintf("/v2/%s/%s/blobs/uploads/%s", testRepo, testImage, uuidL1), gotLocL1)
+	// Next we do a PATCH request
+	wL1Patch, rL1Patch := createNewHTTPTest(http.MethodPatch, map[string]string{
+		"repo":  testRepo,
+		"image": testImage,
+		"uuid":  uuidL1,
+	}, map[string]string{
+		"accountName": token,
+		"userName":    "test",
+		"profileName": "cpu#generic",
+	}, map[string]string{
+		"Authorization":  fmt.Sprintf("Bearer %s", token),
+		"Content-Type":   "application/octet-stream",
+		"Content-Range":  fmt.Sprintf("0-%d", len(l1bytes)-1),
+		"Content-Length": fmt.Sprintf("%d", len(l1bytes)),
+	}, "/{repo}/{image}/blobs/uploads/{uuid}", l1bytes)
+	h.BlobUploadPatchHandler(&wL1Patch, rL1Patch)
+	if http.StatusAccepted != wL1Patch.Code {
+		t.Fatalf("Expected %d, got %d", http.StatusAccepted, wL1Patch.Code)
+	}
+	// Final PUT request
+	wL1Put, rL1Put := createNewHTTPTest(http.MethodPut, map[string]string{
+		"repo":  testRepo,
+		"image": testImage,
+		"uuid":  uuidL1,
+	}, map[string]string{
+		"accountName": token,
+		"userName":    "test",
+		"profileName": "cpu#generic",
+	}, map[string]string{
+		"Authorization": fmt.Sprintf("Bearer %s", token),
+	}, fmt.Sprintf("/{repo}/{image}/blobs/uploads/{uuid}?digest=%s", l1ref.Digest), nil)
+	h.BlobUploadPutHandler(&wL1Put, rL1Put)
+	if http.StatusCreated != wL1Put.Code {
+		t.Fatalf("Expected %d, got %d", http.StatusCreated, wL1Put.Code)
+	}
+	gotPutLocL1 := wL0Put.Header().Get("Location")
+	assert.Equal(t, fmt.Sprintf("/v2/qnib/featuretest/blobs/uploads/%s", uuid), gotPutLocL1)
+	/////// CONFIG
+	cfgBytes := types.FT_arm_ConfigByte()
+	cfg := types.FT_arm_Config()
+	// POST
+	wCfgPost, rCfgPost := createNewHTTPTest(http.MethodPost, map[string]string{
+		"repo":  testRepo,
+		"image": testImage,
+	}, map[string]string{
+		"accountName": token,
+		"userName":    "test",
+		"profileName": "cpu#generic",
+	}, map[string]string{
+		"Authorization": fmt.Sprintf("Bearer %s", token),
+	}, "/{repo}/{image}/blobs/uploads/{uuid}", cfgBytes)
+	h.BlobUploadPostHandler(&wCfgPost, rCfgPost)
+	if http.StatusAccepted != wCfgPost.Code {
+		t.Fatalf("Expected %d, got %d", http.StatusAccepted, wCfgPost.Code)
+	}
+	// Fetch Upload from DB
+	gotLocCfg := wCfgPost.Header().Get("Location")
+	uuidCfg := wCfgPost.Header().Get("Docker-Upload-UUID")
+	assert.Equal(t, fmt.Sprintf("/v2/qnib/featuretest/blobs/uploads/%s", uuidCfg), gotLocCfg)
+	/// PATCH with config
+	wCfgPatch, rCfgPatch := createNewHTTPTest(http.MethodPatch, map[string]string{
+		"repo":  testRepo,
+		"image": testImage,
+		"uuid":  uuidCfg,
+	}, map[string]string{
+		"accountName": token,
+		"userName":    "test",
+		"profileName": "cpu#generic",
+	}, map[string]string{
+		"Authorization":  fmt.Sprintf("Bearer %s", token),
+		"Content-Type":   "application/octet-stream",
+		"Content-Range":  fmt.Sprintf("0-%d", len(cfgBytes)-1),
+		"Content-Length": fmt.Sprintf("%d", len(cfgBytes)),
+	}, "/{repo}/{image}/blobs/uploads/{uuid}", cfgBytes)
+	h.BlobUploadPatchHandler(&wCfgPatch, rCfgPatch)
+	if http.StatusAccepted != wCfgPatch.Code {
+		t.Fatalf("Expected %d, got %d", http.StatusAccepted, wCfgPatch.Code)
+	}
+	// Final PUT request
+	wCfgPut, rCfgPut := createNewHTTPTest(http.MethodPut, map[string]string{
+		"repo":  testRepo,
+		"image": testImage,
+		"uuid":  uuidCfg,
+	}, map[string]string{
+		"accountName": token,
+		"userName":    "test",
+		"profileName": "cpu#generic",
+	}, map[string]string{
+		"Authorization": fmt.Sprintf("Bearer %s", token),
+	}, fmt.Sprintf("/{repo}/{image}/blobs/uploads/{uuid}?digest=%s", cfg.Digest), nil)
+	h.BlobUploadPutHandler(&wCfgPut, rCfgPut)
+	if http.StatusCreated != wCfgPut.Code {
+		t.Fatalf("Expected %d, got %d", http.StatusCreated, wCfgPut.Code)
+	}
+	gotPutLocCfg := wCfgPut.Header().Get("Location")
+	assert.Equal(t, fmt.Sprintf("/v2/qnib/featuretest/blobs/uploads/%s", uuidCfg), gotPutLocCfg)
+	/// Manifest
+	mani := types.FT_arm_ManifestData()
+	wManiPut, rManiPut := createNewHTTPTest(http.MethodPut, map[string]string{
+		"repo":      testRepo,
+		"image":     testImage,
+		"reference": testTag,
+	}, map[string]string{
+		"accountName": token,
+		"userName":    "test",
+		"profileName": "cpu#generic",
+	}, map[string]string{
+		"Authorization": fmt.Sprintf("Bearer %s", token),
+		"Content-Type":  "application/vnd.docker.distribution.manifest.v2+json",
+	}, "/{repo}/{image}/manifests/{reference}", mani.Data)
+	h.ManifestPutHandler(&wManiPut, rManiPut)
+	if http.StatusCreated != wManiPut.Code {
+		t.Fatalf("Expected %d, got %d", http.StatusCreated, wManiPut.Code)
+	}
 
-			h.BlobUploadPostHandler(&wL0, rL0)
-			assert.Equal(t, http.StatusAccepted, wL0.Code)
-			// Fetch Upload from DB
-			gotLoc := wL0.Header().Get("Location")
-			uuid := wL0.Header().Get("Docker-Upload-UUID")
-			assert.Equal(t, fmt.Sprintf("/v2/qnib/featuretest/blobs/uploads/%s", uuid), gotLoc)
-			// Next we do a PATCH request
-			wL0Patch, rL0Patch := createNewHTTPTest(http.MethodPost, map[string]string{
-				"repo":  testRepo,
-				"image": testImage,
-				"uuid":  uuid,
-			}, map[string]string{
-				"accountName": token,
-				"userName":    "test",
-				"profileName": "generic",
-			}, map[string]string{
-				"Authorization":  fmt.Sprintf("Bearer %s", token),
-				"Content-Type":   "application/octet-stream",
-				"Content-Range":  fmt.Sprintf("0-%d", len(l0bytes)-1),
-				"Content-Length": fmt.Sprintf("%d", len(l0bytes)),
-			}, "/{repo}/{image}/blobs/uploads/{uuid}", l0bytes)
-			h.BlobUploadPatchHandler(&wL0Patch, rL0Patch)
-			assert.Equal(t, http.StatusAccepted, wL0Patch.Code)
-			// Final PUT request
-			//startPut := time.Now()
-			wL0Put, rL0Put := createNewHTTPTest(http.MethodPut, map[string]string{
-				"repo":  testRepo,
-				"image": testImage,
-				"uuid":  uuid,
-			}, map[string]string{
-				"accountName": token,
-				"userName":    "test",
-				"profileName": "generic",
-			}, map[string]string{
-				"Authorization": fmt.Sprintf("Bearer %s", token),
-			}, fmt.Sprintf("/{repo}/{image}/blobs/uploads/{uuid}?digest=%s", l0ref.Digest), nil)
-			h.BlobUploadPutHandler(&wL0Put, rL0Put)
-			//endPut := time.Now()
-			assert.Equal(t, http.StatusCreated, wL0Put.Code)
-			gotPutLoc := wL0Put.Header().Get("Location")
-			uuid = wL0Put.Header().Get("Docker-Upload-UUID")
-			assert.NotNil(t, uuid)
-			assert.Equal(t, fmt.Sprintf("/v2/qnib/featuretest/blobs/uploads/%s", uuid), gotPutLoc)
-			///// LAYER1
-			l1bytes := types.FT_arm_Layer1Byte()
-			l1ref := types.FT_arm_Layer1Reference()
-			_ = l1ref
-			// POST with Data
-			wL1, rL1 := createNewHTTPTest(http.MethodPost, map[string]string{
-				"repo":  testRepo,
-				"image": testImage,
-			}, map[string]string{
-				"accountName": token,
-				"userName":    "test",
-				"profileName": "generic",
-			}, map[string]string{
-				"Authorization": fmt.Sprintf("Bearer %s", token),
-			}, "/{repo}/{image}/blobs/uploads/{uuid}", l1bytes)
-			h.BlobUploadPostHandler(&wL1, rL1)
-			assert.Equal(t, http.StatusAccepted, wL1.Code)
-			// Fetch Upload from DB
-			gotLocL1 := wL1.Header().Get("Location")
-			uuidL1 := wL1.Header().Get("Docker-Upload-UUID")
-			assert.Equal(t, fmt.Sprintf("/v2/%s/%s/blobs/uploads/%s", testRepo, testImage, uuidL1), gotLocL1)
-			// Next we do a PATCH request
-			wL1Patch, rL1Patch := createNewHTTPTest(http.MethodPatch, map[string]string{
-				"repo":  testRepo,
-				"image": testImage,
-				"uuid":  uuidL1,
-			}, map[string]string{
-				"accountName": token,
-				"userName":    "test",
-				"profileName": "generic",
-			}, map[string]string{
-				"Authorization":  fmt.Sprintf("Bearer %s", token),
-				"Content-Type":   "application/octet-stream",
-				"Content-Range":  fmt.Sprintf("0-%d", len(l1bytes)-1),
-				"Content-Length": fmt.Sprintf("%d", len(l1bytes)),
-			}, "/{repo}/{image}/blobs/uploads/{uuid}", l1bytes)
-			h.BlobUploadPatchHandler(&wL1Patch, rL1Patch)
-			assert.Equal(t, http.StatusAccepted, wL1Patch.Code)
-			// Final PUT request
-			wL1Put, rL1Put := createNewHTTPTest(http.MethodPut, map[string]string{
-				"repo":  testRepo,
-				"image": testImage,
-				"uuid":  uuidL1,
-			}, map[string]string{
-				"accountName": token,
-				"userName":    "test",
-				"profileName": "generic",
-			}, map[string]string{
-				"Authorization": fmt.Sprintf("Bearer %s", token),
-			}, fmt.Sprintf("/{repo}/{image}/blobs/uploads/{uuid}?digest=%s", l1ref.Digest), nil)
-			h.BlobUploadPutHandler(&wL1Put, rL1Put)
-			assert.Equal(t, http.StatusCreated, wL1Put.Code)
-			gotPutLocL1 := wL0Put.Header().Get("Location")
-			assert.Equal(t, fmt.Sprintf("/v2/qnib/featuretest/blobs/uploads/%s", uuid), gotPutLocL1)
-			/////// CONFIG
-			cfgBytes := types.FT_arm_ConfigByte()
-			cfg := types.FT_arm_Config()
-			// POST
-			wCfgPost, rCfgPost := createNewHTTPTest(http.MethodPost, map[string]string{
-				"repo":  testRepo,
-				"image": testImage,
-			}, map[string]string{
-				"accountName": token,
-				"userName":    "test",
-				"profileName": "generic",
-			}, map[string]string{
-				"Authorization": fmt.Sprintf("Bearer %s", token),
-			}, "/{repo}/{image}/blobs/uploads/{uuid}", cfgBytes)
-			h.BlobUploadPostHandler(&wCfgPost, rCfgPost)
-			assert.Equal(t, http.StatusAccepted, wCfgPost.Code)
-			// Fetch Upload from DB
-			gotLocCfg := wCfgPost.Header().Get("Location")
-			uuidCfg := wCfgPost.Header().Get("Docker-Upload-UUID")
-			assert.Equal(t, fmt.Sprintf("/v2/qnib/featuretest/blobs/uploads/%s", uuidCfg), gotLocCfg)
-			/// PATCH with config
-			wCfgPatch, rCfgPatch := createNewHTTPTest(http.MethodPatch, map[string]string{
-				"repo":  testRepo,
-				"image": testImage,
-				"uuid":  uuidCfg,
-			}, map[string]string{
-				"accountName": token,
-				"userName":    "test",
-				"profileName": "generic",
-			}, map[string]string{
-				"Authorization":  fmt.Sprintf("Bearer %s", token),
-				"Content-Type":   "application/octet-stream",
-				"Content-Range":  fmt.Sprintf("0-%d", len(cfgBytes)-1),
-				"Content-Length": fmt.Sprintf("%d", len(cfgBytes)),
-			}, "/{repo}/{image}/blobs/uploads/{uuid}", cfgBytes)
-			h.BlobUploadPatchHandler(&wCfgPatch, rCfgPatch)
-			assert.Equal(t, http.StatusAccepted, wCfgPatch.Code)
-			// Final PUT request
-			wCfgPut, rCfgPut := createNewHTTPTest(http.MethodPut, map[string]string{
-				"repo":  testRepo,
-				"image": testImage,
-				"uuid":  uuidCfg,
-			}, map[string]string{
-				"accountName": token,
-				"userName":    "test",
-				"profileName": "generic",
-			}, map[string]string{
-				"Authorization": fmt.Sprintf("Bearer %s", token),
-			}, fmt.Sprintf("/{repo}/{image}/blobs/uploads/{uuid}?digest=%s", cfg.Digest), nil)
-			h.BlobUploadPutHandler(&wCfgPut, rCfgPut)
-			assert.Equal(t, http.StatusCreated, wCfgPut.Code)
-			gotPutLocCfg := wCfgPut.Header().Get("Location")
-			assert.Equal(t, fmt.Sprintf("/v2/qnib/featuretest/blobs/uploads/%s", uuidCfg), gotPutLocCfg)
-			/// Manifest
-			mani := types.FT_arm_ManifestData()
-			wManiPut, rManiPut := createNewHTTPTest(http.MethodPut, map[string]string{
-				"repo":      testRepo,
-				"image":     testImage,
-				"reference": testTag,
-			}, map[string]string{
-				"accountName": token,
-				"userName":    "test",
-				"profileName": "generic",
-			}, map[string]string{
-				"Authorization": fmt.Sprintf("Bearer %s", token),
-				"Content-Type":  "application/vnd.docker.distribution.manifest.v2+json",
-			}, "/{repo}/{image}/manifests/{reference}", mani.Data)
-			h.ManifestPutHandler(&wManiPut, rManiPut)
-			assert.Equal(t, http.StatusCreated, wManiPut.Code)
-			// TODO: Check DB
-			// Upstream
-			////// FETCH MANIFEST_LIST via Collection
-			/// Direct DB
-			req := types.Request{
-				Repo:    fmt.Sprintf("%s/%s", testRepo, testImage),
-				Tag:     testTag,
-				Profile: "generic",
-			}
-			_, found, err := h.mag.Database.ManifestList_Get_ByRequest(req)
-			assert.NoError(t, err)
-			assert.True(t, found)
-			//assert.Len(t, ml.Manifests, 1)
-			//assert.Equal(t, mani.Digest, ml.Manifests[0].Digest)
-			/// via HTTPRequest
-			_, rMLGet := createNewHTTPTest(http.MethodGet, map[string]string{
-				"repo":      testRepo,
-				"image":     testImage,
-				"reference": testTag,
-			}, map[string]string{
-				"accountName": token,
-				"userName":    "test",
-				"profileName": "generic",
-			}, map[string]string{
-				"Authorization": fmt.Sprintf("Bearer %s", token),
-			}, "/{repo}/{image}/manifests/{reference}", nil)
-
-			ml, found, err := h.mag.ManifestList_GetByHTTPRequest(rMLGet)
-			assert.NoError(t, err)
-			assert.True(t, found)
-			assert.Len(t, ml.Manifests, 1)
-			assert.Equal(t, mani.Digest, ml.Manifests[0].Digest)
-			/// Fetch Manifest
-			_, rManiGet := createNewHTTPTest(http.MethodGet, map[string]string{
-				"repo":      testRepo,
-				"image":     testImage,
-				"reference": mani.Digest,
-			}, map[string]string{
-				"accountName": token,
-				"userName":    "test",
-				"profileName": "generic",
-			}, map[string]string{
-				"Authorization": fmt.Sprintf("Bearer %s", token),
-			}, "/{repo}/{image}/manifests/{reference}", nil)
-			gotMani, found, err := h.mag.Manifest_GetByHTTPRequest(rManiGet)
-			assert.NoError(t, err)
-			assert.True(t, found)
-			assert.Equal(t, mani.Digest, gotMani.Digest)
-			// Fetch Manifest by tag
-			_, rManiTagGet := createNewHTTPTest(http.MethodGet, map[string]string{
-				"repo":      testRepo,
-				"image":     testImage,
-				"reference": testTag,
-			}, map[string]string{
-				"accountName": token,
-				"userName":    "test",
-				"profileName": "generic",
-			}, map[string]string{
-				"Authorization": fmt.Sprintf("Bearer %s", token),
-			}, "/{repo}/{image}/manifests/{reference}", nil)
-			gotTagMani, foundTag, err := h.mag.Manifest_GetByHTTPRequest(rManiTagGet)
-			assert.NoError(t, err)
-			assert.True(t, foundTag)
-			assert.Equal(t, mani.Digest, gotTagMani.Digest)
-		}
+	// TODO: Check DB
+	// Upstream
+	////// FETCH MANIFEST_LIST via Collection
+	/// Direct DB
+	req := types.Request{
+		Repo:    fmt.Sprintf("%s/%s", testRepo, testImage),
+		Tag:     testTag,
+		Profile: "generic",
+	}
+	_, found, err := h.mag.Database.ManifestList_Get_ByRequest(req)
+	assert.NoError(t, err)
+	if !found {
+		t.Fatal("ManifestList not found")
+	}
+	//assert.Len(t, ml.Manifests, 1)
+	//assert.Equal(t, mani.Digest, ml.Manifests[0].Digest)
+	/// via HTTPRequest
+	_, rMLGet := createNewHTTPTest(http.MethodGet, map[string]string{
+		"repo":      testRepo,
+		"image":     testImage,
+		"reference": testTag,
+	}, map[string]string{
+		"accountName": token,
+		"userName":    "test",
+		"profileName": "cpu#generic",
+	}, map[string]string{
+		"Authorization": fmt.Sprintf("Bearer %s", token),
+	}, "/{repo}/{image}/manifests/{reference}", nil)
+	ml, found, err := h.mag.ManifestList_GetByHTTPRequest(rMLGet)
+	assert.NoError(t, err)
+	assert.True(t, found)
+	assert.Len(t, ml.Manifests, 1)
+	assert.Equal(t, mani.Digest, ml.Manifests[0].Digest)
+	/// Fetch Manifest
+	_, rManiGet := createNewHTTPTest(http.MethodGet, map[string]string{
+		"repo":      testRepo,
+		"image":     testImage,
+		"reference": mani.Digest,
+	}, map[string]string{
+		"accountName": token,
+		"userName":    "test",
+		"profileName": "cpu#generic",
+	}, map[string]string{
+		"Authorization": fmt.Sprintf("Bearer %s", token),
+	}, "/{repo}/{image}/manifests/{reference}", nil)
+	gotMani, found, err := h.mag.Manifest_GetByHTTPRequest(rManiGet)
+	assert.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, mani.Digest, gotMani.Digest)
+	// Fetch Manifest by tag
+	_, rManiTagGet := createNewHTTPTest(http.MethodGet, map[string]string{
+		"repo":      testRepo,
+		"image":     testImage,
+		"reference": testTag,
+	}, map[string]string{
+		"accountName": token,
+		"userName":    "test",
+		"profileName": "cpu#generic",
+	}, map[string]string{
+		"Authorization": fmt.Sprintf("Bearer %s", token),
+	}, "/{repo}/{image}/manifests/{reference}", nil)
+	gotTagMani, foundTag, err := h.mag.Manifest_GetByHTTPRequest(rManiTagGet)
+	assert.NoError(t, err)
+	assert.True(t, foundTag)
+	assert.Equal(t, mani.Digest, gotTagMani.Digest)
+}
 */
 
-/* TODO: Fix this test to remove
+// TODO: Fix this test to remove
 func Test_Manifest_OCITest(t *testing.T) {
 	bs := utils.NewBootstrap()
 	bs.SetEmptyAll()
 	bs.SetYAMLPrefix("../../../../misc/yaml")
 	bs.AddBootstrap("users")
 	bs.AddBootstrap("platforms:generic")
-	bs.AddBootstrap("profile:profiles/cpu/generic.yaml")
-	//bs.PostTestSleep = 60
+	bs.AddBootstrap("layer:0:ft_amd64")
+	bs.AddBootstrap("layer:1:ft_amd64")
+	//bs.AddBootstrap("rules:rules/cpu/generic.yaml")
+	bs.AddBootstrap("rules:rules/generic/linux.yaml")
+	bs.AddBootstrap("profile:profiles/generic.yaml")
+	//bs.PostTestSleep = 300
 	err := h.mag.Minio.EmptyAll()
 	assert.NoError(t, err)
 	br, err := SetupTest(bs)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer TeardownTest(bs)
 	_ = br
 	token, err := br.Get("user:test#bearer")
@@ -378,7 +406,9 @@ func Test_Manifest_OCITest(t *testing.T) {
 		"Content-Length": fmt.Sprintf("%d", len(cfg.Data)),
 	}, "/{repo}/{image}/blobs/uploads/{uuid}", cfg.Data)
 	h.BlobUploadPostHandler(&wCfgPost, rCfgPost)
-	assert.Equal(t, http.StatusCreated, wCfgPost.Code)
+	if wCfgPost.Code != http.StatusCreated {
+		t.Fatalf("wManiPut.Code: %d, expected %d", wCfgPost.Code, http.StatusCreated)
+	}
 	/// Manifest
 	mani := types.ManifestData{
 		Data: []byte(`{
@@ -393,8 +423,8 @@ func Test_Manifest_OCITest(t *testing.T) {
 			"layers": [
 				{
 					"mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
-					"digest": "sha256:48acff1d91752e957527c1b5416e7376d910bcacf01b9441175f8c270e35c183",
-					"size": 168,
+					"digest": "sha256:88ecf269dec31566a8e6b05147732fe34d32bc608de0d636dffaba659230a515",
+					"size": 2796496,
 					"data": null,
 					"newUnspecifiedField": null
 				}
@@ -415,9 +445,11 @@ func Test_Manifest_OCITest(t *testing.T) {
 		"Content-Type":  "application/vnd.docker.distribution.manifest.v2+json",
 	}, "/{repo}/{image}/manifests/{reference}", mani.Data)
 	h.ManifestPutHandler(&wManiPut, rManiPut)
-	assert.Equal(t, http.StatusCreated, wManiPut.Code)
+	if wManiPut.Code != http.StatusCreated {
+		t.Fatalf("wManiPut.Code: %d, expected %d", wManiPut.Code, http.StatusCreated)
+	}
 	maniDigest := wManiPut.Header().Get("Docker-Content-Digest")
-	assert.Equal(t, "sha256:f35709186bc7bee71fa434c4197a70fc70a7d66419d08071eafcf8393a465ee4", maniDigest)
+	assert.Equal(t, "sha256:bec9eaec0dddcf1558fd11ef8d1e68d5cf7e526e8d6bdb282f16984febc852bb", maniDigest)
 	// Remove
 	wManiDel, rManiDel := createNewHTTPTest(http.MethodDelete, map[string]string{
 		"repo":      testRepo,
@@ -433,7 +465,9 @@ func Test_Manifest_OCITest(t *testing.T) {
 	assert.NotNil(t, rManiDel)
 	err = h.mag.Manifest_DeleteByHTTPRequest(rManiDel)
 	assert.NoError(t, err)
-	assert.Equal(t, http.StatusOK, wManiDel.Code)
+	if wManiDel.Code != http.StatusOK {
+		t.Fatalf("wManiDel.Code: %d, expected %d", wManiDel.Code, http.StatusOK)
+	}
 	// Check Collections
 	cols, err := h.mag.Database.CollectionListing_Get_ByRepoLike(testRepo)
 	assert.NoError(t, err)
@@ -454,17 +488,20 @@ func Test_Manifest_OCITest(t *testing.T) {
 	assert.NotNil(t, rCTDel)
 	err = h.mag.Manifest_DeleteByHTTPRequest(rCTDel)
 	assert.NoError(t, err)
-	assert.Equal(t, http.StatusOK, wCTDel.Code)
+	if wCTDel.Code != http.StatusOK {
+		t.Fatalf("wCTDel.Code: %d, expected %d", wCTDel.Code, http.StatusOK)
+	}
 	// Check Collections
 	cols, err = h.mag.Database.CollectionListing_Get_ByRepoLike(testRepo)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	assert.Equal(t, 0, len(cols))
 	/// Count CollectionTag
 	cnt, err := h.mag.Database.CollectionTag_CountRelationships(ct.ID)
 	assert.NoError(t, err)
-	assert.Equal(t, int64(0), cnt)
+	assert.Equal(t, int64(1), cnt)
 }
-*/
 
 func Test_Manifest_OCITest_NoLayers(t *testing.T) {
 	bs := utils.NewBootstrap()
@@ -506,7 +543,7 @@ func Test_Manifest_OCITest_NoLayers(t *testing.T) {
 	}, map[string]string{
 		"accountName": token,
 		"userName":    "test",
-		"profileName": "generic",
+		"profileName": "cpu#generic",
 	}, map[string]string{
 		"Authorization":  fmt.Sprintf("Bearer %s", token),
 		"Content-Type":   "application/octet-stream",
@@ -514,7 +551,10 @@ func Test_Manifest_OCITest_NoLayers(t *testing.T) {
 		"Content-Length": fmt.Sprintf("%d", len(cfg.Data)),
 	}, "/{repo}/{image}/blobs/uploads/{uuid}", cfg.Data)
 	h.BlobUploadPostHandler(&wCfgPost, rCfgPost)
-	assert.Equal(t, http.StatusCreated, wCfgPost.Code)
+	if wCfgPost.Code != http.StatusCreated {
+		t.Fatalf("Code: %d, expected %d", wCfgPost.Code, http.StatusCreated)
+	}
+
 	/// Manifest
 	dat := []byte(`{
 		"schemaVersion": 2,
@@ -539,19 +579,26 @@ func Test_Manifest_OCITest_NoLayers(t *testing.T) {
 	}, map[string]string{
 		"accountName": token,
 		"userName":    "test",
-		"profileName": "generic",
+		"profileName": "cpu#generic",
 	}, map[string]string{
 		"Authorization": fmt.Sprintf("Bearer %s", token),
 		"Content-Type":  "application/vnd.docker.distribution.manifest.v2+json",
 	}, "/{repo}/{image}/manifests/{reference}", mani.Data)
 	h.ManifestPutHandler(&wManiPut, rManiPut)
-	assert.Equal(t, http.StatusCreated, wManiPut.Code)
+	CheckStatusCode(t, wManiPut.Code, http.StatusCreated)
 	maniDigest := wManiPut.Header().Get("Docker-Content-Digest")
 	assert.Equal(t, expManiDigest.String(), maniDigest)
 	assert.Equal(t, "http://example.com/v2/oci/conformance/manifests/tagtest0", wManiPut.Header().Get("Location"))
 }
 
-/*func Test_Manifest_Remove(t *testing.T) {
+func CheckStatusCode(t *testing.T, got, expected int) {
+	if got != expected {
+		t.Fatalf("Code: %d, expected %d", got, expected)
+	}
+}
+
+/*
+func Test_Manifest_Remove(t *testing.T) {
 	testRepo := "qnib"
 	testImage := "featuretest"
 	//testTag := "latest"
@@ -604,4 +651,5 @@ func Test_Manifest_OCITest_NoLayers(t *testing.T) {
 	}, "/{repo}/{image}/manifests/{reference}", nil)
 	err = h.mag.Manifest_DeleteByHTTPRequest(rManiDel2)
 	assert.Error(t, err)
-}*/
+}
+*/

@@ -90,6 +90,7 @@ func (h Handlers) CollectionGetAll(w http.ResponseWriter, r *http.Request) {
 		h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
 		return
 	}
+	logrus.Warnf("CollectionGetAll: '%s' -> %d", pl.Repo, len(cols))
 	slugEnd := 0
 	next := map[string]Next{}
 	reps := set.NewLinkedHashSetString()

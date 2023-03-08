@@ -68,6 +68,7 @@ func Test_BlobHandler_DirectPost(t *testing.T) {
 }
 
 func Test_BlobHandler_LayerTest(t *testing.T) {
+	ctx := context.Background()
 	bs := utils.NewBootstrap()
 	bs.SetEmptyAll()
 	bs.SetYAMLPrefix("../../../../misc/yaml")
@@ -92,7 +93,7 @@ func Test_BlobHandler_LayerTest(t *testing.T) {
 	rctx.URLParams.Add("reference", ftArm64L0Dig)
 	r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
 	r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-	_, found, err := h.mag.ConfigBlob_GetByHTTPRequest(r)
+	_, found, err := h.mag.ConfigBlob_GetByHTTPRequest(ctx, r)
 	assert.NoError(t, err)
 	assert.False(t, found)
 	/// HEAD
@@ -113,7 +114,7 @@ func Test_BlobHandler_Redirect_LayerTest(t *testing.T) {
 	bs.SetYAMLPrefix("../../../../misc/yaml")
 	bs.AddBootstrap("users")
 	bs.AddBootstrap("platforms:generic")
-	bs.AddBootstrap("profile:cpu/generic.yaml")
+	bs.AddBootstrap("profile:profiles/cpu/generic.yaml")
 	bs.AddBootstrap("config:ft_arm")
 	bs.AddBootstrap("config:ft_amd64")
 	bs.AddBootstrap("upstream:ft_arm64")

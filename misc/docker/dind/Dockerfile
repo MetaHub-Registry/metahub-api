@@ -32,7 +32,7 @@ RUN go build -o /usr/bin/regsync
 
 FROM docker:20.10.14-dind
 ENV MH_URL=dev:80
-RUN apk add --no-cache jq vim curl bash
+RUN apk add --no-cache jq vim curl bash skopeo
 COPY daemon.json /etc/docker/daemon.json
 COPY bash_history /root/.bash_history
 COPY bashrc /root/.bashrc
