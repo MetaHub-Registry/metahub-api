@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"testing"
@@ -353,6 +354,7 @@ func Test_UploadManifest_FTarm(t *testing.T) {
 
 // TODO: Fix this test to remove
 func Test_Manifest_OCITest(t *testing.T) {
+	ctx := context.Background()
 	bs := utils.NewBootstrap()
 	bs.SetEmptyAll()
 	bs.SetYAMLPrefix("../../../../misc/yaml")
@@ -463,13 +465,13 @@ func Test_Manifest_OCITest(t *testing.T) {
 		"Authorization": fmt.Sprintf("Bearer %s", token),
 	}, "/{repo}/{image}/manifests/{reference}", nil)
 	assert.NotNil(t, rManiDel)
-	err = h.mag.Manifest_DeleteByHTTPRequest(rManiDel)
+	err = h.mag.Manifest_DeleteByHTTPRequest(ctx, rManiDel)
 	assert.NoError(t, err)
 	if wManiDel.Code != http.StatusOK {
 		t.Fatalf("wManiDel.Code: %d, expected %d", wManiDel.Code, http.StatusOK)
 	}
 	// Check Collections
-	cols, err := h.mag.Database.CollectionListing_Get_ByRepoLike(testRepo)
+	cols, err := h.mag.Database.CollectionListing_Get_ByRepoLike(ctx, testRepo)
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(cols))
 	ct := cols[0].ColTag
@@ -486,13 +488,13 @@ func Test_Manifest_OCITest(t *testing.T) {
 		"Authorization": fmt.Sprintf("Bearer %s", token),
 	}, "/{repo}/{image}/manifests/{reference}", nil)
 	assert.NotNil(t, rCTDel)
-	err = h.mag.Manifest_DeleteByHTTPRequest(rCTDel)
+	err = h.mag.Manifest_DeleteByHTTPRequest(ctx, rCTDel)
 	assert.NoError(t, err)
 	if wCTDel.Code != http.StatusOK {
 		t.Fatalf("wCTDel.Code: %d, expected %d", wCTDel.Code, http.StatusOK)
 	}
 	// Check Collections
-	cols, err = h.mag.Database.CollectionListing_Get_ByRepoLike(testRepo)
+	cols, err = h.mag.Database.CollectionListing_Get_ByRepoLike(ctx, testRepo)
 	if err != nil {
 		t.Fatal(err)
 	}

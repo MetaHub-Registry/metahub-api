@@ -18,15 +18,15 @@ import (
 )
 
 func (h Handlers) BlobUploadPutHandler(w http.ResponseWriter, r *http.Request) {
-	req := types.NewRequest(r)
 	ctx := r.Context()
 	ctx, span := tracer.Start(ctx, "GetConfig")
+	defer span.End()
+	req := types.NewRequest(ctx, r)
 	span.SetAttributes(
 		attribute.Key("method").String(r.Method),
 		attribute.Key("repo").String(req.Repo),
 		attribute.Key("uuid").String(req.UUID),
 	)
-	defer span.End()
 	// Complete the upload specified by uuid, optionally appending the body as the final chunk.
 	logrus.Infof("%-5s BlobUploadPutHandler(%s, %s)", r.Method, req.Repo, req.UUID)
 	buf, err := io.ReadAll(r.Body)
@@ -97,9 +97,9 @@ func (h Handlers) BlobUploadPutHandler(w http.ResponseWriter, r *http.Request) {
 
 func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	req := types.NewRequest(r)
 	ctx, span := tracer.Start(ctx, "BlobUploadPatchHandler")
 	defer span.End()
+	req := types.NewRequest(ctx, r)
 	span.SetAttributes(
 		attribute.Key("length").Int(req.Length),
 		attribute.Key("uuid").String(req.UUID),
@@ -189,8 +189,8 @@ func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request)
 func (h Handlers) BlobUploadPostHandler(w http.ResponseWriter, r *http.Request) {
 	// Hanlder to upload a blob to the object store
 	ctx := r.Context()
-	req := types.NewRequest(r)
 	ctx, span := tracer.Start(ctx, "BlobUploadPostHandler")
+	req := types.NewRequest(ctx, r)
 	span.SetAttributes(
 		attribute.Key("method").String(r.Method),
 		attribute.Key("length").Int(req.Length),
@@ -272,8 +272,8 @@ func (h Handlers) BlobUploadPostHandler(w http.ResponseWriter, r *http.Request) 
 
 func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	req := types.NewRequest(r)
 	ctx, span := tracer.Start(ctx, "BlobHandler")
+	req := types.NewRequest(ctx, r)
 	span.SetAttributes(
 		attribute.Key("method").String(r.Method),
 		attribute.Key("repo").String(req.Repo),
@@ -350,14 +350,15 @@ func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
 
 func (h Handlers) BlobDelHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	req := types.NewRequest(r)
 	ctx, span := tracer.Start(ctx, "BlobDelHandler")
+	defer span.End()
+	req := types.NewRequest(ctx, r)
 	span.SetAttributes(
 		attribute.Key("method").String(r.Method),
 		attribute.Key("repo").String(req.Repo),
 		attribute.Key("tag").String(req.Tag),
 	)
-	defer span.End()
+
 	err := h.mag.BlobDelete(ctx, req)
 	if err != nil {
 		msg := fmt.Sprintf("failed to delete blob: %v", err)
