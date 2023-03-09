@@ -13,14 +13,16 @@ import (
 
 func (h Handlers) ManifestHeadHandler(w http.ResponseWriter, r *http.Request) {
 	// Check whether it is a manifest or manifest list
-	req := types.NewRequest(r)
+
 	ctx := r.Context()
 	ctx, span := tracer.Start(ctx, "ManifestHeadHandler")
+	defer span.End()
+	req := types.NewRequest(ctx, r)
 	span.SetAttributes(
 		attribute.Key("method").String(r.Method),
 		attribute.Key("repo").String(req.Repo),
 	)
-	defer span.End()
+
 	m, found, err := h.mag.Manifest_GetByHTTPRequest(ctx, r)
 	if err != nil {
 		// 1. FALSE
@@ -59,8 +61,11 @@ func (h Handlers) ManifestHeadHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h Handlers) ManifestDelHandler(w http.ResponseWriter, r *http.Request) {
-	req := types.NewRequest(r)
-	err := h.mag.Manifest_DeleteByHTTPRequest(r)
+	ctx := r.Context()
+	ctx, span := tracer.Start(ctx, "ManifestDelHandler")
+	defer span.End()
+	req := types.NewRequest(ctx, r)
+	err := h.mag.Manifest_DeleteByHTTPRequest(ctx, r)
 	if err != nil {
 		msg := fmt.Sprintf("failed to delete manifest: %v", err)
 		logrus.Error(msg)
@@ -73,14 +78,14 @@ func (h Handlers) ManifestDelHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h Handlers) ManifestGetHandler(w http.ResponseWriter, r *http.Request) {
-	req := types.NewRequest(r)
 	ctx := r.Context()
 	ctx, span := tracer.Start(ctx, "ManifestGetHandler")
+	defer span.End()
+	req := types.NewRequest(ctx, r)
 	span.SetAttributes(
 		attribute.Key("method").String(r.Method),
 		attribute.Key("repo").String(req.Repo),
 	)
-	defer span.End()
 	m, found, err := h.mag.Manifest_GetByHTTPRequest(ctx, r)
 	if err != nil {
 		// 1. FALSE
@@ -114,33 +119,35 @@ func (h Handlers) ManifestGetHandler(w http.ResponseWriter, r *http.Request) {
 		e := helper.NewErrPayload("MANIFEST_UNKNOWN", msg, det)
 		helper.WriteOCIErrror(w, http.StatusNotFound, e)
 	}
-	/*m, found, err = h.mag.Manifest_GetByHTTPRequest(r)
-	if err != nil {
-		// 1. FALSE
-		msg := fmt.Sprintf("failed to fetch ManifestList: %v", err)
-		logrus.Error(msg)
-		det := helper.NewDetailFromReq(req)
-		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
-		helper.WriteOCIErrror(w, http.StatusNotFound, e)
-		return
-	}
-	if found {
-		m.WriteWWWBody(w)
-		m.WriteWWWHeader(w)
-		return
-	} else {
-		msg := fmt.Sprintf("no manifest '%s:%s' found for profile '%s'", req.Repo, req.Tag, req.Profile)
-		det := helper.NewDetailFromReq(req)
-		e := helper.NewErrPayload("MANIFEST_UNKNOWN", msg, det)
-		helper.WriteOCIErrror(w, http.StatusNotFound, e)
-	} */
+	/*
+		m, found, err = h.mag.Manifest_GetByHTTPRequest(r)
+		if err != nil {
+			// 1. FALSE
+			msg := fmt.Sprintf("failed to fetch ManifestList: %v", err)
+			logrus.Error(msg)
+			det := helper.NewDetailFromReq(req)
+			e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+			helper.WriteOCIErrror(w, http.StatusNotFound, e)
+			return
+		}
+		if found {
+			m.WriteWWWBody(w)
+			m.WriteWWWHeader(w)
+			return
+		} else {
+			msg := fmt.Sprintf("no manifest '%s:%s' found for profile '%s'", req.Repo, req.Tag, req.Profile)
+			det := helper.NewDetailFromReq(req)
+			e := helper.NewErrPayload("MANIFEST_UNKNOWN", msg, det)
+			helper.WriteOCIErrror(w, http.StatusNotFound, e)
+		}
+	*/
 }
 
 func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
-	req := types.NewRequest(r)
 	ctx := r.Context()
 	ctx, span := tracer.Start(ctx, "ManifestGetHandler")
 	defer span.End()
+	req := types.NewRequest(ctx, r)
 	logrus.Infof("%-5s ManifestPutHandler(%s, %s)", r.Method, req.Repo, req.Tag)
 	buf, err := io.ReadAll(r.Body)
 	if err != nil {

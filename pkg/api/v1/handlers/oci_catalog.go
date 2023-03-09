@@ -10,7 +10,10 @@ import (
 )
 
 func (h Handlers) CatalogGetHandler(w http.ResponseWriter, r *http.Request) {
-	req := types.NewRequest(r)
+	ctx := r.Context()
+	ctx, span := tracer.Start(ctx, "ManifestGetHandler")
+	defer span.End()
+	req := types.NewRequest(ctx, r)
 	msg := fmt.Sprintf("%-5s CatalogGetHandler(%s)", r.Method, req.Repo)
 	logrus.Info(msg)
 

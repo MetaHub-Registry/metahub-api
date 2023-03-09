@@ -8,6 +8,7 @@ import (
 	"github.com/StudioSol/set"
 	"github.com/sirupsen/logrus"
 	"github.com/metahub-registry/metahub-api/internal/utils"
+	"github.com/metahub-registry/metahub-core/pkg/types"
 )
 
 type Next struct {
@@ -20,9 +21,14 @@ type Next struct {
 }
 
 func (h Handlers) CollectionGetOne(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ctx, span := tracer.Start(ctx, "CollectionGetOne")
+	defer span.End()
 	type Payload struct {
-		ColID int64 `json:"collection_id"`
-		TagID int64 `json:"tag_id"`
+		RepoName string `json:"repo_name"`
+		TagName  string `json:"tag_name"`
+		ColID    int64  `json:"collection_id"`
+		TagID    int64  `json:"tag_id"`
 	}
 	pl := Payload{}
 	breadCrumbs := []utils.BreadCrumb{}
@@ -32,9 +38,23 @@ func (h Handlers) CollectionGetOne(w http.ResponseWriter, r *http.Request) {
 		h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
 		return
 	}
-	col, err := h.mag.Database.CollectionListing_Get_ByID(pl.ColID, pl.TagID)
-
-	logrus.Infof("CollectionGetOne(%d,%d): %s:%s", pl.ColID, pl.TagID, col.Repo, col.Tag)
+	var col types.CollectionListing
+	if pl.RepoName != "" && pl.TagName != "" {
+		logrus.Infof("CollectionGetOne(%s,%s)", pl.RepoName, pl.TagName)
+		col, err = h.mag.Database.CollectionListing_Get_ByName(ctx, pl.RepoName, pl.TagName)
+		if err != nil {
+			h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
+			return
+		}
+	} else {
+		logrus.Infof("CollectionGetOne(%d,%d)", pl.ColID, pl.TagID)
+		col, err = h.mag.Database.CollectionListing_Get_ByID(ctx, pl.ColID, pl.TagID)
+		if err != nil {
+			h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
+			return
+		}
+	}
+	logrus.Infof("  -> %s:%s", col.Repo, col.Tag)
 	if err != nil {
 		h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
 		return
@@ -55,7 +75,7 @@ func (h Handlers) CollectionGetOne(w http.ResponseWriter, r *http.Request) {
 			breadCrumbs = append(breadCrumbs, bc)
 		}
 	}
-	manis, err := h.mag.Database.ManifestData_GetByCollectionTag(pl.ColID, pl.TagID)
+	manis, err := h.mag.Database.ManifestData_GetByCollectionTag(ctx, pl.ColID, pl.TagID)
 	if err != nil {
 		h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
 		return
@@ -73,6 +93,9 @@ func (h Handlers) CollectionGetOne(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h Handlers) CollectionGetAll(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ctx, span := tracer.Start(ctx, "CollectionGetOne")
+	defer span.End()
 	type Payload struct {
 		Repo string `json:"repo"`
 	}
@@ -85,7 +108,7 @@ func (h Handlers) CollectionGetAll(w http.ResponseWriter, r *http.Request) {
 	}
 	logrus.Infof("CollectionGetAll: '%s'", pl.Repo)
 	repoSlug := strings.Split(pl.Repo, "/")
-	cols, err := h.mag.Database.CollectionListing_Get_ByRepoLike(pl.Repo)
+	cols, err := h.mag.Database.CollectionListing_Get_ByRepoLike(ctx, pl.Repo)
 	if err != nil {
 		h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
 		return

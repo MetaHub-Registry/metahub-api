@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"regexp"
 	"strings"
@@ -16,6 +15,8 @@ import (
 	"github.com/metahub-registry/metahub-core/pkg/helper"
 	"github.com/metahub-registry/metahub-core/pkg/types"
 	"github.com/metahub-registry/metahub-core/pkg/utils"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type oauthError string
@@ -50,6 +51,9 @@ func getAccessTokenFromBearerToken(r *http.Request) (at *types.AccessToken, user
 }
 
 func (h Handlers) AuthHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	_, span := tracer.Start(ctx, "AuthHandler")
+	defer span.End()
 	acct := r.URL.Query().Get("account")
 	at, user, err := getAccessTokenFromBearerToken(r)
 	if err != nil {
@@ -57,6 +61,10 @@ func (h Handlers) AuthHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
+	span.AddEvent("log", trace.WithAttributes(
+		attribute.String("log.severity", "debug"),
+		attribute.String("log.message", fmt.Sprintf("user:'%s' acct:'%s'", user, acct)),
+	))
 	if acct == "" && user == "" {
 		at.Token = "REDACTED-IN-HISTORY"
 	}
@@ -69,8 +77,17 @@ func (h Handlers) AuthHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) (err error) {
-	req := types.NewRequest(r)
-
+	ctx := r.Context()
+	_, span := tracer.Start(ctx, "AuthMiddlewareHandler")
+	defer span.End()
+	req := types.NewRequest(ctx, r)
+	span.SetAttributes(
+		attribute.Key("req.Digest").String(req.Digest),
+		attribute.Key("req.Host").String(req.Host),
+		attribute.Key("req.Repo").String(req.Repo),
+		attribute.Key("req.Tag").String(req.Tag),
+		attribute.Key("req.Profile").String(req.Profile),
+	)
 	var realm string
 	switch r.Host {
 	case "metahub-registry.org":
@@ -138,19 +155,35 @@ func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) 
 		return fmt.Errorf("error getting token")
 	}
 	password = parts[1]
+	span.AddEvent("log", trace.WithAttributes(
+		attribute.String("log.severity", "debug"),
+		attribute.String("log.user", parts[0]),
+	))
+	span.AddEvent("log", trace.WithAttributes(
+		attribute.String("log.severity", "debug"),
+		attribute.String("log.message", fmt.Sprintf("matching '%s' against '%s'", userReg, parts[0])),
+	))
 	m := utils.ReSubMatchMap(userReg, parts[0])
 	if _, ok := m["user"]; !ok {
 		msg := "username needs to prefix with profile (defaults to generic): '<user>/<profile>'"
-		log.Print(msg)
+		logrus.Error(msg)
 		w.WriteHeader(http.StatusBadRequest)
 		return fmt.Errorf(msg)
 	}
 	username = m["user"]
 	if _, ok := m["profile"]; !ok {
+		span.AddEvent("log", trace.WithAttributes(
+			attribute.String("log.severity", "debug"),
+			attribute.String("log.message", fmt.Sprintf("no profile given when matching '%s' against '%s', default to 'generic'", userReg, parts[0])),
+		))
 		profile = "generic"
 	} else {
 		profile = m["profile"]
 	}
+	span.AddEvent("log", trace.WithAttributes(
+		attribute.String("log.severity", "debug"),
+		attribute.String("log.message", fmt.Sprintf("profile:'%s'", profile)),
+	))
 	code, pl, err := h.mag.UserManagement.LoginUserScope(username, password, req)
 	if err != nil {
 		err = errors.Wrap(err, "error logging in user")
@@ -164,6 +197,10 @@ func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) 
 		context.Set(r, "accountName", at.Token)
 		context.Set(r, "userName", username)
 		context.Set(r, "profileName", profile)
+		span.AddEvent("log", trace.WithAttributes(
+			attribute.String("log.severity", "debug"),
+			attribute.String("log.message", fmt.Sprintf("set profileName:'%s'", profile)),
+		))
 	default:
 		helper.WriteOCIErrror(w, http.StatusUnauthorized, pl)
 		return fmt.Errorf("error logging in")
