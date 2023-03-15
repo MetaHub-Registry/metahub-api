@@ -185,7 +185,7 @@ func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) 
 		attribute.String("log.severity", "debug"),
 		attribute.String("log.message", fmt.Sprintf("profile:'%s' / user:'%s", profile, username)),
 	))
-	code, pl, err := h.mag.UserManagement.LoginUserScope(username, password, req)
+	code, uRole, pl, err := h.mag.UserManagement.LoginUserScope(username, password, req)
 	if err != nil {
 		err = errors.Wrap(err, "error logging in user")
 		logrus.Error(err)
@@ -197,6 +197,7 @@ func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) 
 		// Return the account name to the context
 		context.Set(r, "accountName", at.Token)
 		context.Set(r, "userName", username)
+		context.Set(r, "userRole", uRole)
 		context.Set(r, "profileName", profile)
 		span.AddEvent("log", trace.WithAttributes(
 			attribute.String("log.severity", "debug"),

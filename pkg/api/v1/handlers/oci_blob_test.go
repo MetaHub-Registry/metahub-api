@@ -59,7 +59,9 @@ func Test_BlobHandler_DirectPost(t *testing.T) {
 	}, "/{repo}/{image}/blobs/{reference}", nil)
 	/// POST w/o data to initiaite upload
 	h.BlobUploadPostHandler(&w, r)
-	CheckStatusCode(t, w.Code, http.StatusAccepted)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("Code: %d, expected %d", w.Code, http.StatusAccepted)
+	}
 	assert.Equal(t, 0, w.Body.Len())
 	// POST With data
 	wDat, rDat := createNewHTTPTest(http.MethodPut, map[string]string{
@@ -75,7 +77,9 @@ func Test_BlobHandler_DirectPost(t *testing.T) {
 		"Content-Type":  "application/vnd.docker.distribution.manifest.v2+json",
 	}, "/{repo}/{image}/blobs/{reference}", l0byte)
 	h.BlobUploadPostHandler(&wDat, rDat)
-	CheckStatusCode(t, wDat.Code, http.StatusCreated)
+	if wDat.Code != http.StatusCreated {
+		t.Fatalf("Code: %d, expected %d", wDat.Code, http.StatusCreated)
+	}
 	assert.Equal(t, 0, wDat.Body.Len())
 }
 
@@ -313,7 +317,9 @@ func Test_Upload_UploadBlobSequence_Split(t *testing.T) {
 	rPatchPart2.Header.Set("Content-Range", fmt.Sprintf("%d-%d", len(l0bytePart1), len(l0bytePart1)+len(l0bytePart1)))
 	rPatchPart2.Header.Set("Content-Length", fmt.Sprintf("%d", len(l0bytePart2)))
 	h.BlobUploadPatchHandler(wPatchPart2, rPatchPart2)
-	CheckStatusCode(t, wPatchPart2.Code, http.StatusAccepted)
+	if wPatchPart2.Code != http.StatusAccepted {
+		t.Fatalf("Code: %d, expected %d", wPatchPart2.Code, http.StatusAccepted)
+	}
 	// Final PUT request
 	wPut := httptest.NewRecorder()
 	putUrl := fmt.Sprintf("/{repo}/{image}/blobs/uploads/{uuid}?digest=%s", l0ref.Digest)

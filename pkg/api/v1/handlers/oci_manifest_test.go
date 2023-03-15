@@ -57,7 +57,10 @@ func Test_UploadManifest_FTarm_Short(t *testing.T) {
 		"Content-Type":  "application/vnd.docker.distribution.manifest.v2+json",
 	}, "/{repo}/{image}/manifests/{reference}", mani.Data)
 	h.ManifestPutHandler(&wManiPut, rManiPut)
-	CheckStatusCode(t, wManiPut.Code, http.StatusCreated)
+	if wManiPut.Code != http.StatusCreated {
+		t.Fatalf("Code: %d, expected %d", wManiPut.Code, http.StatusCreated)
+	}
+
 	// TODO: Check result
 
 }
@@ -590,16 +593,12 @@ func Test_Manifest_OCITest_NoLayers(t *testing.T) {
 		"Content-Type":  "application/vnd.docker.distribution.manifest.v2+json",
 	}, "/{repo}/{image}/manifests/{reference}", mani.Data)
 	h.ManifestPutHandler(&wManiPut, rManiPut)
-	CheckStatusCode(t, wManiPut.Code, http.StatusCreated)
+	if wManiPut.Code != http.StatusCreated {
+		t.Fatalf("Code: %d, expected %d", wManiPut.Code, http.StatusCreated)
+	}
 	maniDigest := wManiPut.Header().Get("Docker-Content-Digest")
 	assert.Equal(t, expManiDigest.String(), maniDigest)
 	assert.Equal(t, "http://example.com/v2/oci/conformance/manifests/tagtest0", wManiPut.Header().Get("Location"))
-}
-
-func CheckStatusCode(t *testing.T, got, expected int) {
-	if got != expected {
-		t.Fatalf("Code: %d, expected %d", got, expected)
-	}
 }
 
 /*
