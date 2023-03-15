@@ -94,7 +94,7 @@ func (h Handlers) CollectionGetOne(w http.ResponseWriter, r *http.Request) {
 
 func (h Handlers) CollectionGetAll(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	ctx, span := tracer.Start(ctx, "CollectionGetOne")
+	ctx, span := tracer.Start(ctx, "CollectionGetAll")
 	defer span.End()
 	type Payload struct {
 		Repo string `json:"repo"`

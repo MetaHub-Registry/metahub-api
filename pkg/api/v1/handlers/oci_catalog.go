@@ -11,7 +11,7 @@ import (
 
 func (h Handlers) CatalogGetHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	ctx, span := tracer.Start(ctx, "ManifestGetHandler")
+	ctx, span := tracer.Start(ctx, "CatalogGetHandler")
 	defer span.End()
 	req := types.NewRequest(ctx, r)
 	msg := fmt.Sprintf("%-5s CatalogGetHandler(%s)", r.Method, req.Repo)

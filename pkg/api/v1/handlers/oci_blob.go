@@ -19,7 +19,7 @@ import (
 
 func (h Handlers) BlobUploadPutHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	ctx, span := tracer.Start(ctx, "GetConfig")
+	ctx, span := tracer.Start(ctx, "BlobUploadPutHandler")
 	defer span.End()
 	req := types.NewRequest(ctx, r)
 	span.SetAttributes(
@@ -29,6 +29,15 @@ func (h Handlers) BlobUploadPutHandler(w http.ResponseWriter, r *http.Request) {
 	)
 	// Complete the upload specified by uuid, optionally appending the body as the final chunk.
 	logrus.Infof("%-5s BlobUploadPutHandler(%s, %s)", r.Method, req.Repo, req.UUID)
+	_, e := h.mag.Database.ProfileAuthorizedPushHandler(ctx, req)
+	if e != nil {
+		err := errors.Wrapf(e, "failed to authorize push for profile '%s'", req.Profile)
+		span.RecordError(err)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("DENIED", e.Error(), det)
+		helper.WriteOCIErrror(w, http.StatusBadRequest, e)
+		return
+	}
 	buf, err := io.ReadAll(r.Body)
 	if err != nil {
 		log.Fatal("request", err)
@@ -105,6 +114,15 @@ func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request)
 		attribute.Key("uuid").String(req.UUID),
 	)
 	logrus.Infof("%-5s BlobUploadPatchHandler(%s, %s) Len:%d", r.Method, req.Repo, req.UUID, req.Length)
+	_, e := h.mag.Database.ProfileAuthorizedPushHandler(ctx, req)
+	if e != nil {
+		err := errors.Wrapf(e, "failed to authorize push for profile '%s'", req.Profile)
+		span.RecordError(err)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("DENIED", e.Error(), det)
+		helper.WriteOCIErrror(w, http.StatusBadRequest, e)
+		return
+	}
 	bu, found, err := h.mag.Database.BlobUpload_GetOCI_ByUUID(ctx, req.UUID)
 	if err != nil || !found {
 		msg := "failed to fetch blob upload"
@@ -187,6 +205,10 @@ func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request)
 }
 
 func (h Handlers) BlobUploadPostHandler(w http.ResponseWriter, r *http.Request) {
+	l := logrus.WithFields(logrus.Fields{
+		"package": "oci_blob.go",
+		"func":    "BlobUploadPostHandler",
+	})
 	// Hanlder to upload a blob to the object store
 	ctx := r.Context()
 	ctx, span := tracer.Start(ctx, "BlobUploadPostHandler")
@@ -200,6 +222,16 @@ func (h Handlers) BlobUploadPostHandler(w http.ResponseWriter, r *http.Request) 
 	defer span.End()
 	mt := "NONE"
 	msg := fmt.Sprintf("%-5s BlobUploadPostHandler(%s, Type:%s, Len:%d", r.Method, mt, req.Repo, req.Length)
+	_, e := h.mag.Database.ProfileAuthorizedPushHandler(ctx, req)
+	if e != nil {
+		err := errors.Wrapf(e, "failed to authorize push for profile '%s'", req.Profile)
+		span.RecordError(err)
+		l.Error(err)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("DENIED", e.Error(), det)
+		helper.WriteOCIErrror(w, http.StatusBadRequest, e)
+		return
+	}
 	if req.Tag != "" {
 		msg = fmt.Sprintf("%s, Tag:%s)", msg, req.Tag)
 	} else {
@@ -208,7 +240,7 @@ func (h Handlers) BlobUploadPostHandler(w http.ResponseWriter, r *http.Request) 
 	if req.UUID != "" {
 		msg = fmt.Sprintf("%s, UUID:%s)", msg, req.UUID)
 	}
-	logrus.Warnf(msg)
+	l.Info(msg)
 	bu := types.OCIBlobUpload{
 		UploadUser:    req.User,
 		UploadProfile: req.Profile,
@@ -217,7 +249,7 @@ func (h Handlers) BlobUploadPostHandler(w http.ResponseWriter, r *http.Request) 
 	}
 	err := h.mag.Database.BlobUpload_Create_ByOCI(ctx, &bu)
 	if err != nil {
-		logrus.Error(err)
+		l.Error(err)
 		span.RecordError(err)
 		msg := "failed to create blob upload"
 		det := helper.NewDetailFromReq(req)
@@ -231,14 +263,14 @@ func (h Handlers) BlobUploadPostHandler(w http.ResponseWriter, r *http.Request) 
 		buf, err := io.ReadAll(r.Body)
 		if err != nil {
 			err = errors.Wrap(err, "while io.ReadAll(Body)")
-			logrus.Error(err)
+			l.Error(err)
 			return
 		}
 		dig := digest.FromBytes(buf)
 		bu.Digest = dig.String()
 		err = h.mag.StoreBlobUpload(ctx, &bu, buf)
 		if err != nil {
-			logrus.Error(err)
+			l.Error(err)
 			span.RecordError(err)
 			msg := "failed to store blob upload"
 			det := helper.NewDetailFromReq(req)
@@ -253,7 +285,6 @@ func (h Handlers) BlobUploadPostHandler(w http.ResponseWriter, r *http.Request) 
 			attribute.String("Content-Length", fmt.Sprintf("%d", len(bu.Data))),
 		))
 		span.SetStatus(http.StatusCreated, "Created")
-
 		bu.WriteOCICreateResponse(w)
 	} else {
 		// Registries that do not support single request monolithic uploads SHOULD return
@@ -358,7 +389,15 @@ func (h Handlers) BlobDelHandler(w http.ResponseWriter, r *http.Request) {
 		attribute.Key("repo").String(req.Repo),
 		attribute.Key("tag").String(req.Tag),
 	)
-
+	_, e := h.mag.Database.ProfileAuthorizedPushHandler(ctx, req)
+	if e != nil {
+		err := errors.Wrapf(e, "failed to authorize profile '%s'", req.Profile)
+		span.RecordError(err)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("DENIED", e.Error(), det)
+		helper.WriteOCIErrror(w, http.StatusBadRequest, e)
+		return
+	}
 	err := h.mag.BlobDelete(ctx, req)
 	if err != nil {
 		msg := fmt.Sprintf("failed to delete blob: %v", err)

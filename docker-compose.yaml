@@ -24,6 +24,7 @@ services:
     restart: always
     volumes:
       - .:/go/metahub
+      - /Users/kniepbert/go/src/github.com/metahub-registry/metahub-core:/Users/kniepbert/go/src/github.com/metahub-registry/metahub-core
     networks:
      - api-internal
      - mh-data

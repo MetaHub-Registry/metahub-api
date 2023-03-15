@@ -42,7 +42,7 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		logrus.Fatal(err)
 	}
-	err = gdb.Setup()
+	err = gdb.Setup(ctx)
 	if err != nil {
 		logrus.Fatal(err)
 	}
@@ -108,8 +108,8 @@ func TeardownTest(bs utils.Bootstrap) {
 	}
 }
 
-func SetupTest(bs utils.Bootstrap) (br utils.BootstrapResult, err error) {
-	return h.mag.SetupTest(bs)
+func SetupTest(ctx context.Context, bs utils.Bootstrap) (br utils.BootstrapResult, err error) {
+	return h.mag.SetupTest(ctx, bs)
 }
 
 /*

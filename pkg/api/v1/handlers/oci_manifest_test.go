@@ -24,7 +24,8 @@ func Test_UploadManifest_FTarm_Short(t *testing.T) {
 	bs.SetYAMLPrefix("../../../../misc/yaml")
 	bs.AddBootstrap("users")
 	bs.AddBootstrap("platforms:generic")
-	bs.AddBootstrap("profile:profiles/cpu/generic.yaml")
+	bs.AddBootstrap("rules:rules/generic/linux.yaml")
+	bs.AddBootstrap("profile:profiles/generic.yaml")
 	bs.AddBootstrap("config:ft_arm")
 	bs.AddBootstrap("config:ft_amd64")
 	bs.AddBootstrap("upstream:ft_arm64")
@@ -34,7 +35,8 @@ func Test_UploadManifest_FTarm_Short(t *testing.T) {
 	bs.AddBootstrap("layer:0:ft_amd64")
 	bs.AddBootstrap("layer:1:ft_amd64")
 	//bs.PostTestSleep = 120
-	br, err := SetupTest(bs)
+	ctx := context.Background()
+	br, err := SetupTest(ctx, bs)
 	assert.NoError(t, err)
 	defer TeardownTest(bs)
 	/// Request
@@ -48,14 +50,14 @@ func Test_UploadManifest_FTarm_Short(t *testing.T) {
 		"reference": testTag,
 	}, map[string]string{
 		"accountName": token,
-		"userName":    "test",
+		"userName":    "qnib",
 		"profileName": "generic",
 	}, map[string]string{
 		"Authorization": fmt.Sprintf("Bearer %s", token),
 		"Content-Type":  "application/vnd.docker.distribution.manifest.v2+json",
 	}, "/{repo}/{image}/manifests/{reference}", mani.Data)
 	h.ManifestPutHandler(&wManiPut, rManiPut)
-	assert.Equal(t, http.StatusCreated, wManiPut.Code)
+	CheckStatusCode(t, wManiPut.Code, http.StatusCreated)
 	// TODO: Check result
 
 }
@@ -63,9 +65,10 @@ func Test_UploadManifest_FTarm_Short(t *testing.T) {
 // TODO: Make the test work again
 /*
 func Test_UploadManifest_FTarm(t *testing.T) {
-	testRepo := "qnib"
+	testRepo := "oci"
 	testImage := "featuretest"
 	testTag := "latest"
+	testProfile := "generic"
 	err := h.mag.Minio.EmptyAll()
 	assert.NoError(t, err)
 	bs := utils.NewBootstrap()
@@ -74,8 +77,8 @@ func Test_UploadManifest_FTarm(t *testing.T) {
 	bs.AddBootstrap("users")
 	bs.AddBootstrap("platforms:generic")
 	bs.AddBootstrap("annotation:org.supercontainers.hardware.cpu.target:platform")
-	bs.AddBootstrap("rules:rules/cpu/generic.yaml")
-	bs.AddBootstrap("profile:profiles/cpu/generic.yaml")
+	bs.AddBootstrap("rules:rules/generic/linux.yaml")
+	bs.AddBootstrap("profile:profiles/generic.yaml")
 	bs.PostTestSleep = 180
 	br, err := SetupTest(bs)
 	assert.NoError(t, err)
@@ -92,8 +95,8 @@ func Test_UploadManifest_FTarm(t *testing.T) {
 		"image": testImage,
 	}, map[string]string{
 		"accountName": token,
-		"userName":    "test",
-		"profileName": "cpu#generic",
+		"userName":    testRepo,
+		"profileName": testProfile,
 	}, map[string]string{
 		"Authorization": fmt.Sprintf("Bearer %s", token),
 	}, "/{repo}/{image}/blobs/uploads/{uuid}", l0bytes)
@@ -112,8 +115,8 @@ func Test_UploadManifest_FTarm(t *testing.T) {
 		"uuid":  uuid,
 	}, map[string]string{
 		"accountName": token,
-		"userName":    "test",
-		"profileName": "cpu#generic",
+		"userName":    testRepo,
+		"profileName": testProfile,
 	}, map[string]string{
 		"Authorization":  fmt.Sprintf("Bearer %s", token),
 		"Content-Type":   "application/octet-stream",
@@ -132,8 +135,8 @@ func Test_UploadManifest_FTarm(t *testing.T) {
 		"uuid":  uuid,
 	}, map[string]string{
 		"accountName": token,
-		"userName":    "test",
-		"profileName": "cpu#generic",
+		"userName":    testRepo,
+		"profileName": testProfile,
 	}, map[string]string{
 		"Authorization": fmt.Sprintf("Bearer %s", token),
 	}, fmt.Sprintf("/{repo}/{image}/blobs/uploads/{uuid}?digest=%s", l0ref.Digest), nil)
@@ -156,8 +159,8 @@ func Test_UploadManifest_FTarm(t *testing.T) {
 		"image": testImage,
 	}, map[string]string{
 		"accountName": token,
-		"userName":    "test",
-		"profileName": "cpu#generic",
+		"userName":    testRepo,
+		"profileName": testProfile,
 	}, map[string]string{
 		"Authorization": fmt.Sprintf("Bearer %s", token),
 	}, "/{repo}/{image}/blobs/uploads/{uuid}", l1bytes)
@@ -176,8 +179,8 @@ func Test_UploadManifest_FTarm(t *testing.T) {
 		"uuid":  uuidL1,
 	}, map[string]string{
 		"accountName": token,
-		"userName":    "test",
-		"profileName": "cpu#generic",
+		"userName":    testRepo,
+		"profileName": testProfile,
 	}, map[string]string{
 		"Authorization":  fmt.Sprintf("Bearer %s", token),
 		"Content-Type":   "application/octet-stream",
@@ -195,8 +198,8 @@ func Test_UploadManifest_FTarm(t *testing.T) {
 		"uuid":  uuidL1,
 	}, map[string]string{
 		"accountName": token,
-		"userName":    "test",
-		"profileName": "cpu#generic",
+		"userName":    testRepo,
+		"profileName": testProfile,
 	}, map[string]string{
 		"Authorization": fmt.Sprintf("Bearer %s", token),
 	}, fmt.Sprintf("/{repo}/{image}/blobs/uploads/{uuid}?digest=%s", l1ref.Digest), nil)
@@ -215,8 +218,8 @@ func Test_UploadManifest_FTarm(t *testing.T) {
 		"image": testImage,
 	}, map[string]string{
 		"accountName": token,
-		"userName":    "test",
-		"profileName": "cpu#generic",
+		"userName":    testRepo,
+		"profileName": testProfile,
 	}, map[string]string{
 		"Authorization": fmt.Sprintf("Bearer %s", token),
 	}, "/{repo}/{image}/blobs/uploads/{uuid}", cfgBytes)
@@ -235,8 +238,8 @@ func Test_UploadManifest_FTarm(t *testing.T) {
 		"uuid":  uuidCfg,
 	}, map[string]string{
 		"accountName": token,
-		"userName":    "test",
-		"profileName": "cpu#generic",
+		"userName":    testRepo,
+		"profileName": testProfile,
 	}, map[string]string{
 		"Authorization":  fmt.Sprintf("Bearer %s", token),
 		"Content-Type":   "application/octet-stream",
@@ -254,8 +257,8 @@ func Test_UploadManifest_FTarm(t *testing.T) {
 		"uuid":  uuidCfg,
 	}, map[string]string{
 		"accountName": token,
-		"userName":    "test",
-		"profileName": "cpu#generic",
+		"userName":    testRepo,
+		"profileName": testProfile,
 	}, map[string]string{
 		"Authorization": fmt.Sprintf("Bearer %s", token),
 	}, fmt.Sprintf("/{repo}/{image}/blobs/uploads/{uuid}?digest=%s", cfg.Digest), nil)
@@ -273,8 +276,8 @@ func Test_UploadManifest_FTarm(t *testing.T) {
 		"reference": testTag,
 	}, map[string]string{
 		"accountName": token,
-		"userName":    "test",
-		"profileName": "cpu#generic",
+		"userName":    testRepo,
+		"profileName": testProfile,
 	}, map[string]string{
 		"Authorization": fmt.Sprintf("Bearer %s", token),
 		"Content-Type":  "application/vnd.docker.distribution.manifest.v2+json",
@@ -307,8 +310,8 @@ func Test_UploadManifest_FTarm(t *testing.T) {
 		"reference": testTag,
 	}, map[string]string{
 		"accountName": token,
-		"userName":    "test",
-		"profileName": "cpu#generic",
+		"userName":    testRepo,
+		"profileName": testProfile,
 	}, map[string]string{
 		"Authorization": fmt.Sprintf("Bearer %s", token),
 	}, "/{repo}/{image}/manifests/{reference}", nil)
@@ -324,8 +327,8 @@ func Test_UploadManifest_FTarm(t *testing.T) {
 		"reference": mani.Digest,
 	}, map[string]string{
 		"accountName": token,
-		"userName":    "test",
-		"profileName": "cpu#generic",
+		"userName":    testRepo,
+		"profileName": testProfile,
 	}, map[string]string{
 		"Authorization": fmt.Sprintf("Bearer %s", token),
 	}, "/{repo}/{image}/manifests/{reference}", nil)
@@ -340,8 +343,8 @@ func Test_UploadManifest_FTarm(t *testing.T) {
 		"reference": testTag,
 	}, map[string]string{
 		"accountName": token,
-		"userName":    "test",
-		"profileName": "cpu#generic",
+		"userName":    testRepo,
+		"profileName": testProfile,
 	}, map[string]string{
 		"Authorization": fmt.Sprintf("Bearer %s", token),
 	}, "/{repo}/{image}/manifests/{reference}", nil)
@@ -368,7 +371,7 @@ func Test_Manifest_OCITest(t *testing.T) {
 	//bs.PostTestSleep = 300
 	err := h.mag.Minio.EmptyAll()
 	assert.NoError(t, err)
-	br, err := SetupTest(bs)
+	br, err := SetupTest(ctx, bs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -399,7 +402,7 @@ func Test_Manifest_OCITest(t *testing.T) {
 		"image": testImage,
 	}, map[string]string{
 		"accountName": token,
-		"userName":    "test",
+		"userName":    "oci",
 		"profileName": "generic",
 	}, map[string]string{
 		"Authorization":  fmt.Sprintf("Bearer %s", token),
@@ -440,7 +443,7 @@ func Test_Manifest_OCITest(t *testing.T) {
 		"reference": testTag,
 	}, map[string]string{
 		"accountName": token,
-		"userName":    "test",
+		"userName":    "oci",
 		"profileName": "generic",
 	}, map[string]string{
 		"Authorization": fmt.Sprintf("Bearer %s", token),
@@ -511,12 +514,15 @@ func Test_Manifest_OCITest_NoLayers(t *testing.T) {
 	bs.SetYAMLPrefix("../../../../misc/yaml")
 	bs.AddBootstrap("users")
 	bs.AddBootstrap("platforms:generic")
-	bs.AddBootstrap("rules:rules/cpu/generic.yaml")
-	bs.AddBootstrap("profile:profiles/cpu/generic.yaml")
+	bs.AddBootstrap("rules:rules/generic/linux.yaml")
+	bs.AddBootstrap("profile:profiles/generic.yaml")
 	err := h.mag.Minio.EmptyAll()
 	assert.NoError(t, err)
-	br, err := SetupTest(bs)
-	assert.NoError(t, err)
+	ctx := context.Background()
+	br, err := SetupTest(ctx, bs)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer TeardownTest(bs)
 	_ = br
 	token, err := br.Get("user:test#bearer")
@@ -536,16 +542,14 @@ func Test_Manifest_OCITest_NoLayers(t *testing.T) {
 			}
 		}`),
 	}
-	cfgDig := digest.FromBytes(cfg.Data)
-	logrus.Errorf("cfgDig: %s", cfgDig)
 	/// Direct Post with config
 	wCfgPost, rCfgPost := createNewHTTPTest(http.MethodPost, map[string]string{
 		"repo":  testRepo,
 		"image": testImage,
 	}, map[string]string{
 		"accountName": token,
-		"userName":    "test",
-		"profileName": "cpu#generic",
+		"userName":    "oci",
+		"profileName": "generic",
 	}, map[string]string{
 		"Authorization":  fmt.Sprintf("Bearer %s", token),
 		"Content-Type":   "application/octet-stream",
@@ -556,7 +560,6 @@ func Test_Manifest_OCITest_NoLayers(t *testing.T) {
 	if wCfgPost.Code != http.StatusCreated {
 		t.Fatalf("Code: %d, expected %d", wCfgPost.Code, http.StatusCreated)
 	}
-
 	/// Manifest
 	dat := []byte(`{
 		"schemaVersion": 2,
@@ -580,8 +583,8 @@ func Test_Manifest_OCITest_NoLayers(t *testing.T) {
 		"reference": testTag,
 	}, map[string]string{
 		"accountName": token,
-		"userName":    "test",
-		"profileName": "cpu#generic",
+		"userName":    "oci",
+		"profileName": "generic",
 	}, map[string]string{
 		"Authorization": fmt.Sprintf("Bearer %s", token),
 		"Content-Type":  "application/vnd.docker.distribution.manifest.v2+json",

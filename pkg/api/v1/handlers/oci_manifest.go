@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/metahub-registry/metahub-api/pkg/lib/helper"
 	"github.com/metahub-registry/metahub-core/pkg/types"
@@ -13,7 +14,6 @@ import (
 
 func (h Handlers) ManifestHeadHandler(w http.ResponseWriter, r *http.Request) {
 	// Check whether it is a manifest or manifest list
-
 	ctx := r.Context()
 	ctx, span := tracer.Start(ctx, "ManifestHeadHandler")
 	defer span.End()
@@ -119,36 +119,18 @@ func (h Handlers) ManifestGetHandler(w http.ResponseWriter, r *http.Request) {
 		e := helper.NewErrPayload("MANIFEST_UNKNOWN", msg, det)
 		helper.WriteOCIErrror(w, http.StatusNotFound, e)
 	}
-	/*
-		m, found, err = h.mag.Manifest_GetByHTTPRequest(r)
-		if err != nil {
-			// 1. FALSE
-			msg := fmt.Sprintf("failed to fetch ManifestList: %v", err)
-			logrus.Error(msg)
-			det := helper.NewDetailFromReq(req)
-			e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
-			helper.WriteOCIErrror(w, http.StatusNotFound, e)
-			return
-		}
-		if found {
-			m.WriteWWWBody(w)
-			m.WriteWWWHeader(w)
-			return
-		} else {
-			msg := fmt.Sprintf("no manifest '%s:%s' found for profile '%s'", req.Repo, req.Tag, req.Profile)
-			det := helper.NewDetailFromReq(req)
-			e := helper.NewErrPayload("MANIFEST_UNKNOWN", msg, det)
-			helper.WriteOCIErrror(w, http.StatusNotFound, e)
-		}
-	*/
 }
 
 func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
+	l := logrus.WithFields(logrus.Fields{
+		"package": "oci_manifest.go",
+		"func":    "ManifestPutHandler",
+	})
 	ctx := r.Context()
-	ctx, span := tracer.Start(ctx, "ManifestGetHandler")
+	ctx, span := tracer.Start(ctx, "ManifestPutHandler")
 	defer span.End()
 	req := types.NewRequest(ctx, r)
-	logrus.Infof("%-5s ManifestPutHandler(%s, %s)", r.Method, req.Repo, req.Tag)
+	l.Infof("%-5s ManifestPutHandler(%s, %s) Profile:%s", r.Method, req.Repo, req.Tag, req.Profile)
 	buf, err := io.ReadAll(r.Body)
 	if err != nil {
 		logrus.Fatal("request", err)
@@ -157,21 +139,43 @@ func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 		attribute.Key("method").String(r.Method),
 		attribute.Key("repo").String(req.Repo),
 		attribute.Key("body-length").Int(len(buf)),
+		attribute.Key("profile").String(req.Profile),
 	)
-
+	_, e := h.mag.Database.ProfileAuthorizedPushHandler(ctx, req)
+	if e != nil {
+		err = errors.Wrapf(e, "failed to authorize push for profile '%s'", req.Profile)
+		span.RecordError(err)
+		l.Error(err)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("DENIED", e.Error(), det)
+		helper.WriteOCIErrror(w, http.StatusBadRequest, e)
+		return
+	}
 	switch req.ContentType {
 	case "application/vnd.docker.distribution.manifest.v2+json":
 		// Put manifest in object store
 		m, err := h.mag.StoreManifestUpload(ctx, req, buf)
 		if err != nil {
 			msg := fmt.Sprintf("failed to store manifest: %v", err)
-			logrus.Error(msg)
+			l.Error(msg)
 			det := helper.NewDetailFromReq(req)
 			e := helper.NewErrPayload("MANIFEST_INVALID", msg, det)
 			helper.WriteOCIErrror(w, http.StatusBadRequest, e)
 			return
 		}
-		// Put manifest in database
+		m.WriteWWWHeader(w)
+		w.Header().Set("Location", fmt.Sprintf("%s://%s/v2/%s/manifests/%s", req.Protocol, req.Host, req.Repo, req.Tag))
+		w.WriteHeader(http.StatusCreated)
+	case "application/vnd.docker.distribution.manifest.v1+prettyjws":
+		m, err := h.mag.StoreManifestUpload(ctx, req, buf)
+		if err != nil {
+			msg := fmt.Sprintf("failed to store manifest: %v", err)
+			l.Error(msg)
+			det := helper.NewDetailFromReq(req)
+			e := helper.NewErrPayload("MANIFEST_INVALID", msg, det)
+			helper.WriteOCIErrror(w, http.StatusBadRequest, e)
+			return
+		}
 		m.WriteWWWHeader(w)
 		w.Header().Set("Location", fmt.Sprintf("%s://%s/v2/%s/manifests/%s", req.Protocol, req.Host, req.Repo, req.Tag))
 		w.WriteHeader(http.StatusCreated)
@@ -180,7 +184,7 @@ func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 		m, err := h.mag.StoreManifestUpload(ctx, req, buf)
 		if err != nil {
 			msg := fmt.Sprintf("failed to store manifest: %v", err)
-			logrus.Error(msg)
+			l.Error(msg)
 			det := helper.NewDetailFromReq(req)
 			e := helper.NewErrPayload("MANIFEST_INVALID", msg, det)
 			helper.WriteOCIErrror(w, http.StatusBadRequest, e)
