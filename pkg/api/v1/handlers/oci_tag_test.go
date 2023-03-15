@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -34,7 +35,8 @@ func Test_ListTags(t *testing.T) {
 	bs.AddBootstrap("collection:ft_arm64")
 	bs.SetEmptyAll()
 	//bs.PostTestSleep = 90
-	br, err := SetupTest(bs)
+	ctx := context.Background()
+	br, err := SetupTest(ctx, bs)
 	assert.NoError(t, err)
 	defer TeardownTest(bs)
 	_ = br

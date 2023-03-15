@@ -39,7 +39,7 @@ func init() {
 func sCmd(cmd *cobra.Command, args []string) {
 	config.SetCommandValues(cmd)
 	port, _ := cmd.Flags().GetInt("port")
-	mag, err := magazine.NewMagazine(cmd, "")
+	mag, _, err := magazine.NewMagazine(cmd, "")
 	if err != nil {
 		err = errors.Wrap(err, "Cannot create magazine")
 		log.Fatal(err)

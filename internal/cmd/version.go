@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	mlver "github.com/metahub-registry/metahub-core/pkg/version"
 )
 
 var version = "1.1.1"
@@ -44,7 +45,8 @@ var versionCmd = &cobra.Command{
 
 			fmt.Println(string(b))
 		} else {
-			fmt.Printf("v%s\n", version)
+			fmt.Printf("API:     v%s\n", version)
+			fmt.Printf("Metalib: v%s\n", mlver.Version)
 		}
 	},
 }

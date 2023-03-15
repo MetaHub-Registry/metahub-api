@@ -11,7 +11,7 @@ import (
 
 func (h Handlers) TagGetHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	ctx, span := tracer.Start(ctx, "ManifestGetHandler")
+	ctx, span := tracer.Start(ctx, "TagGetHandler")
 	defer span.End()
 	req := types.NewRequest(ctx, r)
 	msg := fmt.Sprintf("%-5s TagGetHandler(%s)", r.Method, req.Repo)

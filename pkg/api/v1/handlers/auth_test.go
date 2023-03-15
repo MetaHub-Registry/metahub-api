@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -12,10 +13,11 @@ import (
 )
 
 func Test_Auth_AuthHandler_Success(t *testing.T) {
+	ctx := context.Background()
 	bs := utils.NewBootstrap()
 	bs.AddBootstrap("users")
 	bs.SetEmptyAll()
-	br, err := SetupTest(bs)
+	br, err := SetupTest(ctx, bs)
 	assert.NoError(t, err)
 	defer TeardownTest(bs)
 	/// Request
@@ -35,9 +37,10 @@ func Test_Auth_AuthHandler_Success(t *testing.T) {
 }
 
 func Test_Auth_AuthHandler_Fail(t *testing.T) {
+	ctx := context.Background()
 	bs := utils.NewBootstrap()
 	bs.SetEmptyAll()
-	_, err := SetupTest(bs)
+	_, err := SetupTest(ctx, bs)
 	assert.NoError(t, err)
 	defer TeardownTest(bs)
 	/// Request
@@ -63,7 +66,8 @@ func Test_Auth_AuthMiddlewareHandler_WithUser(t *testing.T) {
 	bs := utils.NewBootstrap()
 	bs.AddBootstrap("users")
 	bs.SetEmptyAll()
-	br, err := SetupTest(bs)
+	ctx := context.Background()
+	br, err := SetupTest(ctx, bs)
 	assert.NoError(t, err)
 	defer TeardownTest(bs)
 	/// Request
@@ -102,7 +106,8 @@ func Test_Auth_AuthMiddlewareHandler_WithScope(t *testing.T) {
 	bs.AddBootstrap("users")
 	//bs.SetSqlite("Desktop/metahub.db")
 	bs.SetEmptyAll()
-	br, err := SetupTest(bs)
+	ctx := context.Background()
+	br, err := SetupTest(ctx, bs)
 	assert.NoError(t, err)
 	defer TeardownTest(bs)
 	/// Request

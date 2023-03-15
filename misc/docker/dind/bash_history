@@ -8,3 +8,4 @@ manifest-tool inspect ${MH_URL}/biocontainers/blast:2.13.0
 manifest-tool inspect ${MH_URL}/gromacs/tmpi:2021.5
 manifest-tool inspect ${MH_URL}/gromacs/mpich:2021.5
 skopeo copy --dest-tls-verify=false docker://docker.io/alpine:3.16.2 docker://${MH_URL}/oci/alpine:3.16.2
+echo ${MH_PASS} | skopeo login --tls-verify=false ${MH_URL} --password-stdin -u ${MH_USER}

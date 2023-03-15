@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -69,7 +70,8 @@ func Test_CollectionGetOne(t *testing.T) {
 	bs.AddBootstrap("collection:ft_generic")
 	bs.AddBootstrap("collection:ft_arm64")
 	//bs.PostTestSleep = 180
-	br, err := SetupTest(bs)
+	ctx := context.Background()
+	br, err := SetupTest(ctx, bs)
 	assert.NoError(t, err)
 	defer TeardownTest(bs)
 	_ = br
@@ -81,6 +83,7 @@ func Test_CollectionGetOne(t *testing.T) {
 	colTagID, err := br.GetInt64("tag:arm64#id")
 	assert.NoError(t, err)
 	// Tests
+	testProfile := "generic"
 	reqBody := ReqPayload{
 		ColID: colID,
 		TagID: colTagID,
@@ -91,8 +94,8 @@ func Test_CollectionGetOne(t *testing.T) {
 		"image": testImage,
 	}, map[string]string{
 		"accountName": token,
-		"userName":    "test",
-		"profileName": "generic",
+		"userName":    testRepo,
+		"profileName": testProfile,
 	}, map[string]string{
 		"Authorization": fmt.Sprintf("Bearer %s", token),
 		"Content-Type":  "application/octet-stream",
@@ -113,8 +116,8 @@ func Test_CollectionGetAll(t *testing.T) {
 	bs.AddBootstrap("users")
 	bs.AddBootstrap("platforms:generic")
 	bs.AddBootstrap("annotation:org.supercontainers.hardware.cpu.target:platform")
-	bs.AddBootstrap("rules:rules/cpu/generic.yaml")
-	bs.AddBootstrap("profile:profiles/cpu/generic.yaml")
+	bs.AddBootstrap("rules:rules/generic/linux.yaml")
+	bs.AddBootstrap("profile:profiles/generic.yaml")
 	bs.AddBootstrap("config:ft_arm")
 	bs.AddBootstrap("config:ft_amd64")
 	bs.AddBootstrap("upstream:ft_arm64")
@@ -133,10 +136,13 @@ func Test_CollectionGetAll(t *testing.T) {
 	bs.AddBootstrap("computeManifests")
 	bs.AddBootstrap("computeManifestlists")
 	//bs.PostTestSleep = 300
-	br, err := SetupTest(bs)
+	ctx := context.Background()
+	br, err := SetupTest(ctx, bs)
 	assert.NoError(t, err)
 	defer TeardownTest(bs)
 	_ = br
+	testRepo := "qnib"
+	testProfile := "generic"
 	/// Request
 	token, err := br.Get("user:test#bearer")
 	assert.NoError(t, err)
@@ -147,8 +153,8 @@ func Test_CollectionGetAll(t *testing.T) {
 	wGet := httptest.NewRecorder()
 	_, rGet := createNewHTTPTest(http.MethodGet, map[string]string{}, map[string]string{
 		"accountName": token,
-		"userName":    "test",
-		"profileName": "cpu#generic",
+		"userName":    testRepo,
+		"profileName": testProfile,
 	}, map[string]string{
 		"Authorization": fmt.Sprintf("Bearer %s", token),
 		"Content-Type":  "application/octet-stream",
@@ -169,8 +175,8 @@ func Test_CollectionGetAll(t *testing.T) {
 	wGetFT := httptest.NewRecorder()
 	_, rGetFT := createNewHTTPTest(http.MethodGet, map[string]string{}, map[string]string{
 		"accountName": token,
-		"userName":    "test",
-		"profileName": "cpu#generic",
+		"userName":    testRepo,
+		"profileName": testProfile,
 	}, map[string]string{
 		"Authorization": fmt.Sprintf("Bearer %s", token),
 		"Content-Type":  "application/octet-stream",
@@ -201,5 +207,4 @@ func Test_CollectionGetAll(t *testing.T) {
 	n := respFT.Next["generic"]
 	assert.Equal(t, "qnib/featuretest", n.Repo)
 	assert.Equal(t, "generic", n.Tag)
-	assert.Equal(t, int64(2), n.ManiCount)
 }

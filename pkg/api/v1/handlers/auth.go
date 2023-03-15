@@ -21,6 +21,10 @@ import (
 
 type oauthError string
 
+const (
+	defaultProfile = "generic"
+)
+
 var (
 	invalidRequest oauthError = "invalid_request"
 	invalidToken   oauthError = "invalid_token"
@@ -78,9 +82,10 @@ func (h Handlers) AuthHandler(w http.ResponseWriter, r *http.Request) {
 
 func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) (err error) {
 	ctx := r.Context()
+	req := types.NewRequest(ctx, r)
+
 	_, span := tracer.Start(ctx, "AuthMiddlewareHandler")
 	defer span.End()
-	req := types.NewRequest(ctx, r)
 	span.SetAttributes(
 		attribute.Key("req.Digest").String(req.Digest),
 		attribute.Key("req.Host").String(req.Host),
@@ -88,6 +93,7 @@ func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) 
 		attribute.Key("req.Tag").String(req.Tag),
 		attribute.Key("req.Profile").String(req.Profile),
 	)
+
 	var realm string
 	switch r.Host {
 	case "metahub-registry.org":
@@ -155,17 +161,9 @@ func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) 
 		return fmt.Errorf("error getting token")
 	}
 	password = parts[1]
-	span.AddEvent("log", trace.WithAttributes(
-		attribute.String("log.severity", "debug"),
-		attribute.String("log.user", parts[0]),
-	))
-	span.AddEvent("log", trace.WithAttributes(
-		attribute.String("log.severity", "debug"),
-		attribute.String("log.message", fmt.Sprintf("matching '%s' against '%s'", userReg, parts[0])),
-	))
 	m := utils.ReSubMatchMap(userReg, parts[0])
 	if _, ok := m["user"]; !ok {
-		msg := "username needs to prefix with profile (defaults to generic): '<user>/<profile>'"
+		msg := fmt.Sprintf("username needs to prefix with profile (defaults to %s): '<user>/<profile>'", defaultProfile)
 		logrus.Error(msg)
 		w.WriteHeader(http.StatusBadRequest)
 		return fmt.Errorf(msg)
@@ -174,15 +172,18 @@ func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) 
 	if _, ok := m["profile"]; !ok {
 		span.AddEvent("log", trace.WithAttributes(
 			attribute.String("log.severity", "debug"),
-			attribute.String("log.message", fmt.Sprintf("no profile given when matching '%s' against '%s', default to 'generic'", userReg, parts[0])),
+			attribute.String("log.message", fmt.Sprintf("no profile given when matching '%s' against '%s', default to '%s'", userReg, parts[0], defaultProfile)),
 		))
-		profile = "generic"
+		profile = defaultProfile
 	} else {
 		profile = m["profile"]
+		if profile == "" {
+			profile = defaultProfile
+		}
 	}
 	span.AddEvent("log", trace.WithAttributes(
 		attribute.String("log.severity", "debug"),
-		attribute.String("log.message", fmt.Sprintf("profile:'%s'", profile)),
+		attribute.String("log.message", fmt.Sprintf("profile:'%s' / user:'%s", profile, username)),
 	))
 	code, pl, err := h.mag.UserManagement.LoginUserScope(username, password, req)
 	if err != nil {
