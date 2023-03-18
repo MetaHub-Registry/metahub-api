@@ -26,6 +26,7 @@ func (h Handlers) BlobUploadPutHandler(w http.ResponseWriter, r *http.Request) {
 		attribute.Key("method").String(r.Method),
 		attribute.Key("repo").String(req.Repo),
 		attribute.Key("uuid").String(req.UUID),
+		attribute.Key("content-len").Int(req.Length),
 	)
 	// Complete the upload specified by uuid, optionally appending the body as the final chunk.
 	logrus.Infof("%-5s BlobUploadPutHandler(%s, %s)", r.Method, req.Repo, req.UUID)

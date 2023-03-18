@@ -505,10 +505,10 @@ func Test_Manifest_OCITest(t *testing.T) {
 		t.Fatal(err)
 	}
 	assert.Equal(t, 0, len(cols))
-	/// Count CollectionTag
+	/// Count CollectionTag after compute manifestlist is done
 	cnt, err := h.mag.Database.CollectionTag_CountRelationships(ct.ID)
 	assert.NoError(t, err)
-	assert.Equal(t, int64(1), cnt)
+	assert.Equal(t, int64(2), cnt)
 }
 
 func Test_Manifest_OCITest_NoLayers(t *testing.T) {

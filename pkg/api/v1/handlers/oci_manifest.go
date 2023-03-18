@@ -10,6 +10,7 @@ import (
 	"github.com/metahub-registry/metahub-api/pkg/lib/helper"
 	"github.com/metahub-registry/metahub-core/pkg/types"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 )
 
 func (h Handlers) ManifestHeadHandler(w http.ResponseWriter, r *http.Request) {
@@ -156,13 +157,43 @@ func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 		// Put manifest in object store
 		m, err := h.mag.StoreManifestUpload(ctx, req, buf)
 		if err != nil {
-			msg := fmt.Sprintf("failed to store manifest: %v", err)
-			l.Error(msg)
+			err := errors.Wrapf(err, "failed to store manifest")
+			l.Error(err)
+			span.RecordError(err)
 			det := helper.NewDetailFromReq(req)
-			e := helper.NewErrPayload("MANIFEST_INVALID", msg, det)
+			e := helper.NewErrPayload("INTERNAL_ERROR", err.Error(), det)
 			helper.WriteOCIErrror(w, http.StatusBadRequest, e)
 			return
 		}
+		// Compute manifest
+		mani, err := h.mag.Database.Manifest_GetByLabel(ctx, m.Label)
+		if err != nil {
+			err = errors.Wrap(err, "while executing Manifest_GetByLabel")
+			span.RecordError(err)
+			det := helper.NewDetailFromReq(req)
+			e := helper.NewErrPayload("DENIED", err.Error(), det)
+			helper.WriteOCIErrror(w, http.StatusBadRequest, e)
+			return
+		}
+		err = h.mag.ComputeManifest(ctx, mani)
+		if err != nil {
+			err = errors.Wrap(err, "while executing ComputeManifest")
+			span.RecordError(err)
+			det := helper.NewDetailFromReq(req)
+			e := helper.NewErrPayload("INTERNAL_ERROR", err.Error(), det)
+			helper.WriteOCIErrror(w, http.StatusBadRequest, e)
+			return
+		}
+		err = h.mag.ComputeManifestlists(ctx)
+		if err != nil {
+			err = errors.Wrap(err, "while executing ComputeManifestlists")
+			span.RecordError(err)
+			det := helper.NewDetailFromReq(req)
+			e := helper.NewErrPayload("INTERNAL_ERROR", err.Error(), det)
+			helper.WriteOCIErrror(w, http.StatusBadRequest, e)
+			return
+		}
+		span.SetStatus(codes.Ok, "manifest successfully uploaded")
 		m.WriteWWWHeader(w)
 		w.Header().Set("Location", fmt.Sprintf("%s://%s/v2/%s/manifests/%s", req.Protocol, req.Host, req.Repo, req.Tag))
 		w.WriteHeader(http.StatusCreated)

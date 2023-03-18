@@ -55,6 +55,11 @@ func getAccessTokenFromBearerToken(r *http.Request) (at *types.AccessToken, user
 }
 
 func (h Handlers) AuthHandler(w http.ResponseWriter, r *http.Request) {
+	l := logrus.WithFields(logrus.Fields{
+		"package": "api/auth.go",
+		"func":    "AuthHandler",
+	})
+	_ = l
 	ctx := r.Context()
 	_, span := tracer.Start(ctx, "AuthHandler")
 	defer span.End()
@@ -72,6 +77,7 @@ func (h Handlers) AuthHandler(w http.ResponseWriter, r *http.Request) {
 	if acct == "" && user == "" {
 		at.Token = "REDACTED-IN-HISTORY"
 	}
+	//l.Debugf("User: %s // Token: %s", at.GetUser(), at.Token)
 	// Prepare the body of the response
 	responseBodyBytes := new(bytes.Buffer)
 	w.Header().Add("Content-Type", "application/json; charset=utf-8")
@@ -81,9 +87,12 @@ func (h Handlers) AuthHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) (err error) {
+	l := logrus.WithFields(logrus.Fields{
+		"package": "api/auth.go",
+		"func":    "AuthMiddlewareHandler",
+	})
 	ctx := r.Context()
 	req := types.NewRequest(ctx, r)
-
 	_, span := tracer.Start(ctx, "AuthMiddlewareHandler")
 	defer span.End()
 	span.SetAttributes(
@@ -133,15 +142,14 @@ func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) 
 		return fmt.Errorf("valid authorization header")
 	}
 	accessTokenString := bearerToken[1]
-
 	at, err := h.mag.UserManagement.User.GetAccessToken(accessTokenString)
 	if err != nil {
-		logrus.Infof("error getting access token: %v", err)
+		l.Infof("error getting access token: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return fmt.Errorf("error getting token")
 	}
 	if at == nil {
-		logrus.Error("unknown access token")
+		l.Error("unknown access token")
 		det := helper.NewDetailFromReq(req)
 		w.WriteHeader(http.StatusUnauthorized)
 		logrus.Infof("Realm: %s", realm)
@@ -153,10 +161,10 @@ func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) 
 	decoded := at.GetUser()
 	parts := strings.Split(string(decoded), ":")
 	if len(parts) != 2 {
-		logrus.Error("unknown access token")
+		l.Error("unknown access token")
 		det := helper.NewDetailFromReq(req)
 		w.WriteHeader(http.StatusUnauthorized)
-		logrus.Infof("Realm: %s", realm)
+		l.Infof("Realm: %s", realm)
 		unauthorized(w, realm, det, invalidToken, "unknown access token")
 		return fmt.Errorf("error getting token")
 	}
@@ -181,10 +189,12 @@ func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) 
 			profile = defaultProfile
 		}
 	}
+	msg := fmt.Sprintf("profile:'%s' / user:'%s", profile, username)
 	span.AddEvent("log", trace.WithAttributes(
 		attribute.String("log.severity", "debug"),
-		attribute.String("log.message", fmt.Sprintf("profile:'%s' / user:'%s", profile, username)),
+		attribute.String("log.message", msg),
 	))
+	l.Debug(msg)
 	code, uRole, pl, err := h.mag.UserManagement.LoginUserScope(username, password, req)
 	if err != nil {
 		err = errors.Wrap(err, "error logging in user")
