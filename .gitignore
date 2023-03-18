@@ -9,3 +9,4 @@ report.html
 exp/**
 misc/minio
 misc/backup
+misc/data/**

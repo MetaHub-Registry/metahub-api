@@ -32,6 +32,7 @@ services:
       DEV_URL: dev:80
       CE_URL: ce:80
       PS1: 'dind > '
+      MH_USER: qnib
   #  start mailhog
   #mailhog:
   #  image: 'mailhog/mailhog:latest'

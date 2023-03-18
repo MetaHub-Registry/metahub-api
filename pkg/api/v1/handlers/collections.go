@@ -21,6 +21,10 @@ type Next struct {
 }
 
 func (h Handlers) CollectionGetOne(w http.ResponseWriter, r *http.Request) {
+	l := logrus.WithFields(logrus.Fields{
+		"package": "api/collections.go",
+		"func":    "CollectionGetOne",
+	})
 	ctx := r.Context()
 	ctx, span := tracer.Start(ctx, "CollectionGetOne")
 	defer span.End()
@@ -40,21 +44,29 @@ func (h Handlers) CollectionGetOne(w http.ResponseWriter, r *http.Request) {
 	}
 	var col types.CollectionListing
 	if pl.RepoName != "" && pl.TagName != "" {
-		logrus.Infof("CollectionGetOne(%s,%s)", pl.RepoName, pl.TagName)
+		l = l.WithFields(logrus.Fields{
+			"repo_name": pl.RepoName,
+			"tag_name":  pl.TagName,
+		})
+		l.Info("CollectionGetOne()")
 		col, err = h.mag.Database.CollectionListing_Get_ByName(ctx, pl.RepoName, pl.TagName)
 		if err != nil {
 			h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
 			return
 		}
 	} else {
-		logrus.Infof("CollectionGetOne(%d,%d)", pl.ColID, pl.TagID)
+		l = l.WithFields(logrus.Fields{
+			"collection_id": pl.ColID,
+			"tag_id":        pl.TagID,
+		})
+		l.Info("CollectionGetOne()")
 		col, err = h.mag.Database.CollectionListing_Get_ByID(ctx, pl.ColID, pl.TagID)
 		if err != nil {
 			h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
 			return
 		}
 	}
-	logrus.Infof("  -> %s:%s", col.Repo, col.Tag)
+	l.Infof("  -> %s:%s", col.Repo, col.Tag)
 	if err != nil {
 		h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
 		return
@@ -75,15 +87,17 @@ func (h Handlers) CollectionGetOne(w http.ResponseWriter, r *http.Request) {
 			breadCrumbs = append(breadCrumbs, bc)
 		}
 	}
-	manis, err := h.mag.Database.ManifestData_GetByCollectionTag(ctx, pl.ColID, pl.TagID)
-	if err != nil {
-		h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
-		return
-	}
-	for _, mani := range manis {
-		key := fmt.Sprintf("%s/%s:%s", mani.Upstream.Reg, mani.Upstream.Repo, mani.Upstream.Tag)
-		col.Manifests[key] = mani
-	}
+	/*
+		manis, err := h.mag.Database.ManifestData_GetByCollectionTag(ctx, pl.ColID, pl.TagID)
+		if err != nil {
+			h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
+			return
+		}
+		for _, mani := range manis {
+			key := fmt.Sprintf("%s/%s:%s", mani.Upstream.Reg, mani.Upstream.Repo, mani.Upstream.Tag)
+			col.Manifests[key] = mani
+		}
+	*/
 	payload := envelope{
 		"repos":        reps.AsSlice(),
 		"bread_crumbs": breadCrumbs,
@@ -93,6 +107,10 @@ func (h Handlers) CollectionGetOne(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h Handlers) CollectionGetAll(w http.ResponseWriter, r *http.Request) {
+	l := logrus.WithFields(logrus.Fields{
+		"package": "api/collections.go",
+		"func":    "CollectionGetAll",
+	})
 	ctx := r.Context()
 	ctx, span := tracer.Start(ctx, "CollectionGetAll")
 	defer span.End()
@@ -102,18 +120,21 @@ func (h Handlers) CollectionGetAll(w http.ResponseWriter, r *http.Request) {
 	pl := Payload{}
 	err := h.readJSON(w, r, &pl)
 	if err != nil {
-		logrus.Errorf("CollectionGetAll (body: %v, payload:%v): %v", r.Body, pl, err)
+		l.Errorf("CollectionGetAll (body: %v, payload:%v): %v", r.Body, pl, err)
 		h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
 		return
 	}
-	logrus.Infof("CollectionGetAll: '%s'", pl.Repo)
+	l = l.WithFields(logrus.Fields{
+		"repo": pl.Repo,
+	})
+	l.Infof("CollectionGetAll: '%s'", pl.Repo)
 	repoSlug := strings.Split(pl.Repo, "/")
 	cols, err := h.mag.Database.CollectionListing_Get_ByRepoLike(ctx, pl.Repo)
 	if err != nil {
 		h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
 		return
 	}
-	logrus.Warnf("CollectionGetAll: '%s' -> %d", pl.Repo, len(cols))
+	l.Warnf("CollectionGetAll: '%s' -> %d", pl.Repo, len(cols))
 	slugEnd := 0
 	next := map[string]Next{}
 	reps := set.NewLinkedHashSetString()
