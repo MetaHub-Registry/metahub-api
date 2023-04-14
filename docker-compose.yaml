@@ -2,7 +2,12 @@ version: '3'
 
 services:
   dev:
-    image: registry.github.com/metahub-registry/metahub-api:2023-03-01-arm64-dev
+    build: 
+      context: .
+      target: dev
+      ssh:
+        - default
+    #image: registry.github.com/metahub-registry/metahub-api:2023-03-01-arm64-dev
     environment:
       - SQLITE_FILE=/go/metahub-api/misc/sqlite/metahub_20221017.db
       - PATH=/go/metahub:/go/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
@@ -29,6 +34,7 @@ services:
      - api-internal
      - mh-data
     environment:
+      PATH: /Users/kniepbert/go/src/github.com/metahub-registry/metahub-core/misc/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       DEV_URL: dev:80
       CE_URL: ce:80
       PS1: 'dind > '
