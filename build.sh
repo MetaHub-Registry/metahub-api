@@ -16,20 +16,6 @@ if [[  ! -z $3 ]];then
     TARGET_OPTS="--target=$3"
 fi
 
-if [[ ! -d ext/metalib ]];then
-    mkdir -p ext
-    git submodule update --init --recursive
-else 
-    git submodule update --recursive
-fi
-
-
-go mod edit -replace github.com/metahub-registry/metahub-core=/go/metahub-api/ext/metalib 
-go mod edit -replace github.com/metahub-registry/metahub-core/pkg/backends/minio=/go/metahub-api/ext/metalib/pkg/backends/minio
-go mod edit -replace github.com/metahub-registry/metahub-core/pkg/types=/go/metahub-api/ext/metalib/pkg/types
-go mod edit -replace github.com/metahub-registry/metahub-core/pkg/backends/sqlite=/go/metahub-api/ext/metalib/pkg/backends/sqlite
-go mod edit -replace github.com/metahub-registry/metahub-core/pkg/backends/neo=/go/metahub-api/ext/metalib/pkg/backends/neo
-
 ARCH=$(uname -m)
 for x in $(echo ${ARCHS}|tr , ' '); do
     if [[ "${ARCH}" == "x86_64" ]] && [[ "$x" == "amd64" ]];then
@@ -46,8 +32,7 @@ for x in $(echo ${ARCHS}|tr , ' '); do
             IMG_NAME="${IMG_NAME}-$3"
         fi
         set -x
-        docker build --pull ${TARGET_OPTS} --platform linux/${x} -t ${IMG_NAME} .
+        docker build --pull ${TARGET_OPTS} --ssh default=$SSH_AUTH_SOCK --platform linux/${x} -t ${IMG_NAME} .
         set +x
     fi
 done
-git checkout go.mod

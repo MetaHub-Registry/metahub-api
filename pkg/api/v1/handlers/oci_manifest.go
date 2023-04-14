@@ -87,20 +87,6 @@ func (h Handlers) ManifestGetHandler(w http.ResponseWriter, r *http.Request) {
 		attribute.Key("method").String(r.Method),
 		attribute.Key("repo").String(req.Repo),
 	)
-	m, found, err := h.mag.Manifest_GetByHTTPRequest(ctx, r)
-	if err != nil {
-		// 1. FALSE
-		msg := fmt.Sprintf("failed to fetch Manifest: %v", err)
-		logrus.Error(msg)
-		det := helper.NewDetailFromReq(req)
-		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
-		helper.WriteOCIErrror(w, http.StatusNotFound, e)
-		return
-	}
-	if found {
-		m.WriteWWW(w)
-		return
-	}
 	ml, found, err := h.mag.ManifestList_GetByHTTPRequest(ctx, r)
 	if err != nil {
 		// 1. FALSE
@@ -113,6 +99,20 @@ func (h Handlers) ManifestGetHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	if found {
 		ml.WriteWWW(w)
+		return
+	}
+	m, found, err := h.mag.Manifest_GetByHTTPRequest(ctx, r)
+	if err != nil {
+		// 1. FALSE
+		msg := fmt.Sprintf("failed to fetch Manifest: %v", err)
+		logrus.Error(msg)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+		helper.WriteOCIErrror(w, http.StatusNotFound, e)
+		return
+	}
+	if found {
+		m.WriteWWW(w)
 		return
 	} else {
 		msg := fmt.Sprintf("no manifest '%s:%s' found for profile '%s'", req.Repo, req.Tag, req.Profile)
@@ -152,12 +152,43 @@ func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 		helper.WriteOCIErrror(w, http.StatusBadRequest, e)
 		return
 	}
+	prf, found, err := h.mag.Database.Profile_Get_ByLabel(ctx, req.Profile)
+	if err != nil {
+		err := errors.Wrapf(err, "failed to fetch profile '%s'", req.Profile)
+		l.Error(err)
+		span.RecordError(err)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("INTERNAL_ERROR", err.Error(), det)
+		helper.WriteOCIErrror(w, http.StatusBadRequest, e)
+		return
+	}
+	if !found {
+		err := errors.Errorf("profile '%s' not found", req.Profile)
+		l.Error(err)
+		span.RecordError(err)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("INTERNAL_ERROR", err.Error(), det)
+		helper.WriteOCIErrror(w, http.StatusBadRequest, e)
+		return
+	}
+
 	switch req.ContentType {
 	case "application/vnd.docker.distribution.manifest.v2+json":
 		// Put manifest in object store
 		m, err := h.mag.StoreManifestUpload(ctx, req, buf)
 		if err != nil {
 			err := errors.Wrapf(err, "failed to store manifest")
+			l.Error(err)
+			span.RecordError(err)
+			det := helper.NewDetailFromReq(req)
+			e := helper.NewErrPayload("INTERNAL_ERROR", err.Error(), det)
+			helper.WriteOCIErrror(w, http.StatusBadRequest, e)
+			return
+		}
+		// TODO: 2023-04-14 Unwind profile for uploaded manifest
+		err = h.mag.Database.Profile_UnwindRules(ctx, prf.ID, m.ID)
+		if err != nil {
+			err := errors.Wrapf(err, "failed to unwind profile '%s' for manifest '%s'", req.Profile, m.Label)
 			l.Error(err)
 			span.RecordError(err)
 			det := helper.NewDetailFromReq(req)
