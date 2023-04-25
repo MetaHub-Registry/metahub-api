@@ -4,6 +4,7 @@
         "localhost:80",
         "metahub:80",
         "dev:80",
-        "ce:80"
+        "ce:80",
+        "registry:5050"
       ]
 }

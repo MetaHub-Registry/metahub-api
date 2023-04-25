@@ -33,6 +33,12 @@ services:
     volumes:
      - neo4j:/var/lib/neo4j/data
      - ${PWD}/misc/backup:/backup
+  registry:
+    image: quay.io/cqnib/testcontainer-registry:2023-04-24.1-amd64
+    ports:
+      - 5050:5050
+    networks:
+      - mh-data
 volumes:
   neo4j:
 

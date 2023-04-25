@@ -56,7 +56,7 @@ func Test_CollectionGetOne(t *testing.T) {
 	bs.AddBootstrap("users")
 	bs.AddBootstrap("platforms:generic")
 	bs.AddBootstrap("profile:profiles/cpu/generic.yaml")
-	bs.AddBootstrap("config:ft_arm")
+	bs.AddBootstrap("config:ft_arm64")
 	bs.AddBootstrap("config:ft_amd64")
 	bs.AddBootstrap("upstream:ft_arm64")
 	bs.AddBootstrap("upstream:ft_amd64")
@@ -115,10 +115,9 @@ func Test_CollectionGetAll(t *testing.T) {
 	bs.SetYAMLPrefix("../../../../misc/yaml")
 	bs.AddBootstrap("users")
 	bs.AddBootstrap("platforms:generic")
-	bs.AddBootstrap("annotation:org.supercontainers.hardware.cpu.target:platform")
 	bs.AddBootstrap("rules:rules/generic/linux.yaml")
 	bs.AddBootstrap("profile:profiles/generic.yaml")
-	bs.AddBootstrap("config:ft_arm")
+	bs.AddBootstrap("config:ft_arm64")
 	bs.AddBootstrap("config:ft_amd64")
 	bs.AddBootstrap("upstream:ft_arm64")
 	bs.AddBootstrap("upstream:ft_amd64")
@@ -138,7 +137,11 @@ func Test_CollectionGetAll(t *testing.T) {
 	//bs.PostTestSleep = 300
 	ctx := context.Background()
 	br, err := SetupTest(ctx, bs)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Log(err)
+		TeardownTest(bs)
+		t.Fatal(err)
+	}
 	defer TeardownTest(bs)
 	_ = br
 	testRepo := "qnib"
