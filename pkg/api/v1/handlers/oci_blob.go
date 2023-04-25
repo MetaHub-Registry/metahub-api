@@ -12,6 +12,7 @@ import (
 	"github.com/metahub-registry/metahub-api/pkg/lib/helper"
 	"github.com/metahub-registry/metahub-core/pkg/tracing"
 	"github.com/metahub-registry/metahub-core/pkg/types"
+	"github.com/metahub-registry/metahub-core/pkg/upstream"
 	"github.com/metahub-registry/metahub-core/pkg/utils"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -303,6 +304,10 @@ func (h Handlers) BlobUploadPostHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
+	l := logrus.WithFields(logrus.Fields{
+		"package": "api/handler/oci_blob.go",
+		"func":    "BlobHandler",
+	})
 	ctx := r.Context()
 	ctx, span := tracer.Start(ctx, "BlobHandler")
 	req := types.NewRequest(ctx, r)
@@ -319,57 +324,100 @@ func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
 		msg += fmt.Sprintf("%s)", req.Tag)
 	}
 	logrus.Info(msg)
-	cfg, found, err := h.mag.ConfigBlob_GetByHTTPRequest(ctx, r)
+	// Check for blob in Graph
+	up := upstream.UpstreamTriple{
+		Reg:    req.Host,
+		Repo:   req.Repo,
+		Tag:    req.Tag,
+		Digest: digest.Digest(req.Digest),
+	}
+	mediaType, blobFound, err := h.mag.BlobExists(ctx, up)
 	if err != nil {
-		// 1. FALSE
-		msg := fmt.Sprintf("failed to fetch config: %v", err)
-		logrus.Error(msg)
-		msg = "failed to fetch config blob"
+		msg := fmt.Sprintf("failed to check if blob exists: %v", err)
+		l.Error(msg)
+		err := errors.New(msg)
+		span.RecordError(err)
 		det := helper.NewDetailFromReq(req)
 		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
 		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 		return
 	}
-	if found {
-		if r.Method == "GET" {
-			cfg.WriteWWW(w)
-		} else {
-			cfg.WriteWWWHeader(w)
-		}
+	if !blobFound {
+		msg := fmt.Sprintf("blob for w/ digest '%s' not found", utils.ShortenDigest(req.Digest))
+		l.Error(msg)
+		span.AddEvent("log", trace.WithAttributes(
+			attribute.String("log.severity", "debug"),
+			attribute.String("log.message", msg),
+		))
+		// Not found
+		msg = "could not find blob"
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("NAME_UNKNOWN", msg, det)
+		span.SetStatus(http.StatusNotFound, e.Message)
+		helper.WriteOCIErrror(w, http.StatusNotFound, e)
 		return
 	}
-	// OK, let's check if it is a layer
-	// If redirect is enabled, we need to fetch the PreSignedURL
-	if r.Method == "GET" && h.mag.Minio.GetLayerBucketConfig().Redirect {
-		psUrl, err := h.mag.Layer_GetPresignedUrlByHTTPRequest(r)
+	switch mediaType {
+	case "application/vnd.docker.image.rootfs.diff.tar.gzip":
+		// If redirect is enabled, we need to fetch the PreSignedURL
+		if r.Method == "GET" && h.mag.Minio.GetLayerBucketConfig().Redirect {
+			psUrl, err := h.mag.Layer_GetPresignedUrlByHTTPRequest(r)
+			if err != nil {
+				det := helper.NewDetailFromReq(req)
+				e := helper.NewErrPayload("INTERNAL_ERROR", "failed to fetch layer presigned url", det)
+				helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
+			} else {
+				tracing.SpanLog(span, "debug", "307 temporariy redirect blob from '%s' to MinIO/S3 presigend URL: %s", req.Repo, psUrl)
+				span.SetStatus(http.StatusTemporaryRedirect, "temporariy redirect blob to MinIO/S3 presigend URL")
+				http.Redirect(w, r, psUrl, http.StatusTemporaryRedirect)
+				return
+			}
+		}
+		layer, found, err := h.mag.Layer_GetByHTTPRequest(r)
 		if err != nil {
+			// 1. FALSE
+			msg := fmt.Sprintf("failed to fetch layer: %v", err)
+			logrus.Error(msg)
+			msg = "failed to fetch layer blob"
 			det := helper.NewDetailFromReq(req)
-			e := helper.NewErrPayload("INTERNAL_ERROR", "failed to fetch layer presigned url", det)
+			e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+			span.SetStatus(http.StatusInternalServerError, e.Message)
 			helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
-		} else {
-			tracing.SpanLog(span, "debug", "307 temporariy redirect blob from '%s' to MinIO/S3 presigend URL: %s", req.Repo, psUrl)
-			span.SetStatus(http.StatusTemporaryRedirect, "temporariy redirect blob to MinIO/S3 presigend URL")
-			http.Redirect(w, r, psUrl, http.StatusTemporaryRedirect)
 			return
 		}
-	}
-	layer, found, err := h.mag.Layer_GetByHTTPRequest(r)
-	if err != nil {
-		// 1. FALSE
-		msg := fmt.Sprintf("failed to fetch layer: %v", err)
-		logrus.Error(msg)
-		msg = "failed to fetch layer blob"
+		if found {
+			if r.Method == "GET" {
+				layer.WriteWWW(w)
+			}
+			layer.WriteWWWHeader(w)
+			return
+		}
+	case "application/vnd.oci.image.config.v1+json":
+		cfg, found, err := h.mag.ConfigBlob_GetByHTTPRequest(ctx, r)
+		if err != nil {
+			// 1. FALSE
+			msg := fmt.Sprintf("failed to fetch config: %v", err)
+			logrus.Error(msg)
+			msg = "failed to fetch config blob"
+			det := helper.NewDetailFromReq(req)
+			e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+			helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
+			return
+		}
+		if found {
+			if r.Method == "GET" {
+				cfg.WriteWWW(w)
+			} else {
+				cfg.WriteWWWHeader(w)
+			}
+			return
+		}
+	default:
+		msg := fmt.Sprintf("unkown mediaType '%s'", mediaType)
+		l.Error(msg)
 		det := helper.NewDetailFromReq(req)
 		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
-		span.SetStatus(http.StatusInternalServerError, e.Message)
 		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
-		return
-	}
-	if found {
-		if r.Method == "GET" {
-			layer.WriteWWW(w)
-		}
-		layer.WriteWWWHeader(w)
 		return
 	}
 	// Not found

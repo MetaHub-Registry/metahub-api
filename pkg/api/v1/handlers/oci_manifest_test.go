@@ -26,7 +26,7 @@ func Test_UploadManifest_FTarm_Short(t *testing.T) {
 	bs.AddBootstrap("platforms:generic")
 	bs.AddBootstrap("rules:rules/generic/linux.yaml")
 	bs.AddBootstrap("profile:profiles/generic.yaml")
-	bs.AddBootstrap("config:ft_arm")
+	bs.AddBootstrap("config:ft_arm64")
 	bs.AddBootstrap("config:ft_amd64")
 	bs.AddBootstrap("upstream:ft_arm64")
 	bs.AddBootstrap("upstream:ft_amd64")
@@ -79,10 +79,9 @@ func Test_UploadManifest_FTarm(t *testing.T) {
 	bs.SetYAMLPrefix("../../../../misc/yaml")
 	bs.AddBootstrap("users")
 	bs.AddBootstrap("platforms:generic")
-	bs.AddBootstrap("annotation:org.supercontainers.hardware.cpu.target:platform")
 	bs.AddBootstrap("rules:rules/generic/linux.yaml")
 	bs.AddBootstrap("profile:profiles/generic.yaml")
-	bs.PostTestSleep = 180
+	//bs.PostTestSleep = 180
 	br, err := SetupTest(bs)
 	assert.NoError(t, err)
 	defer TeardownTest(bs)

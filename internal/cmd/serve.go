@@ -34,6 +34,7 @@ func init() {
 	// parseCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 	serveCmd.Flags().Int("port", 80, "The API port")
 	serveCmd.Flags().String("user-db", "", "The user database file to use - will be overwritten")
+	serveCmd.Flags().String("registries", "", "Backend registries to add (comma-separated)")
 }
 
 func sCmd(cmd *cobra.Command, args []string) {

@@ -5,15 +5,23 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/metahub-registry/metahub-api/pkg/lib/helper"
 	"github.com/metahub-registry/metahub-core/pkg/types"
+	"github.com/metahub-registry/metahub-core/pkg/upstream"
+	"github.com/metahub-registry/metahub-core/pkg/utils"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 func (h Handlers) ManifestHeadHandler(w http.ResponseWriter, r *http.Request) {
+	l := logrus.WithFields(logrus.Fields{
+		"package": "api/handler/oci_manifest.go",
+		"func":    "ManifestHeadHandler",
+	})
 	// Check whether it is a manifest or manifest list
 	ctx := r.Context()
 	ctx, span := tracer.Start(ctx, "ManifestHeadHandler")
@@ -23,39 +31,117 @@ func (h Handlers) ManifestHeadHandler(w http.ResponseWriter, r *http.Request) {
 		attribute.Key("method").String(r.Method),
 		attribute.Key("repo").String(req.Repo),
 	)
+	up := upstream.UpstreamTriple{
+		Reg:     req.Host,
+		Repo:    req.Repo,
+		Tag:     req.Tag,
+		Digest:  digest.Digest(req.Digest),
+		Profile: req.Profile,
+	}
+	if req.Digest != "" {
+		span.SetAttributes(attribute.Key("digest").String(req.Digest))
+		l.Infof("%-5s ManifestHeadHandler(%s@sha256:%s) Profile:%s", r.Method, req.Repo, utils.ShortenDigest(req.Digest), req.Profile)
+	} else {
+		l.Infof("%-5s ManifestHeadHandler(%s:%s) Profile:%s", r.Method, req.Repo, req.Tag, req.Profile)
+	}
 
-	m, found, err := h.mag.Manifest_GetByHTTPRequest(ctx, r)
+	colFound, err := h.mag.Database.CollectionExists(ctx, up)
 	if err != nil {
-		// 1. FALSE
-		msg := fmt.Sprintf("failed to fetch ManifestList: %v", err)
-		logrus.Error(msg)
-		det := helper.NewDetailFromReq(req)
-		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
-		helper.WriteOCIErrror(w, http.StatusNotFound, e)
-		return
-	}
-	if found {
-		m.WriteWWWHeader(w)
-		return
-	}
-	ml, found, err := h.mag.ManifestList_GetByHTTPRequest(ctx, r)
-	if err != nil {
-		// 1. FALSE
-		msg := fmt.Sprintf("failed to fetch ManifestList: %v", err)
-		logrus.Error(msg)
+		msg := fmt.Sprintf("failed to check if collection exists: %v", err)
+		l.Error(msg)
+		err := errors.New(msg)
+		span.RecordError(err)
 		det := helper.NewDetailFromReq(req)
 		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
 		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 		return
 	}
-	if found {
-		logrus.Warnf("ManifestList found for %s/%s: \n%v", req.Repo, req.Tag, ml)
-		ml.WriteWWWHeader(w)
+
+	if !colFound {
+		l.Infof("Collection NOT found for %s/%s", req.Repo, req.Tag)
+		e := h.mag.HeadManifestNotFound(ctx, req)
+		if e != nil {
+			err := errors.Wrap(e, "failed to HeadManifestNotFound")
+			span.RecordError(err)
+			l.Error(err)
+			det := helper.NewDetailFromReq(req)
+			e := helper.NewErrPayload("INTERNAL_ERROR", err.Error(), det)
+			helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
+			return
+		}
+	}
+	l.Infof("Collection found for %s/%s", req.Repo, req.Tag)
+	mediaType, maniFound, err := h.mag.Database.ManifestExists(ctx, up)
+	if err != nil {
+		msg := fmt.Sprintf("failed to check if collection exists: %v", err)
+		l.Error(msg)
+		err := errors.New(msg)
+		span.RecordError(err)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
+		return
+	}
+	if !maniFound {
+		e := h.mag.HeadManifestNotFound(ctx, req)
+		if e != nil {
+			err := errors.Wrap(e, "failed to HeadManifestNotFound")
+			span.RecordError(err)
+			l.Error(err)
+			det := helper.NewDetailFromReq(req)
+			e := helper.NewErrPayload("INTERNAL_ERROR", err.Error(), det)
+			helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
+			return
+		}
+	}
+	msg := fmt.Sprintf("Manifest found with type '%s'", mediaType)
+	span.AddEvent("log", trace.WithAttributes(
+		attribute.String("log.severity", "debug"),
+		attribute.String("log.message", msg),
+	))
+	l.Debug(msg)
+	switch mediaType {
+	case "application/vnd.oci.image.index.v1+json":
+		ml, found, err := h.mag.ManifestList_GetByHTTPRequest(ctx, r)
+		if err != nil {
+			// 1. FALSE
+			msg := fmt.Sprintf("failed to fetch ManifestList: %v", err)
+			l.Error(msg)
+			det := helper.NewDetailFromReq(req)
+			e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+			helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
+			return
+		}
+		if found {
+			ml.WriteWWW(w)
+			return
+		}
+	case "application/vnd.oci.image.manifest.v1+json":
+		m, found, err := h.mag.Manifest_GetByHTTPRequest(ctx, r)
+		if err != nil {
+			// 1. FALSE
+			msg := fmt.Sprintf("failed to fetch Manifest: %v", err)
+			l.Error(msg)
+			det := helper.NewDetailFromReq(req)
+			e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+			helper.WriteOCIErrror(w, http.StatusNotFound, e)
+			return
+		}
+		if found {
+			m.WriteWWW(w)
+			return
+		}
+	default:
+		msg := fmt.Sprintf("unkown mediaType '%s'", mediaType)
+		l.Error(msg)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 		return
 	}
 	imgName := fmt.Sprintf("%s/%s", req.Repo, req.Tag)
-	msg := fmt.Sprintf("failed to fetch ManifestList for collection '%s'", imgName)
-	logrus.Error(msg)
+	msg = fmt.Sprintf("failed to fetch ManifestList for collection '%s'", imgName)
+	l.Error(msg)
 	det := helper.NewDetailFromReq(req)
 	e := helper.NewErrPayload("MANIFEST_UNKNOWN", msg, det)
 	helper.WriteOCIErrror(w, http.StatusNotFound, e)
@@ -79,6 +165,10 @@ func (h Handlers) ManifestDelHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h Handlers) ManifestGetHandler(w http.ResponseWriter, r *http.Request) {
+	l := logrus.WithFields(logrus.Fields{
+		"package": "api/handler/oci_manifest.go",
+		"func":    "ManifestGetHandler",
+	})
 	ctx := r.Context()
 	ctx, span := tracer.Start(ctx, "ManifestGetHandler")
 	defer span.End()
@@ -86,40 +176,101 @@ func (h Handlers) ManifestGetHandler(w http.ResponseWriter, r *http.Request) {
 	span.SetAttributes(
 		attribute.Key("method").String(r.Method),
 		attribute.Key("repo").String(req.Repo),
+		attribute.Key("tag").String(req.Tag),
+		attribute.Key("digest").String(req.Digest),
 	)
-	ml, found, err := h.mag.ManifestList_GetByHTTPRequest(ctx, r)
+	l = l.WithFields(logrus.Fields{
+		"repo":   req.Repo,
+		"tag":    req.Tag,
+		"digest": utils.ShortenDigest(req.Digest),
+	})
+	up := upstream.UpstreamTriple{
+		Reg:     req.Host,
+		Repo:    req.Repo,
+		Tag:     req.Tag,
+		Digest:  digest.Digest(req.Digest),
+		Profile: req.Profile,
+	}
+	if req.Digest != "" {
+		span.SetAttributes(attribute.Key("digest").String(req.Digest))
+		l.Infof("%-5s ManifestGetHandler(%s@sha256:%s) Profile:%s", r.Method, req.Repo, utils.ShortenDigest(req.Digest), req.Profile)
+	} else {
+		l.Infof("%-5s ManifestGetHandler(%s:%s) Profile:%s", r.Method, req.Repo, req.Tag, req.Profile)
+	}
+
+	mediaType, colFound, err := h.mag.Database.ManifestExists(ctx, up)
 	if err != nil {
-		// 1. FALSE
-		msg := fmt.Sprintf("failed to fetch ManifestList: %v", err)
-		logrus.Error(msg)
+		msg := fmt.Sprintf("failed to check if collection exists: %v", err)
+		l.Error(msg)
+		err := errors.New(msg)
+		span.RecordError(err)
 		det := helper.NewDetailFromReq(req)
 		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
 		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 		return
 	}
-	if found {
-		ml.WriteWWW(w)
-		return
-	}
-	m, found, err := h.mag.Manifest_GetByHTTPRequest(ctx, r)
-	if err != nil {
-		// 1. FALSE
-		msg := fmt.Sprintf("failed to fetch Manifest: %v", err)
-		logrus.Error(msg)
+	if !colFound {
+		msg := fmt.Sprintf("collection for manifest(list) '%s@%s' not found", req.Repo, utils.ShortenDigest(req.Digest))
+		l.Error(msg)
+		span.AddEvent("log", trace.WithAttributes(
+			attribute.String("log.severity", "debug"),
+			attribute.String("log.message", msg),
+		))
 		det := helper.NewDetailFromReq(req)
 		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
-		helper.WriteOCIErrror(w, http.StatusNotFound, e)
+		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 		return
 	}
-	if found {
-		m.WriteWWW(w)
-		return
-	} else {
-		msg := fmt.Sprintf("no manifest '%s:%s' found for profile '%s'", req.Repo, req.Tag, req.Profile)
+	msg := fmt.Sprintf("Manifest found with type '%s'", mediaType)
+	span.AddEvent("log", trace.WithAttributes(
+		attribute.String("log.severity", "debug"),
+		attribute.String("log.message", msg),
+	))
+	l.Debug(msg)
+	switch mediaType {
+	case "application/vnd.oci.image.index.v1+json":
+		ml, found, err := h.mag.ManifestList_GetByHTTPRequest(ctx, r)
+		if err != nil {
+			// 1. FALSE
+			msg := fmt.Sprintf("failed to fetch ManifestList: %v", err)
+			l.Error(msg)
+			det := helper.NewDetailFromReq(req)
+			e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+			helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
+			return
+		}
+		if found {
+			ml.WriteWWW(w)
+			return
+		}
+	case "application/vnd.oci.image.manifest.v1+json":
+		m, found, err := h.mag.Manifest_GetByHTTPRequest(ctx, r)
+		if err != nil {
+			// 1. FALSE
+			msg := fmt.Sprintf("failed to fetch Manifest: %v", err)
+			l.Error(msg)
+			det := helper.NewDetailFromReq(req)
+			e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+			helper.WriteOCIErrror(w, http.StatusNotFound, e)
+			return
+		}
+		if found {
+			m.WriteWWW(w)
+			return
+		}
+	default:
+		msg := fmt.Sprintf("unkown mediaType '%s'", mediaType)
+		l.Error(msg)
 		det := helper.NewDetailFromReq(req)
-		e := helper.NewErrPayload("MANIFEST_UNKNOWN", msg, det)
-		helper.WriteOCIErrror(w, http.StatusNotFound, e)
+		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
+		return
 	}
+	msg = fmt.Sprintf("no manifest '%s:%s' found for profile '%s'", req.Repo, req.Tag, req.Profile)
+	det := helper.NewDetailFromReq(req)
+	e := helper.NewErrPayload("MANIFEST_UNKNOWN", msg, det)
+	helper.WriteOCIErrror(w, http.StatusNotFound, e)
+
 }
 
 func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {

@@ -66,6 +66,11 @@ func Initialize(mag magazine.Magazine) *chi.Mux {
 		r.Get("/{image}/manifests/{reference}", h.ManifestGetHandler)
 		r.Head("/{repo}/{image}/manifests/{reference}", h.ManifestHeadHandler)
 		r.Get("/{repo}/{image}/manifests/{reference}", h.ManifestGetHandler)
+		r.Head("/{repo}/{repo2}/{image}/manifests/{reference}", h.ManifestHeadHandler)
+		r.Get("/{repo}/{repo2}/{image}/manifests/{reference}", h.ManifestGetHandler)
+		r.Head("/{repo}/{repo2}/{repo3}/{image}/manifests/{reference}", h.ManifestHeadHandler)
+		r.Get("/{repo}/{repo2}/{repo3}/{image}/manifests/{reference}", h.ManifestGetHandler)
+
 		//// Upload Manifest
 		r.Put("/{image}/manifests/{reference}", h.ManifestPutHandler)
 		r.Put("/{repo}/{image}/manifests/{reference}", h.ManifestPutHandler)
