@@ -37,14 +37,18 @@ func Test_BlobHandler_DirectPost(t *testing.T) {
 	//bs.AddBootstrap("layer:qnib/test")
 	ctx := context.Background()
 	br, err := SetupTest(ctx, bs)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer TeardownTest(bs)
 	testRepo := "qnib"
 	testImage := "test"
 	testProfile := "generic"
 	/// Request
 	token, err := br.Get("user:test#bearer")
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	w, r := createNewHTTPTest(http.MethodPut, map[string]string{
 		"repo":      testRepo,
 		"image":     testImage,
@@ -94,15 +98,21 @@ func Test_BlobHandler_LayerTest(t *testing.T) {
 	bs.AddBootstrap("layer:0:ft_arm64")
 	//bs.PostTestSleep = 60
 	br, err := SetupTest(ctx, bs)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer TeardownTest(bs)
 	/// Request
 	token, err := br.Get("user:test#bearer")
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodHead, "/{repo}/{image}/blobs/{reference}", nil)
 	ftArm64L0Dig, err := br.Get("layer:0:ft_arm64#digest")
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("repo", "qnib")
 	rctx.URLParams.Add("image", "featuretest")
@@ -110,7 +120,9 @@ func Test_BlobHandler_LayerTest(t *testing.T) {
 	r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
 	r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	_, found, err := h.mag.ConfigBlob_GetByHTTPRequest(ctx, r)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	assert.False(t, found)
 	/// HEAD
 	h.BlobHandler(w, r)
@@ -147,7 +159,9 @@ func Test_BlobHandler_Redirect_LayerTest(t *testing.T) {
 	//bs.PostTestSleep = 300
 	ctx := context.Background()
 	br, err := SetupTest(ctx, bs)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	_ = br
 	defer TeardownTest(bs)
 	/// Vars
@@ -155,12 +169,16 @@ func Test_BlobHandler_Redirect_LayerTest(t *testing.T) {
 	//testProfile := "generic"
 	/// Request
 	token, err := br.Get("user:test#bearer")
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodHead, "/{repo}/{image}/blobs/{reference}", nil)
 	rctx := chi.NewRouteContext()
 	ftArm64L0Dig, err := br.Get("layer:0:ft_arm64#digest")
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	rctx.URLParams.Add("repo", testRepo)
 	rctx.URLParams.Add("image", "featuretest")
 	rctx.URLParams.Add("reference", ftArm64L0Dig)
@@ -183,7 +201,9 @@ func Test_Upload_UploadBlobSequence(t *testing.T) {
 	//bs.PostTestSleep = 300
 	ctx := context.Background()
 	br, err := SetupTest(ctx, bs)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	_ = br
 	defer TeardownTest(bs)
 	/// Vars
@@ -191,7 +211,9 @@ func Test_Upload_UploadBlobSequence(t *testing.T) {
 	testProfile := "generic"
 	/// Request
 	token, err := br.Get("user:test#bearer")
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	// POST with Data
 	w := httptest.NewRecorder()
 	l0bytes := types.FT_arm_Layer0Byte()
@@ -257,7 +279,9 @@ func Test_Upload_UploadBlobSequence_Split(t *testing.T) {
 	//bs.SetSqlite("Desktop/metahub.db")
 	ctx := context.Background()
 	br, err := SetupTest(ctx, bs)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	_ = br
 	defer TeardownTest(bs)
 	/// Vars
@@ -265,7 +289,9 @@ func Test_Upload_UploadBlobSequence_Split(t *testing.T) {
 	testProfile := "generic"
 	/// Request
 	token, err := br.Get("user:test#bearer")
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	// POST with Data
 	w := httptest.NewRecorder()
 	l0bytes := types.FT_arm_Layer0Byte()

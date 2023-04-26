@@ -357,8 +357,14 @@ func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
 		helper.WriteOCIErrror(w, http.StatusNotFound, e)
 		return
 	}
+	msg = fmt.Sprintf("blob for w/ digest '%s' found: %s", utils.ShortenDigest(req.Digest), mediaType)
+	span.AddEvent("log", trace.WithAttributes(
+		attribute.String("log.severity", "debug"),
+		attribute.String("log.message", msg),
+	))
+	l.Debug(msg)
 	switch mediaType {
-	case "application/vnd.docker.image.rootfs.diff.tar.gzip":
+	case "application/vnd.docker.image.rootfs.diff.tar.gzip", "unknownLayer":
 		// If redirect is enabled, we need to fetch the PreSignedURL
 		if r.Method == "GET" && h.mag.Minio.GetLayerBucketConfig().Redirect {
 			psUrl, err := h.mag.Layer_GetPresignedUrlByHTTPRequest(r)
@@ -392,7 +398,7 @@ func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
 			layer.WriteWWWHeader(w)
 			return
 		}
-	case "application/vnd.oci.image.config.v1+json":
+	case "application/vnd.oci.image.config.v1+json", "unknownConfig":
 		cfg, found, err := h.mag.ConfigBlob_GetByHTTPRequest(ctx, r)
 		if err != nil {
 			// 1. FALSE

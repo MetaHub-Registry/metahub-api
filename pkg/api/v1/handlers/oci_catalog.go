@@ -16,8 +16,7 @@ func (h Handlers) CatalogGetHandler(w http.ResponseWriter, r *http.Request) {
 	req := types.NewRequest(ctx, r)
 	msg := fmt.Sprintf("%-5s CatalogGetHandler(%s)", r.Method, req.Repo)
 	logrus.Info(msg)
-
-	res, err := h.mag.Collections_GetCatalog(req)
+	res, err := h.mag.Collections_GetCatalog(ctx, req)
 	if err != nil {
 		msg := fmt.Sprintf("failed to fetch catalog: %v", err)
 		logrus.Error(msg)
