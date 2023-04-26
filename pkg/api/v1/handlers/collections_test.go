@@ -72,16 +72,24 @@ func Test_CollectionGetOne(t *testing.T) {
 	//bs.PostTestSleep = 180
 	ctx := context.Background()
 	br, err := SetupTest(ctx, bs)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer TeardownTest(bs)
 	_ = br
 	/// Request
 	token, err := br.Get("user:test#bearer")
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	colID, err := br.GetInt64("collection:ft#id")
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	colTagID, err := br.GetInt64("tag:arm64#id")
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Tests
 	testProfile := "generic"
 	reqBody := ReqPayload{
@@ -104,7 +112,9 @@ func Test_CollectionGetOne(t *testing.T) {
 	assert.Equal(t, http.StatusOK, wGet.Code)
 	var resp CollectionResponse
 	err = json.Unmarshal(wGet.Body.Bytes(), &resp)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	assert.Equal(t, "qnib/featuretest", resp.Collection.Repo)
 	assert.Equal(t, "arm64", resp.Collection.Tag)
 }
@@ -148,7 +158,9 @@ func Test_CollectionGetAll(t *testing.T) {
 	testProfile := "generic"
 	/// Request
 	token, err := br.Get("user:test#bearer")
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Tests
 	reqBody := ReqRepo{
 		Repo: "qnib",
@@ -168,7 +180,9 @@ func Test_CollectionGetAll(t *testing.T) {
 	}
 	var resp CollectionsResponse
 	err = json.Unmarshal(wGet.Body.Bytes(), &resp)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	assert.Equal(t, 0, resp.SlugEnd)
 	assert.Len(t, resp.Next, 1)
 	// qnib/featuretest
@@ -191,7 +205,9 @@ func Test_CollectionGetAll(t *testing.T) {
 	var respFT CollectionsResponse
 	body := wGetFT.Body.Bytes()
 	err = json.Unmarshal(body, &respFT)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if false {
 		var prettyJSON bytes.Buffer
 		error := json.Indent(&prettyJSON, body, "", "\t")

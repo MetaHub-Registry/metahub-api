@@ -59,7 +59,7 @@ func (h Handlers) ManifestHeadHandler(w http.ResponseWriter, r *http.Request) {
 
 	if !colFound {
 		l.Infof("Collection NOT found for %s/%s", req.Repo, req.Tag)
-		e := h.mag.HeadManifestNotFound(ctx, req)
+		colFound, e := h.mag.HeadManifestNotFound(ctx, req)
 		if e != nil {
 			err := errors.Wrap(e, "failed to HeadManifestNotFound")
 			span.RecordError(err)
@@ -68,6 +68,15 @@ func (h Handlers) ManifestHeadHandler(w http.ResponseWriter, r *http.Request) {
 			e := helper.NewErrPayload("INTERNAL_ERROR", err.Error(), det)
 			helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 			return
+		}
+		if !colFound {
+			imgName := fmt.Sprintf("%s/%s", req.Repo, req.Tag)
+			msg := fmt.Sprintf("failed to fetch collection upstream '%s'", imgName)
+			span.AddEvent("log", trace.WithAttributes(
+				attribute.String("log.severity", "debug"),
+				attribute.String("log.message", msg),
+			))
+			l.Debug(msg)
 		}
 	}
 	l.Infof("Collection found for %s/%s", req.Repo, req.Tag)
@@ -83,7 +92,7 @@ func (h Handlers) ManifestHeadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !maniFound {
-		e := h.mag.HeadManifestNotFound(ctx, req)
+		upstreamFound, e := h.mag.HeadManifestNotFound(ctx, req)
 		if e != nil {
 			err := errors.Wrap(e, "failed to HeadManifestNotFound")
 			span.RecordError(err)
@@ -93,6 +102,19 @@ func (h Handlers) ManifestHeadHandler(w http.ResponseWriter, r *http.Request) {
 			helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 			return
 		}
+		if !upstreamFound {
+			imgName := fmt.Sprintf("%s/%s", req.Repo, req.Tag)
+			msg := fmt.Sprintf("failed to fetch manifest upstream '%s'", imgName)
+			span.AddEvent("log", trace.WithAttributes(
+				attribute.String("log.severity", "debug"),
+				attribute.String("log.message", msg),
+			))
+			l.Debug(msg)
+			det := helper.NewDetailFromReq(req)
+			e := helper.NewErrPayload("MANIFEST_UNKNOWN", msg, det)
+			helper.WriteOCIErrror(w, http.StatusNotFound, e)
+		}
+
 	}
 	msg := fmt.Sprintf("Manifest found with type '%s'", mediaType)
 	span.AddEvent("log", trace.WithAttributes(
@@ -216,9 +238,10 @@ func (h Handlers) ManifestGetHandler(w http.ResponseWriter, r *http.Request) {
 			attribute.String("log.severity", "debug"),
 			attribute.String("log.message", msg),
 		))
+		msg = fmt.Sprintf("no manifest '%s:%s' found for profile '%s'", req.Repo, req.Tag, req.Profile)
 		det := helper.NewDetailFromReq(req)
-		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
-		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
+		e := helper.NewErrPayload("MANIFEST_UNKNOWN", msg, det)
+		helper.WriteOCIErrror(w, http.StatusNotFound, e)
 		return
 	}
 	msg := fmt.Sprintf("Manifest found with type '%s'", mediaType)
@@ -336,6 +359,12 @@ func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 			helper.WriteOCIErrror(w, http.StatusBadRequest, e)
 			return
 		}
+		msg := fmt.Sprintf("successfully stored maniefst with digest '%s'", m.Digest)
+		span.AddEvent("log", trace.WithAttributes(
+			attribute.String("log.severity", "debug"),
+			attribute.String("log.message", msg),
+		))
+		l.Debug(msg)
 		// TODO: 2023-04-14 Unwind profile for uploaded manifest
 		err = h.mag.Database.Profile_UnwindRules(ctx, prf.ID, m.ID)
 		if err != nil {

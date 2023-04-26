@@ -18,11 +18,15 @@ func Test_Auth_AuthHandler_Success(t *testing.T) {
 	bs.AddBootstrap("users")
 	bs.SetEmptyAll()
 	br, err := SetupTest(ctx, bs)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer TeardownTest(bs)
 	/// Request
 	token, err := br.Get("user:test#bearer")
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodHead, "/auth?account=qnib", nil)
 	r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
@@ -30,7 +34,9 @@ func Test_Auth_AuthHandler_Success(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 	var js map[string]string
 	err = json.Unmarshal(w.Body.Bytes(), &js)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	gotToken, ok := js["token"]
 	assert.True(t, ok)
 	assert.Equal(t, token, gotToken)
@@ -41,7 +47,9 @@ func Test_Auth_AuthHandler_Fail(t *testing.T) {
 	bs := utils.NewBootstrap()
 	bs.SetEmptyAll()
 	_, err := SetupTest(ctx, bs)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer TeardownTest(bs)
 	/// Request
 	w := httptest.NewRecorder()
@@ -50,7 +58,9 @@ func Test_Auth_AuthHandler_Fail(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 	var js map[string]string
 	err = json.Unmarshal(w.Body.Bytes(), &js)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	gotToken, ok := js["token"]
 	assert.True(t, ok)
 	assert.Equal(t, "REDACTED-IN-HISTORY", gotToken)
@@ -68,11 +78,15 @@ func Test_Auth_AuthMiddlewareHandler_WithUser(t *testing.T) {
 	bs.SetEmptyAll()
 	ctx := context.Background()
 	br, err := SetupTest(ctx, bs)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer TeardownTest(bs)
 	/// Request
 	token, err := br.Get("user:test#bearer")
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Real user
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodHead, "/v2", nil)
@@ -108,11 +122,15 @@ func Test_Auth_AuthMiddlewareHandler_WithScope(t *testing.T) {
 	bs.SetEmptyAll()
 	ctx := context.Background()
 	br, err := SetupTest(ctx, bs)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer TeardownTest(bs)
 	/// Request
 	token, err := br.Get("user:test#bearer")
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	w := httptest.NewRecorder()
 	url := fmt.Sprintf("/v2/%s/manifests/%s", testRepo, testTag)
 	r := httptest.NewRequest(http.MethodPut, url, nil)
@@ -120,7 +138,9 @@ func Test_Auth_AuthMiddlewareHandler_WithScope(t *testing.T) {
 	h.AuthMiddlewareHandler(w, r)
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 	token, err = br.Get("user:admin#bearer")
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	wAdmin := httptest.NewRecorder()
 
 	r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))

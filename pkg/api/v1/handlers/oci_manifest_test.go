@@ -18,7 +18,9 @@ func Test_UploadManifest_FTarm_Short(t *testing.T) {
 	testImage := "featuretest"
 	testTag := "arm64"
 	err := h.mag.Minio.EmptyAll()
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	bs := utils.NewBootstrap()
 	bs.SetEmptyAll()
 	bs.SetYAMLPrefix("../../../../misc/yaml")
@@ -37,11 +39,15 @@ func Test_UploadManifest_FTarm_Short(t *testing.T) {
 	//bs.PostTestSleep = 120
 	ctx := context.Background()
 	br, err := SetupTest(ctx, bs)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer TeardownTest(bs)
 	/// Request
 	token, err := br.Get("user:test#bearer")
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	/// Manifest
 	mani := types.FT_arm_ManifestData()
 	wManiPut, rManiPut := createNewHTTPTest(http.MethodPut, map[string]string{
@@ -73,7 +79,9 @@ func Test_UploadManifest_FTarm(t *testing.T) {
 	testTag := "latest"
 	testProfile := "generic"
 	err := h.mag.Minio.EmptyAll()
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+}
 	bs := utils.NewBootstrap()
 	bs.SetEmptyAll()
 	bs.SetYAMLPrefix("../../../../misc/yaml")
@@ -83,11 +91,15 @@ func Test_UploadManifest_FTarm(t *testing.T) {
 	bs.AddBootstrap("profile:profiles/generic.yaml")
 	//bs.PostTestSleep = 180
 	br, err := SetupTest(bs)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+}
 	defer TeardownTest(bs)
 	/// Request
 	token, err := br.Get("user:test#bearer")
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+}
 	///// LAYER0
 	l0bytes := types.FT_arm_Layer0Byte()
 	l0ref := types.FT_arm_Layer0Reference()
@@ -299,7 +311,9 @@ func Test_UploadManifest_FTarm(t *testing.T) {
 		Profile: "generic",
 	}
 	_, found, err := h.mag.Database.ManifestList_Get_ByRequest(req)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+}
 	if !found {
 		t.Fatal("ManifestList not found")
 	}
@@ -318,7 +332,9 @@ func Test_UploadManifest_FTarm(t *testing.T) {
 		"Authorization": fmt.Sprintf("Bearer %s", token),
 	}, "/{repo}/{image}/manifests/{reference}", nil)
 	ml, found, err := h.mag.ManifestList_GetByHTTPRequest(rMLGet)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+}
 	assert.True(t, found)
 	assert.Len(t, ml.Manifests, 1)
 	assert.Equal(t, mani.Digest, ml.Manifests[0].Digest)
@@ -335,7 +351,9 @@ func Test_UploadManifest_FTarm(t *testing.T) {
 		"Authorization": fmt.Sprintf("Bearer %s", token),
 	}, "/{repo}/{image}/manifests/{reference}", nil)
 	gotMani, found, err := h.mag.Manifest_GetByHTTPRequest(rManiGet)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+}
 	assert.True(t, found)
 	assert.Equal(t, mani.Digest, gotMani.Digest)
 	// Fetch Manifest by tag
@@ -351,7 +369,9 @@ func Test_UploadManifest_FTarm(t *testing.T) {
 		"Authorization": fmt.Sprintf("Bearer %s", token),
 	}, "/{repo}/{image}/manifests/{reference}", nil)
 	gotTagMani, foundTag, err := h.mag.Manifest_GetByHTTPRequest(rManiTagGet)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+}
 	assert.True(t, foundTag)
 	assert.Equal(t, mani.Digest, gotTagMani.Digest)
 }
@@ -372,7 +392,9 @@ func Test_Manifest_OCITest(t *testing.T) {
 	bs.AddBootstrap("profile:profiles/generic.yaml")
 	//bs.PostTestSleep = 300
 	err := h.mag.Minio.EmptyAll()
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	br, err := SetupTest(ctx, bs)
 	if err != nil {
 		t.Fatal(err)
@@ -380,7 +402,9 @@ func Test_Manifest_OCITest(t *testing.T) {
 	defer TeardownTest(bs)
 	_ = br
 	token, err := br.Get("user:test#bearer")
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Tests
 	testRepo := "oci"
 	testImage := "conformance"
@@ -471,13 +495,17 @@ func Test_Manifest_OCITest(t *testing.T) {
 	}, "/{repo}/{image}/manifests/{reference}", nil)
 	assert.NotNil(t, rManiDel)
 	err = h.mag.Manifest_DeleteByHTTPRequest(ctx, rManiDel)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if wManiDel.Code != http.StatusOK {
 		t.Fatalf("wManiDel.Code: %d, expected %d", wManiDel.Code, http.StatusOK)
 	}
 	// Check Collections
 	cols, err := h.mag.Database.CollectionListing_Get_ByRepoLike(ctx, testRepo)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	assert.Equal(t, 1, len(cols))
 	ct := cols[0].ColTag
 	// remove collectiontag
@@ -494,7 +522,9 @@ func Test_Manifest_OCITest(t *testing.T) {
 	}, "/{repo}/{image}/manifests/{reference}", nil)
 	assert.NotNil(t, rCTDel)
 	err = h.mag.Manifest_DeleteByHTTPRequest(ctx, rCTDel)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if wCTDel.Code != http.StatusOK {
 		t.Fatalf("wCTDel.Code: %d, expected %d", wCTDel.Code, http.StatusOK)
 	}
@@ -506,7 +536,9 @@ func Test_Manifest_OCITest(t *testing.T) {
 	assert.Equal(t, 0, len(cols))
 	/// Count CollectionTag after compute manifestlist is done
 	cnt, err := h.mag.Database.CollectionTag_CountRelationships(ct.ID)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	assert.Equal(t, int64(2), cnt)
 }
 
@@ -519,7 +551,9 @@ func Test_Manifest_OCITest_NoLayers(t *testing.T) {
 	bs.AddBootstrap("rules:rules/generic/linux.yaml")
 	bs.AddBootstrap("profile:profiles/generic.yaml")
 	err := h.mag.Minio.EmptyAll()
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	ctx := context.Background()
 	br, err := SetupTest(ctx, bs)
 	if err != nil {
@@ -528,7 +562,9 @@ func Test_Manifest_OCITest_NoLayers(t *testing.T) {
 	defer TeardownTest(bs)
 	_ = br
 	token, err := br.Get("user:test#bearer")
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Tests
 	testRepo := "oci"
 	testImage := "conformance"
@@ -608,7 +644,9 @@ func Test_Manifest_Remove(t *testing.T) {
 	bs := utils.NewBootstrap()
 	bs.SetEmptyAll()
 	err := h.mag.Minio.EmptyAll()
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+}
 	bs.AddBootstrap("users")
 	bs.AddBootstrap("platforms:generic")
 	bs.AddBootstrap("profile:profiles/cpu/generic.yaml")
@@ -619,14 +657,20 @@ func Test_Manifest_Remove(t *testing.T) {
 	bs.AddBootstrap("manifestlist:qnib/featuretest:arm64")
 	//bs.SetSqlite("Desktop/metahub.db")
 	br, err := SetupTest(bs)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+}
 	defer TeardownTest(bs)
 	_ = br
 	/// Request
 	token, err := br.Get("user:test#bearer")
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+}
 	maniDigest, err := br.Get("manifest:qnib/featuretest:arm64#digest")
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+}
 	// Remove
 	_, rManiDel := createNewHTTPTest(http.MethodDelete, map[string]string{
 		"repo":      testRepo,
@@ -640,7 +684,9 @@ func Test_Manifest_Remove(t *testing.T) {
 		"Authorization": fmt.Sprintf("Bearer %s", token),
 	}, "/{repo}/{image}/manifests/{reference}", nil)
 	err = h.mag.Manifest_DeleteByHTTPRequest(rManiDel)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+}
 	_, rManiDel2 := createNewHTTPTest(http.MethodDelete, map[string]string{
 		"repo":      testRepo,
 		"image":     testImage,

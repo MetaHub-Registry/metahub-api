@@ -37,13 +37,17 @@ func Test_ListTags(t *testing.T) {
 	//bs.PostTestSleep = 90
 	ctx := context.Background()
 	br, err := SetupTest(ctx, bs)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer TeardownTest(bs)
 	_ = br
 	/// Request
 	assert.NotNil(t, h.mag.Database)
 	token, err := br.Get("user:test#bearer")
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Tests
 	wList0, rList0 := createNewHTTPTest(http.MethodGet, map[string]string{
 		"repo":  testRepo,
@@ -61,6 +65,8 @@ func Test_ListTags(t *testing.T) {
 	//
 	var list0 types.TagResponse
 	err = json.Unmarshal(wList0.Body.Bytes(), &list0)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	assert.Equal(t, 2, len(list0.Tags))
 }
