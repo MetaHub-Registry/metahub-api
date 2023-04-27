@@ -80,13 +80,19 @@ func Initialize(mag magazine.Magazine) *chi.Mux {
 		// Blobs
 		r.Get("/{image}/blobs/{reference}", h.BlobHandler)
 		r.Get("/{repo}/{image}/blobs/{reference}", h.BlobHandler)
+		r.Get("/{repo}/{repo2}/{image}/blobs/{reference}", h.BlobHandler)
+		r.Get("/{repo}/{repo2}/{repo3}/{image}/blobs/{reference}", h.BlobHandler)
 		///// HEAD is the same w/o actually writing a body
 		r.Head("/{image}/blobs/{reference}", h.BlobHandler)
 		r.Head("/{repo}/{image}/blobs/{reference}", h.BlobHandler)
+		r.Head("/{repo}/{repo2}/{image}/blobs/{reference}", h.BlobHandler)
+		r.Head("/{repo}/{repo2}/{repo3}/{image}/blobs/{reference}", h.BlobHandler)
 
 		// Tags
 		r.Get("/{image}/tags/list", h.TagGetHandler)
 		r.Get("/{repo}/{image}/tags/list", h.TagGetHandler)
+		r.Get("/{repo}/{repo2}/{image}/tags/list", h.TagGetHandler)
+		r.Get("/{repo}/{repo2}/{repo3}/{image}/tags/list", h.TagGetHandler)
 		r.Get("/_catalog", h.CatalogGetHandler)
 		// Upload Blobs
 		r.Post("/{repo}/{image}/blobs/uploads", h.BlobUploadPostHandler)
