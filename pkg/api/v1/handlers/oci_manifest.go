@@ -44,42 +44,44 @@ func (h Handlers) ManifestHeadHandler(w http.ResponseWriter, r *http.Request) {
 	} else {
 		l.Infof("%-5s ManifestHeadHandler(%s:%s) Profile:%s", r.Method, req.Repo, req.Tag, req.Profile)
 	}
-
-	colFound, err := h.mag.Database.CollectionExists(ctx, up)
-	if err != nil {
-		msg := fmt.Sprintf("failed to check if collection exists: %v", err)
-		l.Error(msg)
-		err := errors.New(msg)
-		span.RecordError(err)
-		det := helper.NewDetailFromReq(req)
-		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
-		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
-		return
-	}
-
-	if !colFound {
-		l.Infof("Collection NOT found for %s/%s", req.Repo, req.Tag)
-		colFound, e := h.mag.HeadManifestNotFound(ctx, req)
-		if e != nil {
-			err := errors.Wrap(e, "failed to HeadManifestNotFound")
+	/*
+		// CollectionExists checks if the collection exists, in case of a tag with a tag
+		colFound, err := h.mag.Database.CollectionExists(ctx, up)
+		if err != nil {
+			msg := fmt.Sprintf("failed to check if collection exists: %v", err)
+			l.Error(msg)
+			err := errors.New(msg)
 			span.RecordError(err)
-			l.Error(err)
 			det := helper.NewDetailFromReq(req)
-			e := helper.NewErrPayload("INTERNAL_ERROR", err.Error(), det)
+			e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
 			helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 			return
 		}
 		if !colFound {
-			imgName := fmt.Sprintf("%s/%s", req.Repo, req.Tag)
-			msg := fmt.Sprintf("failed to fetch collection upstream '%s'", imgName)
-			span.AddEvent("log", trace.WithAttributes(
-				attribute.String("log.severity", "debug"),
-				attribute.String("log.message", msg),
-			))
-			l.Debug(msg)
+			l.Infof("Collection NOT found for %s/%s", req.Repo, req.Tag)
+			colFound, e := h.mag.HeadManifestNotFound(ctx, req)
+			if e != nil {
+				err := errors.Wrap(e, "failed to HeadManifestNotFound")
+				span.RecordError(err)
+				l.Error(err)
+				det := helper.NewDetailFromReq(req)
+				e := helper.NewErrPayload("INTERNAL_ERROR", err.Error(), det)
+				helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
+				return
+			}
+			if !colFound {
+				imgName := fmt.Sprintf("%s/%s", req.Repo, req.Tag)
+				msg := fmt.Sprintf("failed to fetch collection upstream '%s'", imgName)
+				span.AddEvent("log", trace.WithAttributes(
+					attribute.String("log.severity", "debug"),
+					attribute.String("log.message", msg),
+				))
+				l.Debug(msg)
+			}
 		}
-	}
-	l.Infof("Collection found for %s/%s", req.Repo, req.Tag)
+
+	*/
+
 	mediaType, maniFound, err := h.mag.Database.ManifestExists(ctx, up)
 	if err != nil {
 		msg := fmt.Sprintf("failed to check if collection exists: %v", err)
@@ -91,11 +93,16 @@ func (h Handlers) ManifestHeadHandler(w http.ResponseWriter, r *http.Request) {
 		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 		return
 	}
+	var upstreamFound bool
 	if !maniFound {
-		upstreamFound, e := h.mag.HeadManifestNotFound(ctx, req)
+		var md string
+		var e error
+		md, upstreamFound, e = h.mag.HeadManifestNotFound(ctx, req)
 		if e != nil {
 			err := errors.Wrap(e, "failed to HeadManifestNotFound")
 			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			span.End()
 			l.Error(err)
 			det := helper.NewDetailFromReq(req)
 			e := helper.NewErrPayload("INTERNAL_ERROR", err.Error(), det)
@@ -103,6 +110,20 @@ func (h Handlers) ManifestHeadHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if !upstreamFound {
+			switch md {
+			case "application/vnd.docker.distribution.manifest.list.v2+json":
+				msg := fmt.Sprintf("image indexes are not supported (yet): %s", md)
+				span.SetStatus(codes.Error, msg)
+				span.AddEvent("log", trace.WithAttributes(
+					attribute.String("log.severity", "debug"),
+					attribute.String("log.message", msg),
+				))
+				l.Warn(msg)
+				det := helper.NewDetailFromReq(req)
+				e := helper.NewErrPayload("MANIFEST_UNKNOWN", msg, det)
+				helper.WriteOCIErrror(w, http.StatusNotFound, e)
+				return
+			}
 			imgName := fmt.Sprintf("%s/%s", req.Repo, req.Tag)
 			msg := fmt.Sprintf("failed to fetch manifest upstream '%s'", imgName)
 			span.AddEvent("log", trace.WithAttributes(
@@ -116,12 +137,23 @@ func (h Handlers) ManifestHeadHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 	}
-	msg := fmt.Sprintf("Manifest found with type '%s'", mediaType)
-	span.AddEvent("log", trace.WithAttributes(
-		attribute.String("log.severity", "debug"),
-		attribute.String("log.message", msg),
-	))
-	l.Debug(msg)
+	if upstreamFound {
+		mediaType = "application/vnd.oci.image.index.v1+json"
+		msg := fmt.Sprintf("Manifest was fetched upstream, set mediaType to '%s'", mediaType)
+		span.AddEvent("log", trace.WithAttributes(
+			attribute.String("log.severity", "debug"),
+			attribute.String("log.message", msg),
+		))
+		l.Debug(msg)
+
+	} else {
+		msg := fmt.Sprintf("Manifest found with type '%s'", mediaType)
+		span.AddEvent("log", trace.WithAttributes(
+			attribute.String("log.severity", "debug"),
+			attribute.String("log.message", msg),
+		))
+		l.Debug(msg)
+	}
 	switch mediaType {
 	case "application/vnd.oci.image.index.v1+json":
 		ml, found, err := h.mag.ManifestList_GetByHTTPRequest(ctx, r)
@@ -162,7 +194,7 @@ func (h Handlers) ManifestHeadHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	imgName := fmt.Sprintf("%s/%s", req.Repo, req.Tag)
-	msg = fmt.Sprintf("failed to fetch ManifestList for collection '%s'", imgName)
+	msg := fmt.Sprintf("failed to fetch ManifestList for collection '%s'", imgName)
 	l.Error(msg)
 	det := helper.NewDetailFromReq(req)
 	e := helper.NewErrPayload("MANIFEST_UNKNOWN", msg, det)
@@ -232,7 +264,7 @@ func (h Handlers) ManifestGetHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !colFound {
-		msg := fmt.Sprintf("collection for manifest(list) '%s@%s' not found", req.Repo, utils.ShortenDigest(req.Digest))
+		msg := fmt.Sprintf("Manifest for manifest(list) '%s@%s' not found", req.Repo, utils.ShortenDigest(req.Digest))
 		l.Error(msg)
 		span.AddEvent("log", trace.WithAttributes(
 			attribute.String("log.severity", "debug"),
@@ -306,9 +338,15 @@ func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 	defer span.End()
 	req := types.NewRequest(ctx, r)
 	l.Infof("%-5s ManifestPutHandler(%s, %s) Profile:%s", r.Method, req.Repo, req.Tag, req.Profile)
-	buf, err := io.ReadAll(r.Body)
-	if err != nil {
-		logrus.Fatal("request", err)
+	buf, e := io.ReadAll(r.Body)
+	if e != nil {
+		err := errors.Wrapf(e, "failed to read body")
+		span.RecordError(err)
+		l.Error(err)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("INTERNAL_ERROR", e.Error(), det)
+		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
+		return
 	}
 	span.SetAttributes(
 		attribute.Key("method").String(r.Method),
@@ -316,9 +354,9 @@ func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 		attribute.Key("body-length").Int(len(buf)),
 		attribute.Key("profile").String(req.Profile),
 	)
-	_, e := h.mag.Database.ProfileAuthorizedPushHandler(ctx, req)
+	_, e = h.mag.Database.ProfileAuthorizedPushHandler(ctx, req)
 	if e != nil {
-		err = errors.Wrapf(e, "failed to authorize push for profile '%s'", req.Profile)
+		err := errors.Wrapf(e, "failed to authorize push for profile '%s'", req.Profile)
 		span.RecordError(err)
 		l.Error(err)
 		det := helper.NewDetailFromReq(req)

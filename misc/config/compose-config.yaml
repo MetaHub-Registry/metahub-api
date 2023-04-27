@@ -25,4 +25,3 @@ logging:
 tracing:
   name: "metahub-api"
   endpoint: "http://jaeger:14268/api/traces"
-registries: "docker.io"
