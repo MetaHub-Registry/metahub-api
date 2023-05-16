@@ -47,7 +47,7 @@ func (rpl ReqPayload) ToByte() []byte {
 	return newFsConfigBytes
 }
 
-func Test_CollectionGetOne(t *testing.T) {
+func TestCollectionGetOne(t *testing.T) {
 	testRepo := "qnib"
 	testImage := "featuretest"
 	bs := utils.NewBootstrap()
@@ -55,6 +55,8 @@ func Test_CollectionGetOne(t *testing.T) {
 	bs.SetYAMLPrefix("../../../../misc/yaml")
 	bs.AddBootstrap("users")
 	bs.AddBootstrap("platforms:generic")
+	//bs.AddBootstrap("rules:rules/cpu/noop.yaml")
+	//bs.AddBootstrap("rules:rules/os/linux.yaml")
 	bs.AddBootstrap("profile:profiles/cpu/generic.yaml")
 	bs.AddBootstrap("config:ft_arm64")
 	bs.AddBootstrap("config:ft_amd64")
@@ -97,7 +99,7 @@ func Test_CollectionGetOne(t *testing.T) {
 		TagID: colTagID,
 	}
 	wGet := httptest.NewRecorder()
-	_, rGet := createNewHTTPTest(http.MethodGet, map[string]string{
+	_, rGet := utils.CreateNewHTTPTest(http.MethodGet, map[string]string{
 		"repo":  testRepo,
 		"image": testImage,
 	}, map[string]string{
@@ -119,7 +121,7 @@ func Test_CollectionGetOne(t *testing.T) {
 	assert.Equal(t, "arm64", resp.Collection.Tag)
 }
 
-func Test_CollectionGetAll(t *testing.T) {
+func TestCollectionGetAll(t *testing.T) {
 	bs := utils.NewBootstrap()
 	bs.SetEmptyAll()
 	bs.SetYAMLPrefix("../../../../misc/yaml")
@@ -166,7 +168,7 @@ func Test_CollectionGetAll(t *testing.T) {
 		Repo: "qnib",
 	}
 	wGet := httptest.NewRecorder()
-	_, rGet := createNewHTTPTest(http.MethodGet, map[string]string{}, map[string]string{
+	_, rGet := utils.CreateNewHTTPTest(http.MethodGet, map[string]string{}, map[string]string{
 		"accountName": token,
 		"userName":    testRepo,
 		"profileName": testProfile,
@@ -190,7 +192,7 @@ func Test_CollectionGetAll(t *testing.T) {
 		Repo: "qnib/featuretest",
 	}
 	wGetFT := httptest.NewRecorder()
-	_, rGetFT := createNewHTTPTest(http.MethodGet, map[string]string{}, map[string]string{
+	_, rGetFT := utils.CreateNewHTTPTest(http.MethodGet, map[string]string{}, map[string]string{
 		"accountName": token,
 		"userName":    testRepo,
 		"profileName": testProfile,

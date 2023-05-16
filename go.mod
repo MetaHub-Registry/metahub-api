@@ -5,6 +5,7 @@ go 1.19
 require (
 	github.com/StudioSol/set v1.0.0
 	github.com/chi-middleware/logrus-logger v0.2.0
+	github.com/distribution/distribution v2.8.1+incompatible
 	github.com/go-chi/chi/v5 v5.0.8
 	github.com/go-chi/cors v1.2.1
 	github.com/go-chi/render v1.0.2
@@ -53,6 +54,7 @@ require (
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/google/uuid v1.3.0 // indirect
+	github.com/h2non/filetype v1.1.3 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/inconshreveable/mousetrap v1.0.1 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
@@ -101,7 +103,6 @@ require (
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	gotest.tools/v3 v3.4.0 // indirect
 )
 
 replace github.com/metahub-registry/metahub-core => /Users/kniepbert/go/src/github.com/metahub-registry/metahub-core

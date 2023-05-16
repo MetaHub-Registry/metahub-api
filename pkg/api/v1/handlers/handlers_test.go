@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 
@@ -10,6 +11,8 @@ import (
 	"github.com/metahub-registry/metahub-core/pkg/backends/minio"
 	"github.com/metahub-registry/metahub-core/pkg/backends/neo"
 	"github.com/metahub-registry/metahub-core/pkg/backends/sqlite"
+	"github.com/metahub-registry/metahub-core/pkg/tracing"
+	"github.com/metahub-registry/metahub-core/pkg/upstream"
 	"github.com/metahub-registry/metahub-core/pkg/utils"
 )
 
@@ -17,9 +20,15 @@ const (
 	neoDb     = "test"
 	neoUser   = "neo4j"
 	neoPasswd = "test"
+	svcName   = "api-test"
 )
 
-var h Handlers
+var (
+	h               Handlers
+	regHttpURI      string
+	jeagerHttpURI   string
+	jeagerThriftURI string
+)
 
 func TestMain(m *testing.M) {
 	logrus.Info("Start TestMain")
@@ -46,6 +55,21 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		logrus.Fatal(err)
 	}
+	/// Registry
+	regC, err := upstream.SetupRegistry(ctx)
+	if err != nil {
+		logrus.Fatal(err)
+	}
+	defer regC.Terminate(ctx)
+	regHttpURI = regC.HttpURI
+	//jeager
+	jeagerC, err := tracing.SetupJeager(ctx)
+	if err != nil {
+		logrus.Fatal(err)
+	}
+	defer jeagerC.Terminate(ctx)
+	jeagerHttpURI = jeagerC.HttpURI
+	jeagerThriftURI = jeagerC.ThriftURI
 	/// Minio
 	minioC, err := minio.SetupMinio(ctx)
 	if err != nil {
@@ -83,11 +107,33 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		logrus.Fatal(err)
 	}
+	trEnd := fmt.Sprintf("http://%s/api/traces", jeagerC.ThriftURI)
+	logrus.Infof("Tracing endpoint '%s': %s", svcName, trEnd)
+	tr, err := tracing.InitTracer(svcName, trEnd)
+	if err != nil {
+		logrus.Fatalf("Could not initialize jaeger tracer: %s", err.Error())
+	}
+	trCfg := magazine.TraceCfg{
+		Enabled:  true,
+		Endpoint: jeagerC.ThriftURI,
+		Tracer:   tr,
+	}
 	mag := magazine.Magazine{
 		Minio:          min,
 		Database:       gdb,
 		UserManagement: sq,
+		Config: magazine.MagConfig{
+			Tracing: trCfg,
+		},
 	}
+	logrus.Infof("Registry: %s", regC.HttpURI)
+	mag.Config.Args = map[string]string{
+		"TEST_REGISTRY":      regC.HttpURI,
+		"TEST_JAEGER_HTTP":   jeagerC.HttpURI,
+		"TEST_JAEGER_THRIFT": jeagerC.ThriftURI,
+		"registries":         regC.HttpURI,
+	}
+	logrus.Infof("Jaeger HTTP: http://%s", jeagerC.HttpURI)
 	h = NewHandlers("test", mag)
 	code := m.Run()
 	os.Exit(code)
@@ -96,6 +142,10 @@ func TestMain(m *testing.M) {
 
 func TeardownTest(bs utils.Bootstrap) {
 	logrus.Info("> TeardownTest")
+	jh, ok := h.mag.Config.Args["TEST_JAEGER_HTTP"]
+	if ok {
+		logrus.Infof("Jaeger HTTP: http://%s", jh)
+	}
 	h.mag.Minio.PreTearDown(bs)
 	h.mag.Database.TeardownTest(bs)
 	err := h.mag.Minio.EmptyAll()
@@ -111,168 +161,3 @@ func TeardownTest(bs utils.Bootstrap) {
 func SetupTest(ctx context.Context, bs utils.Bootstrap) (br utils.BootstrapResult, err error) {
 	return h.mag.SetupTest(ctx, bs)
 }
-
-/*
-func SetupTestOLD(bs utils.Bootstrap) (br utils.BootstrapResult, err error) {
-	logrus.Debug("> SetupTest")
-	br = utils.NewBootstrapResult()
-
-	for _, b := range bs.Bootstraps {
-		sq := h.mag.SQlite
-		min := h.mag.Minio
-		switch b {
-		default:
-			err = fmt.Errorf("No Setup for '%s'", b)
-			return br, err
-		// Users/Profile/Platforms
-		case "profiles":
-			err = sqlite.Setup_Profiles(&sq, &br, "../../../../misc/yaml/profiles")
-			if err != nil {
-				return
-			}
-		case "platforms":
-			err = sqlite.Setup_Platforms(&sq, &br)
-			if err != nil {
-				return
-			}
-		case "users":
-			err = sqlite.Setup_Users(&sq, &br)
-			if err != nil {
-				return
-			}
-		// Upstream
-		case "upstreams:qnib/featuretest:arm64":
-			err = sqlite.Setup_Upstream_FTarm(&sq, &br)
-			if err != nil {
-				return
-			}
-		case "upstreams:qnib/featuretest:amd64":
-			err = sqlite.Setup_Upstream_FT_amd64(&sq, &br)
-			if err != nil {
-				err = errors.Wrap(err, "Setup_Upstream_FT_amd64")
-				return
-			}
-		// Layers
-		case "layers:qnib/featuretest:amd64":
-			err = sqlite.Setup_Layers_FT_amd64(&sq, &br)
-			if err != nil {
-				err = errors.Wrap(err, "Setup_Layers_FT_amd64")
-				return
-			}
-		case "layers:qnib/featuretest:arm64":
-			err = sqlite.Setup_Layers_FTarm(&sq, &br)
-			if err != nil {
-				return
-			}
-		/// CONFIG
-		case "config:qnib/featuretest:amd64":
-			err = sqlite.Setup_Config_FT_amd64(&sq, &br)
-			if err != nil {
-				err = errors.Wrap(err, "sqlite.Setup_Config_FT_amd64")
-				return
-			}
-			err = minio.Setup_Config_FT_amd64(&min, &br)
-			if err != nil {
-				err = errors.Wrap(err, "minio.Setup_Config_FT_amd64")
-				return
-			}
-		case "config:qnib/featuretest:arm64":
-			err = sqlite.Setup_Config_FTarm(&sq, &br)
-			if err != nil {
-				return
-			}
-			err = minio.Setup_Config_FT_arm64(&min, &br)
-			if err != nil {
-				err = errors.Wrap(err, "minio.Setup_Config_FT_arm64")
-				return
-			}
-		/// Manifests
-		case "manifest:qnib/featuretest:arm64":
-			err = sqlite.Setup_Manifest_QNIB_FeatureTest_arm(&sq, &br)
-			if err != nil {
-				return
-			}
-		case "manifest:qnib/featuretest:amd64":
-			err = sqlite.Setup_Manifest_QNIB_FeatureTest_amd(&sq, &br)
-			if err != nil {
-				err = errors.Wrap(err, "Setup_Manifest_QNIB_FeatureTest_amd")
-				return
-			}
-		/// ManifestLists
-		case "manifestlist:qnib/featuretest:amd64":
-			err = sqlite.Setup_Manifestlist_FTamd64(&sq, &br)
-			if err != nil {
-				err = errors.Wrap(err, "Setup_Manifestlist_FTamd64")
-				return
-			}
-		case "manifestlist:qnib/featuretest:arm64":
-			err = sqlite.Setup_Manifestlist_FTarm(&sq, &br)
-			if err != nil {
-				return
-			}
-		/// Collections
-		case "collection:qnib/featuretest:amd64":
-			err = sqlite.Setup_Collection_QNIB_FeatureTest_amd64(&sq, &br)
-			if err != nil {
-				err = errors.Wrap(err, "Setup_Collection_QNIB_FeatureTest_amd64")
-				return
-			}
-		case "collection:qnib/featuretest:generic":
-			err = sqlite.Setup_Collection_QNIB_FeatureTest_Generic(&sq, &br)
-			if err != nil {
-				err = errors.Wrap(err, "Setup_Collection_QNIB_FeatureTest_Generic")
-				return
-			}
-
-		case "collection:qnib/featuretest:arm64":
-			err = sqlite.Setup_Collection_QNIB_FeatureTest_arm(&sq, &br)
-			if err != nil {
-				return
-			}
-		case "filter:generic":
-			err = sqlite.Setup_Filter_Generic(&sq, &br)
-			if err != nil {
-				return
-			}
-		case "layer:qnib/test":
-			// Bootstrap
-			L1 := l1
-			repo := "qnib"
-			image := "test"
-			bu1 := types.OCIBlobUpload{
-				Digest:     L1.Digest,
-				UUID:       uuid.New(),
-				UploadUser: "test",
-				UploadProfile: "generic",
-				Repo:       fmt.Sprintf("%s/%s", repo, image),
-				BlobType:   "layer",
-			}
-			err = h.mag.StoreLayerUpload(ctx, &bu1, L1.Data)
-			if err != nil {
-				return br, err
-			}
-		case "layer-redirect:qnib/test":
-			// Bootstrap
-			L1 := l1
-			repo := "qnib"
-			image := "test"
-			bu1 := types.OCIBlobUpload{
-				Digest:     L1.Digest,
-				UUID:       uuid.New(),
-				UploadUser: "test",
-				UploadProfile: "generic",
-				Repo:       fmt.Sprintf("%s/%s", repo, image),
-				BlobType:   "layer",
-			}
-			lBc := h.mag.Minio.BucketConfig["layers"]
-			lBc.Redirect = true
-			h.mag.Minio.BucketConfig["layers"] = lBc
-			err = h.mag.StoreLayerUpload(ctx, &bu1, L1.Data)
-			if err != nil {
-				return br, err
-			}
-		}
-	}
-	return
-}
-*/

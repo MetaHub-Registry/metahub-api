@@ -11,3 +11,6 @@ misc/minio
 misc/backup
 misc/data/**
 .DS_Store
+.scannerwork/**
+.env
+misc/compose/sonarqube/**

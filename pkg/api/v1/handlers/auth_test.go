@@ -4,15 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	gCtx "github.com/gorilla/context"
 	"github.com/stretchr/testify/assert"
 	"github.com/metahub-registry/metahub-core/pkg/utils"
 )
 
-func Test_Auth_AuthHandler_Success(t *testing.T) {
+func TestAuthAuthHandlerSuccess(t *testing.T) {
 	ctx := context.Background()
 	bs := utils.NewBootstrap()
 	bs.AddBootstrap("users")
@@ -42,7 +44,7 @@ func Test_Auth_AuthHandler_Success(t *testing.T) {
 	assert.Equal(t, token, gotToken)
 }
 
-func Test_Auth_AuthHandler_Fail(t *testing.T) {
+func TestAuthAuthHandlerFail(t *testing.T) {
 	ctx := context.Background()
 	bs := utils.NewBootstrap()
 	bs.SetEmptyAll()
@@ -72,7 +74,7 @@ func Test_Auth_AuthHandler_Fail(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, w2.Code)
 }
 
-func Test_Auth_AuthMiddlewareHandler_WithUser(t *testing.T) {
+func TestAuthAuthMiddlewareHandlerWithUser(t *testing.T) {
 	bs := utils.NewBootstrap()
 	bs.AddBootstrap("users")
 	bs.SetEmptyAll()
@@ -113,7 +115,7 @@ func Test_Auth_AuthMiddlewareHandler_WithUser(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, w2.Code)
 }
 
-func Test_Auth_AuthMiddlewareHandler_WithScope(t *testing.T) {
+func TestAuthAuthMiddlewareHandlerWithScope(t *testing.T) {
 	testRepo := "test/image"
 	testTag := "tag123"
 	bs := utils.NewBootstrap()
@@ -146,5 +148,24 @@ func Test_Auth_AuthMiddlewareHandler_WithScope(t *testing.T) {
 	r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	h.AuthMiddlewareHandler(wAdmin, r)
 	assert.Equal(t, http.StatusOK, wAdmin.Code)
+	h.AuthMiddlewareFunc(wAdmin, r)
+	deb := gCtx.Get(r, "debug")
+	assert.Equal(t, 0, deb)
 
 }
+func TestAuthMiddleware(t *testing.T) {
+	expected := `{"token":"REDACTED-IN-HISTORY"}`
+	req := httptest.NewRequest(http.MethodGet, "/greet?name=john", nil)
+	w := httptest.NewRecorder()
+	h.AuthHandler(w, req)
+	res := w.Result()
+	defer res.Body.Close()
+	data, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		t.Errorf("Error: %v", err)
+	}
+
+	assert.JSONEq(t, expected, string(data))
+}
+
+//

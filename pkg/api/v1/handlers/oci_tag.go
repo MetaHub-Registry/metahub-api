@@ -16,7 +16,7 @@ func (h Handlers) TagGetHandler(w http.ResponseWriter, r *http.Request) {
 	req := types.NewRequest(ctx, r)
 	msg := fmt.Sprintf("%-5s TagGetHandler(%s)", r.Method, req.Repo)
 	logrus.Info(msg)
-	res, err := h.mag.Tags_GetList(req)
+	res, err := h.mag.TagsGetList(ctx, req)
 	if err != nil {
 		msg := fmt.Sprintf("failed to fetch tags: %v", err)
 		logrus.Error(msg)
@@ -24,13 +24,6 @@ func (h Handlers) TagGetHandler(w http.ResponseWriter, r *http.Request) {
 		det := helper.NewDetailFromReq(req)
 		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
 		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
-		return
-	}
-	if len(res.Tags) == 0 {
-		msg = "could not find repo"
-		det := helper.NewDetailFromReq(req)
-		e := helper.NewErrPayload("NAME_UNKNOWN", msg, det)
-		helper.WriteOCIErrror(w, http.StatusNotFound, e)
 		return
 	}
 	res.WriteWWW(w)
