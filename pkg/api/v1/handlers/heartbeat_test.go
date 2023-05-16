@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func Test_Heartbeat(t *testing.T) {
+func TestHeartbeat(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
 	h.HeartbeatHandler(w, req)

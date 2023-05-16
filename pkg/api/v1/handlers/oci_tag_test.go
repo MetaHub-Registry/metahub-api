@@ -12,7 +12,7 @@ import (
 	"github.com/metahub-registry/metahub-core/pkg/utils"
 )
 
-func Test_ListTags(t *testing.T) {
+func TestListTags(t *testing.T) {
 	testRepo := "qnib"
 	testImage := "featuretest"
 	bs := utils.NewBootstrap()
@@ -49,7 +49,7 @@ func Test_ListTags(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Tests
-	wList0, rList0 := createNewHTTPTest(http.MethodGet, map[string]string{
+	wList0, rList0 := utils.CreateNewHTTPTest(http.MethodGet, map[string]string{
 		"repo":  testRepo,
 		"image": testImage,
 	}, map[string]string{

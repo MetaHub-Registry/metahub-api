@@ -25,7 +25,7 @@ var (
 	}
 )
 
-func Test_BlobHandler_DirectPost(t *testing.T) {
+func TestBlobHandlerDirectPost(t *testing.T) {
 	_, l0byte := types.FT_arm_BlobUpload_Layer0()
 	bs := utils.NewBootstrap()
 	bs.SetEmptyAll()
@@ -49,7 +49,7 @@ func Test_BlobHandler_DirectPost(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	w, r := createNewHTTPTest(http.MethodPut, map[string]string{
+	w, r := utils.CreateNewHTTPTest(http.MethodPost, map[string]string{
 		"repo":      testRepo,
 		"image":     testImage,
 		"reference": l1.Digest,
@@ -68,7 +68,7 @@ func Test_BlobHandler_DirectPost(t *testing.T) {
 	}
 	assert.Equal(t, 0, w.Body.Len())
 	// POST With data
-	wDat, rDat := createNewHTTPTest(http.MethodPut, map[string]string{
+	wDat, rDat := utils.CreateNewHTTPTest(http.MethodPost, map[string]string{
 		"repo":      testRepo,
 		"image":     testImage,
 		"reference": l1.Digest,
@@ -87,7 +87,7 @@ func Test_BlobHandler_DirectPost(t *testing.T) {
 	assert.Equal(t, 0, wDat.Body.Len())
 }
 
-func Test_BlobHandler_LayerTest(t *testing.T) {
+func TestBlobHandlerLayerTest(t *testing.T) {
 	ctx := context.Background()
 	bs := utils.NewBootstrap()
 	bs.SetEmptyAll()
@@ -136,7 +136,7 @@ func Test_BlobHandler_LayerTest(t *testing.T) {
 	assert.LessOrEqual(t, w.Body.Len(), 412)
 }
 
-func Test_BlobHandler_Redirect_LayerTest(t *testing.T) {
+func TestBlobHandlerRedirectLayerTest(t *testing.T) {
 	bs := utils.NewBootstrap()
 	bs.SetEmptyAll()
 	bs.SetYAMLPrefix("../../../../misc/yaml")
@@ -190,86 +190,96 @@ func Test_BlobHandler_Redirect_LayerTest(t *testing.T) {
 	assert.Equal(t, http.StatusTemporaryRedirect, w.Code)
 }
 
-func Test_Upload_UploadBlobSequence(t *testing.T) {
+func TestUploadUploadLayer0Sequence(t *testing.T) {
+	ctx := context.Background()
 	bs := utils.NewBootstrap()
+	debug := 0
 	bs.SetEmptyAll()
 	bs.SetYAMLPrefix("../../../../misc/yaml")
 	bs.AddBootstrap("users")
 	bs.AddBootstrap("platforms:generic")
 	bs.AddBootstrap("rules:rules/generic/linux.yaml")
 	bs.AddBootstrap("profile:profiles/generic.yaml")
-	//bs.PostTestSleep = 300
-	ctx := context.Background()
+	if debug > 0 {
+		bs.PostTestSleep = debug
+	}
 	br, err := SetupTest(ctx, bs)
 	if err != nil {
+		TeardownTest(bs)
 		t.Fatal(err)
 	}
-	_ = br
+	for _, l := range br.ToLines() {
+		if debug > 0 {
+			t.Log(l)
+		}
+	}
 	defer TeardownTest(bs)
 	/// Vars
 	testRepo := "qnib"
+	br.Add("repo", testRepo)
 	testProfile := "generic"
-	/// Request
-	token, err := br.Get("user:test#bearer")
-	if err != nil {
-		t.Fatal(err)
+	br.Add("profile", testProfile)
+	testImage := "alpine"
+	br.Add("image", testImage)
+
+	// POST to get UUID
+	if w, r, e := getHttpTestLayer0UploadPostHandler(&br); e != nil {
+		t.Fatal(e)
+	} else {
+		h.BlobUploadPostHandler(w, r)
+		assert.Equal(t, http.StatusAccepted, w.Code)
+		// Fetch Upload from DB
+		gotLoc := w.Header().Get("Location")
+		uuid := w.Header().Get("Docker-Upload-UUID")
+		br.Add("uuid", uuid)
+		assert.Regexp(t, fmt.Sprintf(`/v2/qnib/alpine/blobs/uploads/%s$`, uuid), gotLoc)
 	}
-	// POST with Data
-	w := httptest.NewRecorder()
-	l0bytes := types.FT_arm_Layer0Byte()
-	l0ref := types.FT_arm_Layer0Reference()
-	r := httptest.NewRequest(http.MethodPost, "/{repo}/{image}/blobs/uploads/", bytes.NewReader(l0bytes))
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("repo", testRepo)
-	rctx.URLParams.Add("image", "alpine")
-	r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
-	gCtx.Set(r, "accountName", token)
-	gCtx.Set(r, "userName", testRepo)
-	gCtx.Set(r, "profileName", testProfile)
-	r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-	h.BlobUploadPostHandler(w, r)
-	assert.Equal(t, http.StatusAccepted, w.Code)
-	// Fetch Upload from DB
-	gotLoc := w.Header().Get("Location")
-	uuid := w.Header().Get("Docker-Upload-UUID")
-	assert.Regexp(t, fmt.Sprintf(`/v2/qnib/alpine/blobs/uploads/%s$`, uuid), gotLoc)
 	// Next we do a PATCH request
-	wPatch := httptest.NewRecorder()
-	rPatch := httptest.NewRequest(http.MethodPost, "/{repo}/{image}/blobs/uploads/{uuid}", bytes.NewReader(l0bytes))
-	rctxPatch := chi.NewRouteContext()
-	rctxPatch.URLParams.Add("repo", testRepo)
-	rctxPatch.URLParams.Add("image", "alpine")
-	rctxPatch.URLParams.Add("uuid", uuid)
-	rPatch = rPatch.WithContext(context.WithValue(rPatch.Context(), chi.RouteCtxKey, rctxPatch))
-	gCtx.Set(rPatch, "accountName", token)
-	gCtx.Set(rPatch, "userName", testRepo)
-	gCtx.Set(rPatch, "profileName", testProfile)
-	rPatch.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-	rPatch.Header.Set("Content-Type", "application/octet-stream")
-	rPatch.Header.Set("Content-Range", fmt.Sprintf("0-%d", len(l0bytes)-1))
-	rPatch.Header.Set("Content-Length", fmt.Sprintf("%d", len(l0bytes)))
-	h.BlobUploadPatchHandler(wPatch, rPatch)
-	assert.Equal(t, http.StatusAccepted, wPatch.Code)
+	if w, r, e := getHttpTestLayer0UploadPatchHandler(&br); e != nil {
+		t.Fatal(e)
+	} else {
+		h.BlobUploadPatchHandler(w, r)
+		assert.Equal(t, http.StatusAccepted, w.Code)
+	}
 	// Final PUT request
-	wPut := httptest.NewRecorder()
-	putUrl := fmt.Sprintf("/{repo}/{image}/blobs/uploads/{uuid}?digest=%s", l0ref.Digest)
-	rPut := httptest.NewRequest(http.MethodPost, putUrl, bytes.NewReader(l0bytes))
-	rctxPut := chi.NewRouteContext()
-	rctxPut.URLParams.Add("repo", testRepo)
-	rctxPut.URLParams.Add("image", "alpine")
-	rctxPut.URLParams.Add("uuid", uuid)
-	rPut = rPut.WithContext(context.WithValue(rPut.Context(), chi.RouteCtxKey, rctxPut))
-	gCtx.Set(rPut, "accountName", token)
-	gCtx.Set(rPut, "userName", testRepo)
-	gCtx.Set(rPut, "profileName", testProfile)
-	rPut.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-	h.BlobUploadPutHandler(wPut, rPut)
-	assert.Equal(t, http.StatusCreated, wPut.Code)
-	gotPutLoc := wPut.Header().Get("Location")
-	assert.Regexp(t, fmt.Sprintf(`/v2/qnib/alpine/blobs/uploads/%s$`, uuid), gotPutLoc)
+	if w, r, e := getHttpTestLayer0UploadPutHandler(&br); e != nil {
+		t.Fatal(e)
+	} else {
+		h.BlobUploadPutHandler(w, r)
+		assert.Equal(t, http.StatusCreated, w.Code)
+		gotPutLoc := w.Header().Get("Location")
+		uuid, err := br.Get("uuid")
+		if err != nil {
+			t.Fatal(err)
+		}
+		assert.Regexp(t, fmt.Sprintf(`/v2/%s/%s/blobs/uploads/%s$`, testRepo, testImage, uuid), gotPutLoc)
+	}
+	// CrossMount
+	cmImage := "alpine-crossmount"
+	br.Add("cross-mount-image", cmImage)
+	if w, r, e := getHttpTestLayer0UploadPostHandlerMount(&br); e != nil {
+		t.Fatal(e)
+	} else {
+		h.BlobUploadPostHandler(w, r)
+		assert.Equal(t, http.StatusAccepted, w.Code)
+		// Fetch Upload from DB
+		gotLoc := w.Header().Get("Location")
+		uuid := w.Header().Get("Docker-Upload-UUID")
+		br.Add("uuid-mount", uuid)
+		assert.Regexp(t, fmt.Sprintf(`/v2/%s/blobs/uploads/%s$`, cmImage, uuid), gotLoc)
+	}
+	// Remove
+	l0ref := types.FT_arm_Layer0Reference()
+	br.Add("reference", string(l0ref.Digest))
+	if w, r, e := getHttpTestLayer0UploadDeleteHandler(&br); e != nil {
+		t.Fatal(e)
+	} else {
+		h.BlobDelHandler(w, r)
+		assert.Equal(t, http.StatusAccepted, w.Code)
+	}
 }
 
-func Test_Upload_UploadBlobSequence_Split(t *testing.T) {
+func TestUploadUploadBlobSequenceSplit(t *testing.T) {
 	bs := utils.NewBootstrap()
 	bs.SetEmptyAll()
 	bs.SetYAMLPrefix("../../../../misc/yaml")
@@ -286,7 +296,11 @@ func Test_Upload_UploadBlobSequence_Split(t *testing.T) {
 	defer TeardownTest(bs)
 	/// Vars
 	testRepo := "qnib"
+	br.Add("repo", testRepo)
 	testProfile := "generic"
+	br.Add("profile", testProfile)
+	testImage := "alpine"
+	br.Add("image", testImage)
 	/// Request
 	token, err := br.Get("user:test#bearer")
 	if err != nil {
@@ -299,7 +313,7 @@ func Test_Upload_UploadBlobSequence_Split(t *testing.T) {
 	l0bytePart2 := l0bytes[len(l0bytes)/2:]
 	l0ref := types.FT_arm_Layer0Reference()
 	_ = l0ref
-	r := httptest.NewRequest(http.MethodPost, "/{repo}/{image}/blobs/uploads/", bytes.NewReader(l0bytes))
+	r := httptest.NewRequest(http.MethodPost, "/{image}/blobs/uploads/", bytes.NewReader(l0bytes))
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("repo", testRepo)
 	rctx.URLParams.Add("image", "alpine")
@@ -316,7 +330,7 @@ func Test_Upload_UploadBlobSequence_Split(t *testing.T) {
 	assert.Equal(t, fmt.Sprintf("/v2/qnib/alpine/blobs/uploads/%s", uuid), gotLoc)
 	// Next we do a PATCH request with Part1
 	wPatchPart1 := httptest.NewRecorder()
-	rPatchPart1 := httptest.NewRequest(http.MethodPost, "/{repo}/{image}/blobs/uploads/{uuid}", bytes.NewReader(l0bytePart1))
+	rPatchPart1 := httptest.NewRequest(http.MethodPatch, "/{repo}/{image}/blobs/uploads/{uuid}", bytes.NewReader(l0bytePart1))
 	rctxPatch := chi.NewRouteContext()
 	rctxPatch.URLParams.Add("repo", testRepo)
 	rctxPatch.URLParams.Add("image", "alpine")
@@ -349,7 +363,7 @@ func Test_Upload_UploadBlobSequence_Split(t *testing.T) {
 	// Final PUT request
 	wPut := httptest.NewRecorder()
 	putUrl := fmt.Sprintf("/{repo}/{image}/blobs/uploads/{uuid}?digest=%s", l0ref.Digest)
-	rPut := httptest.NewRequest(http.MethodPost, putUrl, bytes.NewReader(l0bytes))
+	rPut := httptest.NewRequest(http.MethodPut, putUrl, bytes.NewReader(l0bytes))
 	rctxPut := chi.NewRouteContext()
 	rctxPut.URLParams.Add("repo", testRepo)
 	rctxPut.URLParams.Add("image", "alpine")
@@ -363,22 +377,4 @@ func Test_Upload_UploadBlobSequence_Split(t *testing.T) {
 	assert.Equal(t, http.StatusCreated, wPut.Code)
 	gotPutLoc := wPut.Header().Get("Location")
 	assert.Equal(t, fmt.Sprintf("/v2/qnib/alpine/blobs/uploads/%s", uuid), gotPutLoc)
-}
-
-func createNewHTTPTest(meth string, p, c, h map[string]string, url string, b []byte) (w httptest.ResponseRecorder, r *http.Request) {
-	w = *httptest.NewRecorder()
-	r = httptest.NewRequest(meth, url, bytes.NewReader(b))
-	rctx := chi.NewRouteContext()
-	for k, v := range p {
-		rctx.URLParams.Add(k, v)
-	}
-	r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
-	for k, v := range c {
-		gCtx.Set(r, k, v)
-	}
-	for k, v := range h {
-		r.Header.Set(k, v)
-	}
-	r.Header.Set("Content-Length", fmt.Sprintf("%d", len(b)))
-	return
 }

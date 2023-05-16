@@ -9,26 +9,27 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/gorilla/context"
+	gCtx "github.com/gorilla/context"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/metahub-registry/metahub-core/pkg/helper"
 	"github.com/metahub-registry/metahub-core/pkg/types"
 	"github.com/metahub-registry/metahub-core/pkg/utils"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/trace"
 )
 
 type oauthError string
 
 const (
 	defaultProfile = "generic"
+	pkgNameAuth    = "api/auth.go"
+	realFrmt       = "Realm: %s"
 )
 
 var (
 	invalidRequest oauthError = "invalid_request"
 	invalidToken   oauthError = "invalid_token"
 	userReg                   = regexp.MustCompile(`(?P<user>[\w\-\.\_]+)(\/(?P<profile>[\/\w\-\.\_#]+))?`)
+	debugUser                 = map[string]int{"oci": 4}
 )
 
 func getAccessTokenFromBearerToken(r *http.Request) (at *types.AccessToken, user string, err error) {
@@ -55,14 +56,14 @@ func getAccessTokenFromBearerToken(r *http.Request) (at *types.AccessToken, user
 }
 
 func (h Handlers) AuthHandler(w http.ResponseWriter, r *http.Request) {
-	l := logrus.WithFields(logrus.Fields{
-		"package": "api/auth.go",
+	ctx := r.Context()
+	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
+		"package": pkgNameAuth,
 		"func":    "AuthHandler",
 	})
 	_ = l
-	ctx := r.Context()
-	_, span := tracer.Start(ctx, "AuthHandler")
 	defer span.End()
+	_ = ctx
 	acct := r.URL.Query().Get("account")
 	at, user, err := getAccessTokenFromBearerToken(r)
 	if err != nil {
@@ -70,10 +71,8 @@ func (h Handlers) AuthHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
-	span.AddEvent("log", trace.WithAttributes(
-		attribute.String("log.severity", "debug"),
-		attribute.String("log.message", fmt.Sprintf("user:'%s' acct:'%s'", user, acct)),
-	))
+	utils.Debug(l, span, "user:'%s' acct:'%s'", user, acct)
+
 	if acct == "" && user == "" {
 		at.Token = "REDACTED-IN-HISTORY"
 	}
@@ -87,22 +86,20 @@ func (h Handlers) AuthHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) (err error) {
-	l := logrus.WithFields(logrus.Fields{
-		"package": "api/auth.go",
-		"func":    "AuthMiddlewareHandler",
-	})
 	ctx := r.Context()
 	req := types.NewRequest(ctx, r)
-	_, span := tracer.Start(ctx, "AuthMiddlewareHandler")
+	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
+		"package": pkgNameAuth,
+		"func":    "AuthMiddlewareHandler",
+		"host":    req.Host,
+		"repo":    req.Repo,
+		"tag":     req.Tag,
+		"method":  req.Method,
+		"digest":  req.Digest,
+		"profile": req.Profile,
+		"role":    req.UserRole,
+	})
 	defer span.End()
-	span.SetAttributes(
-		attribute.Key("req.Digest").String(req.Digest),
-		attribute.Key("req.Host").String(req.Host),
-		attribute.Key("req.Repo").String(req.Repo),
-		attribute.Key("req.Tag").String(req.Tag),
-		attribute.Key("req.Profile").String(req.Profile),
-	)
-
 	var realm string
 	switch r.Host {
 	case "metahub-registry.org":
@@ -125,7 +122,7 @@ func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) 
 	authorizationHeader := r.Header.Get("authorization")
 	if authorizationHeader == "" {
 		//logrus.Warn("Unauthenticated request as no authorization header was provided")
-		det := helper.NewDetailFromReq(req)
+		det := helper.NewDetail("repository", req.Repo, req.Method)
 		unauthorized(w, realm, det, invalidRequest, "missing authorization header")
 		return fmt.Errorf("missing authorization header")
 	}
@@ -137,7 +134,7 @@ func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) 
 		}
 		det := helper.NewDetail("repository", repo, "pull")
 		w.WriteHeader(http.StatusUnauthorized)
-		logrus.Infof("Realm: %s", realm)
+		utils.Debug(l, span, realFrmt, realm)
 		unauthorized(w, realm, det, invalidRequest, "invalid authorization header: %q", authorizationHeader)
 		return fmt.Errorf("valid authorization header")
 	}
@@ -150,9 +147,9 @@ func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) 
 	}
 	if at == nil {
 		l.Error("unknown access token")
-		det := helper.NewDetailFromReq(req)
+		det := helper.NewDetail("repository", req.Repo, req.Method)
 		w.WriteHeader(http.StatusUnauthorized)
-		logrus.Infof("Realm: %s", realm)
+		logrus.Infof(realFrmt, realm)
 		unauthorized(w, realm, det, invalidToken, "unknown access token")
 		return fmt.Errorf("error getting token")
 	}
@@ -162,14 +159,18 @@ func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) 
 	parts := strings.Split(string(decoded), ":")
 	if len(parts) != 2 {
 		l.Error("unknown access token")
-		det := helper.NewDetailFromReq(req)
+		det := helper.NewDetail("repository", req.Repo, req.Method)
 		w.WriteHeader(http.StatusUnauthorized)
-		l.Infof("Realm: %s", realm)
+		utils.Debug(l, span, realFrmt, realm)
 		unauthorized(w, realm, det, invalidToken, "unknown access token")
 		return fmt.Errorf("error getting token")
 	}
 	password = parts[1]
-	m := utils.ReSubMatchMap(userReg, parts[0])
+	m, err := utils.ReSubMatchMap(userReg, parts[0])
+	if err != nil {
+		utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "pull", err, "INTERNAL_ERROR", "failed to match regex")
+		return
+	}
 	if _, ok := m["user"]; !ok {
 		msg := fmt.Sprintf("username needs to prefix with profile (defaults to %s): '<user>/<profile>'", defaultProfile)
 		logrus.Error(msg)
@@ -178,24 +179,17 @@ func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) 
 	}
 	username = m["user"]
 	if _, ok := m["profile"]; !ok {
-		span.AddEvent("log", trace.WithAttributes(
-			attribute.String("log.severity", "debug"),
-			attribute.String("log.message", fmt.Sprintf("no profile given when matching '%s' against '%s', default to '%s'", userReg, parts[0], defaultProfile)),
-		))
+		utils.Debug(l, span, "no profile given when matching '%s' against '%s', default to '%s'", userReg, parts[0], defaultProfile)
 		profile = defaultProfile
 	} else {
 		profile = m["profile"]
 		if profile == "" {
 			profile = defaultProfile
 		}
+		utils.Debug(l, span, "set profile to default '%s'", defaultProfile)
 	}
-	msg := fmt.Sprintf("profile:'%s' / user:'%s", profile, username)
-	span.AddEvent("log", trace.WithAttributes(
-		attribute.String("log.severity", "debug"),
-		attribute.String("log.message", msg),
-	))
-	l.Debug(msg)
-	code, uRole, pl, err := h.mag.UserManagement.LoginUserScope(username, password, req)
+	utils.Debug(l, span, "profile:'%s' / user:'%s", profile, username)
+	code, uRole, pl, err := h.mag.UserManagement.LoginUserScope(ctx, username, password, req)
 	if err != nil {
 		err = errors.Wrap(err, "error logging in user")
 		logrus.Error(err)
@@ -205,14 +199,12 @@ func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) 
 	switch code {
 	case http.StatusOK:
 		// Return the account name to the context
-		context.Set(r, "accountName", at.Token)
-		context.Set(r, "userName", username)
-		context.Set(r, "userRole", uRole)
-		context.Set(r, "profileName", profile)
-		span.AddEvent("log", trace.WithAttributes(
-			attribute.String("log.severity", "debug"),
-			attribute.String("log.message", fmt.Sprintf("set profileName:'%s'", profile)),
-		))
+		gCtx.Set(r, "accountName", at.Token)
+		gCtx.Set(r, "userName", username)
+		gCtx.Set(r, "userRole", uRole)
+		gCtx.Set(r, "profileName", profile)
+		utils.Debug(l, span, "set profileName:'%s'", profile)
+		utils.Debug(l, span, "set userRole:'%s'", uRole)
 	default:
 		helper.WriteOCIErrror(w, http.StatusUnauthorized, pl)
 		return fmt.Errorf("error logging in")
@@ -220,12 +212,32 @@ func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) 
 	return nil
 }
 
+func (h Handlers) AuthMiddlewareFunc(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
+		"package": pkgNameAuth,
+		"func":    "AuthMiddlewareFunc",
+	})
+	defer span.End()
+	_ = ctx
+	err := h.AuthMiddlewareHandler(w, r)
+	if err != nil {
+		return
+	}
+	uName := gCtx.Get(r, "userName")
+	debug, ok := debugUser[uName.(string)]
+	if ok {
+		gCtx.Set(r, "debug", debug)
+	} else {
+		gCtx.Set(r, "debug", 0)
+	}
+	utils.Debug(l, span, "set debug for user '%s' to level '%d'", uName, debug)
+
+}
+
 func (h Handlers) AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		err := h.AuthMiddlewareHandler(w, r)
-		if err != nil {
-			return
-		}
+		h.AuthMiddlewareFunc(w, r)
 		next.ServeHTTP(w, r)
 	})
 }

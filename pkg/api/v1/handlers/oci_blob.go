@@ -18,6 +18,10 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+const (
+	pkgNameOCIBlob = "handlers/oci_blob.go"
+)
+
 func (h Handlers) BlobUploadPutHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	ctx, span := tracer.Start(ctx, "BlobUploadPutHandler")
@@ -207,31 +211,23 @@ func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request)
 }
 
 func (h Handlers) BlobUploadPostHandler(w http.ResponseWriter, r *http.Request) {
-	l := logrus.WithFields(logrus.Fields{
-		"package": "oci_blob.go",
-		"func":    "BlobUploadPostHandler",
-	})
-	// Hanlder to upload a blob to the object store
 	ctx := r.Context()
-	ctx, span := tracer.Start(ctx, "BlobUploadPostHandler")
 	req := types.NewRequest(ctx, r)
-	span.SetAttributes(
-		attribute.Key("method").String(r.Method),
-		attribute.Key("length").Int(req.Length),
-		attribute.Key("repo").String(req.Repo),
-		attribute.Key("uuid").String(req.UUID),
-	)
+	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
+		"package": pkgNameOCIBlob,
+		"func":    "BlobUploadPostHandler",
+		"method":  r.Method,
+		"repo":    req.Repo,
+		"uuid":    req.UUID,
+		"user":    req.User,
+		"role":    req.UserRole,
+	})
 	defer span.End()
 	mt := "NONE"
 	msg := fmt.Sprintf("%-5s BlobUploadPostHandler(%s, Type:%s, Len:%d", r.Method, mt, req.Repo, req.Length)
 	_, e := h.mag.Database.ProfileAuthorizedPushHandler(ctx, req)
 	if e != nil {
-		err := errors.Wrapf(e, "failed to authorize push for profile '%s'", req.Profile)
-		span.RecordError(err)
-		l.Error(err)
-		det := helper.NewDetailFromReq(req)
-		e := helper.NewErrPayload("DENIED", e.Error(), det)
-		helper.WriteOCIErrror(w, http.StatusBadRequest, e)
+		utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "push", e, "DENIED", "failed to authorize push for profile '%s'", req.Profile)
 		return
 	}
 	if req.Tag != "" {
@@ -251,12 +247,7 @@ func (h Handlers) BlobUploadPostHandler(w http.ResponseWriter, r *http.Request) 
 	}
 	err := h.mag.Database.BlobUpload_Create_ByOCI(ctx, &bu)
 	if err != nil {
-		l.Error(err)
-		span.RecordError(err)
-		msg := "failed to create blob upload"
-		det := helper.NewDetailFromReq(req)
-		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
-		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
+		utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "push", e, "INTERNAL_ERROR", "failed to create blob upload")
 		return
 	}
 	tracing.SpanDebug(span, "request.length:%d", req.Length)
@@ -272,12 +263,7 @@ func (h Handlers) BlobUploadPostHandler(w http.ResponseWriter, r *http.Request) 
 		bu.Digest = dig.String()
 		err = h.mag.StoreBlobUpload(ctx, &bu, buf)
 		if err != nil {
-			l.Error(err)
-			span.RecordError(err)
-			msg := "failed to store blob upload"
-			det := helper.NewDetailFromReq(req)
-			e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
-			helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
+			utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "push", e, "INTERNAL_ERROR", "failed to store blob upload")
 			return
 		}
 		span.AddEvent("log", trace.WithAttributes(
@@ -364,7 +350,10 @@ func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
 	))
 	l.Debug(msg)
 	switch mediaType {
-	case "application/vnd.docker.image.rootfs.diff.tar.gzip", "unknownLayer":
+	case
+		"application/vnd.docker.image.rootfs.diff.tar.gzip",
+		"application/vnd.oci.image.layer.v1.tar+gzip",
+		"unknownLayer":
 		// If redirect is enabled, we need to fetch the PreSignedURL
 		if r.Method == "GET" && h.mag.Minio.GetLayerBucketConfig().Redirect {
 			psUrl, err := h.mag.Layer_GetPresignedUrlByHTTPRequest(r)
@@ -398,7 +387,10 @@ func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
 			layer.WriteWWWHeader(w)
 			return
 		}
-	case "application/vnd.oci.image.config.v1+json", "unknownConfig":
+	case
+		"application/vnd.oci.image.config.v1+json",
+		"application/vnd.docker.container.image.v1+json",
+		"unknownConfig":
 		cfg, found, err := h.mag.ConfigBlob_GetByHTTPRequest(ctx, r)
 		if err != nil {
 			// 1. FALSE
@@ -436,31 +428,30 @@ func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
 
 func (h Handlers) BlobDelHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	ctx, span := tracer.Start(ctx, "BlobDelHandler")
-	defer span.End()
 	req := types.NewRequest(ctx, r)
-	span.SetAttributes(
-		attribute.Key("method").String(r.Method),
-		attribute.Key("repo").String(req.Repo),
-		attribute.Key("tag").String(req.Tag),
-	)
+	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
+		"package": pkgNameOCIBlob,
+		"func":    "BlobDelHandler",
+		"method":  r.Method,
+		"repo":    req.Repo,
+		"uuid":    req.UUID,
+		"user":    req.User,
+		"role":    req.UserRole,
+	})
+	defer span.End()
 	_, e := h.mag.Database.ProfileAuthorizedPushHandler(ctx, req)
 	if e != nil {
-		err := errors.Wrapf(e, "failed to authorize profile '%s'", req.Profile)
-		span.RecordError(err)
-		det := helper.NewDetailFromReq(req)
-		e := helper.NewErrPayload("DENIED", e.Error(), det)
-		helper.WriteOCIErrror(w, http.StatusBadRequest, e)
+		utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "push", e, "DENIED", "failed to authorize profile '%s'", req.Profile)
 		return
 	}
-	err := h.mag.BlobDelete(ctx, req)
+	found, err := h.mag.BlobDelete(ctx, req)
 	if err != nil {
-		msg := fmt.Sprintf("failed to delete blob: %v", err)
-		logrus.Error(msg)
-		det := helper.NewDetailFromReq(req)
-		e := helper.NewErrPayload("MANIFEST_UNKNOWN", msg, det)
-		span.SetStatus(http.StatusNotFound, e.Message)
-		helper.WriteOCIErrror(w, http.StatusNotFound, e)
+		utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "push", e, "INTERNAL_ERROR", "failed to delete blob")
+		return
+	}
+	if !found {
+		e := fmt.Errorf(types.FailBlobNotFound)
+		utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "push", e, "MANIFEST_UNKNOWN", "")
 		return
 	}
 	span.SetStatus(http.StatusAccepted, "")

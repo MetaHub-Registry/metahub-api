@@ -9,6 +9,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/metahub-registry/metahub-api/internal/utils"
 	"github.com/metahub-registry/metahub-core/pkg/types"
+	mlibUtils "github.com/metahub-registry/metahub-core/pkg/utils"
 )
 
 type Next struct {
@@ -98,6 +99,7 @@ func (h Handlers) CollectionGetOne(w http.ResponseWriter, r *http.Request) {
 			col.Manifests[key] = mani
 		}
 	*/
+	mlibUtils.Debug(l, span, "Found collection '%s:%s' with %d manifests", col.Repo, col.Tag, len(col.Manifests))
 	payload := envelope{
 		"repos":        reps.AsSlice(),
 		"bread_crumbs": breadCrumbs,
