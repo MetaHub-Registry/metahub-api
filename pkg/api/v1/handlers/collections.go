@@ -12,6 +12,10 @@ import (
 	mlibUtils "github.com/metahub-registry/metahub-core/pkg/utils"
 )
 
+const (
+	pkgNameCol = "handlers/collections.go"
+)
+
 type Next struct {
 	Repo      string `json:"repo"`
 	Tag       string `json:"tag"`           // Tag is added when repo slug is exhausted
@@ -22,15 +26,16 @@ type Next struct {
 }
 
 func (h Handlers) CollectionGetOne(w http.ResponseWriter, r *http.Request) {
-	l := logrus.WithFields(logrus.Fields{
-		"package": "api/collections.go",
+	ctx := r.Context()
+	l, ctx, span := mlibUtils.InitLogging(ctx, tracer, map[string]any{
+		"package": pkgNameCol,
 		"func":    "CollectionGetOne",
 	})
-	ctx := r.Context()
-	ctx, span := tracer.Start(ctx, "CollectionGetOne")
 	defer span.End()
 	type Payload struct {
 		RepoName string `json:"repo_name"`
+		Repo     string `json:"repo"`
+		Tag      string `json:"tag"`
 		TagName  string `json:"tag_name"`
 		ColID    int64  `json:"collection_id"`
 		TagID    int64  `json:"tag_id"`
@@ -43,6 +48,13 @@ func (h Handlers) CollectionGetOne(w http.ResponseWriter, r *http.Request) {
 		h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
 		return
 	}
+	if pl.RepoName == "" && pl.Repo != "" {
+		pl.RepoName = pl.Repo
+	}
+	if pl.TagName == "" && pl.Tag != "" {
+		pl.TagName = pl.Tag
+	}
+	mlibUtils.Info(l, span, "Payload: %s:%s", pl.RepoName, pl.TagName)
 	var col types.CollectionListing
 	if pl.RepoName != "" && pl.TagName != "" {
 		l = l.WithFields(logrus.Fields{
@@ -67,7 +79,7 @@ func (h Handlers) CollectionGetOne(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	l.Infof("  -> %s:%s", col.Repo, col.Tag)
+	mlibUtils.Debug(l, span, " -> %s:%s", col.Repo, col.Tag)
 	if err != nil {
 		h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
 		return
