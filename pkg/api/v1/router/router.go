@@ -39,7 +39,7 @@ func Initialize(mag magazine.Magazine) *chi.Mux {
 			AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 			AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
 			ExposedHeaders:   []string{"Link"},
-			AllowCredentials: false,
+			AllowCredentials: true,
 			MaxAge:           300, // Maximum value not ignored by any of major browsers
 		}),
 	)
@@ -49,9 +49,16 @@ func Initialize(mag magazine.Magazine) *chi.Mux {
 	router.Route("/api/v1", func(r chi.Router) {
 		r.Post("/collections", h.CollectionGetAll)
 		r.Post("/collection", h.CollectionGetOne)
+		r.Get("/users/{id}", h.UserGetOne)
+		r.Post("/users", h.UserPost)
+		r.Put("/users/{id}/secrets", h.UserPutSecret)
+		r.Get("/session", h.UserGetSession)
 	})
 	router.Get("/auth", h.AuthHandler)
-
+	// Oauth2
+	router.Get("/login", h.GitHubLogin)
+	//router.Get("/logout", h.GitHubLogout)
+	router.Get("/github_oauth_cb", h.GitHubCallback)
 	/////// Subroute with AuthMiddleware to trigger login
 	// (even if the token is the anonymous one)
 	router.Route("/v2", func(r chi.Router) {

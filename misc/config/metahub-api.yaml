@@ -18,7 +18,7 @@ neo4j:
   password: test
   url: bolt://neo4j:7687
 frontend:
-  redirect: http://localhost:5173
+  redirect: http://localhost:8081
 logging:
   gelf: logstash:12201
   level: debug
