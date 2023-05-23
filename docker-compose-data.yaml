@@ -34,7 +34,7 @@ services:
      - neo4j:/var/lib/neo4j/data
      - ${PWD}/misc/backup:/backup
   registry:
-    image: quay.io/cqnib/testcontainer-registry:2023-05-12-amd64
+    image: quay.io/cqnib/testcontainer-registry:2023-05-23-amd64
     ports:
       - 5050:5050
     networks:

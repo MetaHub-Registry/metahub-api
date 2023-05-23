@@ -55,7 +55,7 @@ func TestUserLogin(t *testing.T) {
 
 func TestUserGetOne(t *testing.T) {
 	bs := utils.NewBootstrap()
-	debug := 1
+	debug := 0
 	bs.SetEmptyAll()
 	bs.SetYAMLPrefix("../../../../misc/yaml")
 	bs.AddBootstrap("users")
@@ -102,7 +102,7 @@ func TestUserGetOne(t *testing.T) {
 
 func TestUserCRUD(t *testing.T) {
 	bs := utils.NewBootstrap()
-	debug := 1
+	debug := 0
 	bs.SetEmptyAll()
 	bs.SetYAMLPrefix("../../../../misc/yaml")
 	ctx := context.Background()
