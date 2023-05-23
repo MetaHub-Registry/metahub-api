@@ -51,6 +51,42 @@ services:
       CE_URL: ce:80
       PS1: 'dind > '
       MH_USER: qnib
+  dind2:
+    build: misc/docker/dind/
+    privileged: true
+    restart: always
+    volumes:
+      - .:/go/metahub
+      - ./misc/docker/dind/daemon.json:/etc/docker/daemon.json:ro
+      - /Users/kniepbert/go/src/github.com/metahub-registry/metahub-core:/Users/kniepbert/go/src/github.com/metahub-registry/metahub-core
+    networks:
+     - api-internal
+     - mh-data
+    environment:
+      PATH: /Users/kniepbert/go/src/github.com/metahub-registry/metahub-core/misc/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      DEV_URL: dev:80
+      CE_URL: ce:80
+      PS1: 'dind > '
+      MH_USER: qnib
+      MH_PASS: mypassword
+  dind3:
+    build: misc/docker/dind/
+    privileged: true
+    restart: always
+    volumes:
+      - .:/go/metahub
+      - ./misc/docker/dind/daemon.json:/etc/docker/daemon.json:ro
+      - /Users/kniepbert/go/src/github.com/metahub-registry/metahub-core:/Users/kniepbert/go/src/github.com/metahub-registry/metahub-core
+    networks:
+     - api-internal
+     - mh-data
+    environment:
+      PATH: /Users/kniepbert/go/src/github.com/metahub-registry/metahub-core/misc/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      DEV_URL: dev:80
+      CE_URL: ce:80
+      PS1: 'dind > '
+      MH_USER: qnib
+      MH_PASS: mypassword
   #  start mailhog
   #mailhog:
   #  image: 'mailhog/mailhog:latest'
