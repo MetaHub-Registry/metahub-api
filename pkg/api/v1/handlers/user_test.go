@@ -1,14 +1,20 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"testing"
+	"time"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/jwtauth/v5"
+	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/stretchr/testify/assert"
-	"github.com/metahub-registry/metahub-core/pkg/types/www"
+	"github.com/metahub-registry/metahub-core/pkg/backends/sqlite"
+	"github.com/metahub-registry/metahub-core/pkg/types"
 	"github.com/metahub-registry/metahub-core/pkg/utils"
 )
 
@@ -53,7 +59,8 @@ func TestUserLogin(t *testing.T) {
 	}
 }
 
-func TestUserGetOne(t *testing.T) {
+/* TODO: Fix test by injecting bearer token... */
+func TestGetUsername(t *testing.T) {
 	bs := utils.NewBootstrap()
 	debug := 0
 	bs.SetEmptyAll()
@@ -79,122 +86,235 @@ func TestUserGetOne(t *testing.T) {
 	}
 	defer TeardownTest(bs)
 	// Actual Tests
-	sqlUsr, err := h.mag.UserManagement.GetByUsername(ctx, "admin")
+	expUsername := "admin"
+	expGHID := "123"
+	url := "/api/v1/protected/session"
+	tkn, err := h.CreateJWT(ctx, expUsername, expGHID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	userID := fmt.Sprintf("%d", sqlUsr.ID)
-	wGet0, rGet0 := utils.CreateNewHTTPTest(http.MethodGet,
-		map[string]string{"id": userID}, map[string]string{},
-		map[string]string{},
-		"/", nil)
-	h.UserGetOne(&wGet0, rGet0)
-	if wGet0.Code != http.StatusOK {
-		t.Fatalf("Should have returned 200, but got %d", wGet0.Code)
-	}
-	var resp www.User
-	err = json.Unmarshal(wGet0.Body.Bytes(), &resp)
+	req := httptest.NewRequest("GET", url, bytes.NewBuffer(nil))
+	req.Header.Add("Accept", "application/json")
+	req = req.WithContext(context.WithValue(req.Context(), "jwt", &tkn))
+	c := req.Context()
+	_, claims, err := jwtauth.FromContext(c)
 	if err != nil {
 		t.Fatal(err)
 	}
-	assert.Equal(t, sqlUsr.ID, resp.ID)
+	t.Logf("Claims: %v", claims)
 }
 
-func TestUserCRUD(t *testing.T) {
-	bs := utils.NewBootstrap()
+func TestUserGetSession(t *testing.T) {
+	ctx := context.Background()
 	debug := 0
+	bs := utils.NewBootstrap()
 	bs.SetEmptyAll()
 	bs.SetYAMLPrefix("../../../../misc/yaml")
-	ctx := context.Background()
+	bs.AddBootstrap("users")
 	if debug > 0 {
 		bs.PostTestSleep = debug
 	}
-	err := h.mag.Minio.EmptyAll()
+	br, err := SetupTest(ctx, bs)
 	if err != nil {
+		TeardownTest(bs)
 		t.Fatal(err)
 	}
-	br, err := SetupTest(ctx, bs)
 	for _, l := range br.ToLines() {
 		if debug > 0 {
 			t.Log(l)
 		}
 	}
+	defer TeardownTest(bs)
+	r := chi.NewRouter()
+	// Protected routes
+	r.Group(func(r chi.Router) {
+		r.Use(jwtauth.Verifier(TokenAuthHS256))
+		authenticator := func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				token, _, err := jwtauth.FromContext(r.Context())
+				if err != nil {
+					http.Error(w, jwtauth.ErrorReason(err).Error(), http.StatusUnauthorized)
+					return
+				}
+				if err := jwt.Validate(token); err != nil {
+					http.Error(w, jwtauth.ErrorReason(err).Error(), http.StatusUnauthorized)
+					return
+				}
+				// Token is authenticated, pass it through
+				next.ServeHTTP(w, r)
+			})
+		}
+		r.Use(authenticator)
+		r.Get("/api/v1/protected/session", h.UserGetSession)
+	})
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+	// Actual tests
+	userName := "admin"
+	adminID, err := br.GetInt("user:" + userName + "#id")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.mag.UserManagement.SetLoggedIn(ctx, adminID)
+	hdr := newAuthHeader((map[string]interface{}{"user": userName, "id": "1234", "exp": jwtauth.ExpireIn(5 * time.Minute)}))
+	if status, resp := testRequest(t, ts, "GET", "/api/v1/protected/session", hdr, nil); status != 200 {
+		t.Fatalf(resp)
+	} else {
+		t.Log(resp)
+	}
+}
+
+func TestUserSecrets(t *testing.T) {
+	ctx := context.Background()
+	debug := 0
+	bs := utils.NewBootstrap()
+	bs.SetEmptyAll()
+	//bs.SetSqlite("Desktop/user_secrets.db")
+	bs.SetYAMLPrefix("../../../../misc/yaml")
+	bs.AddBootstrap("users")
+	if debug > 0 {
+		bs.PostTestSleep = debug
+	}
+	br, err := SetupTest(ctx, bs)
 	if err != nil {
 		TeardownTest(bs)
 		t.Fatal(err)
 	}
+	for _, l := range br.ToLines() {
+		if debug > 0 {
+			t.Log(l)
+		}
+	}
 	defer TeardownTest(bs)
-	// Actual Tests
-	wwwUser := www.User{
-		GithubUsername: "test",
-		Email:          "test@test.de",
-		GithubUserID:   "123",
-		Secrets:        []www.Secret{},
-	}
-	wwwBytes := wwwUser.ToBytes()
-	w0, r0 := utils.CreateNewHTTPTest(http.MethodPost,
-		map[string]string{}, map[string]string{},
-		map[string]string{},
-		"/users", wwwBytes)
-	h.UserPost(&w0, r0)
-	if w0.Code != http.StatusCreated {
-		t.Fatalf("Should have returned 201, but got %d", w0.Code)
-	}
-	u0, err := h.mag.UserManagement.GetByUsername(ctx, "test")
+	r := chi.NewRouter()
+	// Protected routes
+	r.Group(func(r chi.Router) {
+		r.Use(jwtauth.Verifier(TokenAuthHS256))
+		authenticator := func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				token, _, err := jwtauth.FromContext(r.Context())
+				if err != nil {
+					http.Error(w, jwtauth.ErrorReason(err).Error(), http.StatusUnauthorized)
+					return
+				}
+				if err := jwt.Validate(token); err != nil {
+					http.Error(w, jwtauth.ErrorReason(err).Error(), http.StatusUnauthorized)
+					return
+				}
+				// Token is authenticated, pass it through
+				next.ServeHTTP(w, r)
+			})
+		}
+		r.Use(authenticator)
+		r.Get("/api/v1/protected/session", h.UserGetSession)
+		r.Put("/api/v1/protected/user/secret", h.UserPutSecret)
+		r.Delete("/api/v1/protected/user/secret/{id}", h.UserDelSecret)
+		r.Get("/api/v1/protected/user", h.UserGetOne)
+	})
+	ts := httptest.NewServer(r)
+	defer ts.Close()
+	// Actual tests
+	userName := "admin"
+	adminID, err := br.GetInt("user:" + userName + "#id")
 	if err != nil {
 		t.Fatal(err)
 	}
-	assert.Equal(t, "123", u0.GithubID)
-	///// GET /user/id
-	userID := fmt.Sprintf("%d", u0.ID)
-	wGet0, rGet0 := utils.CreateNewHTTPTest(http.MethodGet,
-		map[string]string{"id": userID}, map[string]string{},
-		map[string]string{},
-		"/users/{id}", nil)
-	h.UserGetOne(&wGet0, rGet0)
-	if wGet0.Code != http.StatusOK {
-		t.Fatalf("Should have returned 200, but got %d", wGet0.Code)
-	}
-	var resp www.User
-	err = json.Unmarshal(wGet0.Body.Bytes(), &resp)
-	if err != nil {
-		t.Fatal(err)
-	}
-	assert.Equal(t, u0.ID, resp.ID)
-	////// PUT secret
-	secret := www.Secret{
-		Key:  "hash",
-		Name: "test0",
-	}
-	wPut0, rPut0 := utils.CreateNewHTTPTest(http.MethodPut,
-		map[string]string{"id": userID}, map[string]string{},
-		map[string]string{},
-		"/users/{id}/secrets", secret.ToBytes())
-	h.UserPutSecret(&wPut0, rPut0)
-	if wPut0.Code != http.StatusCreated {
-		t.Fatalf("Should have returned 201, but got %d", wPut0.Code)
-	}
-	////// GET secret
-	if sqlU0, err := h.mag.UserManagement.GetByUsername(ctx, "test"); err != nil {
-		t.Fatal(err)
+	h.mag.UserManagement.SetLoggedIn(ctx, adminID)
+	hdr := newAuthHeader((map[string]interface{}{"user": "admin", "id": "1234", "exp": jwtauth.ExpireIn(5 * time.Minute)}))
+	if status, resp := testRequest(t, ts, "GET", "/api/v1/protected/user", hdr, nil); status != 200 {
+		t.Fatalf(resp)
 	} else {
-		assert.Equal(t, 1, len(sqlU0.Secrets))
+		if u, err := sqlite.NewUserFromJSON(resp); err != nil {
+			t.Fatal(err)
+		} else {
+			t.Logf("User: %v", u)
+			assert.Equal(t, 1, len(u.Secrets))
+		}
 	}
-	// Get Session
-	/* TODO: Can not add cookie to request?
-	wGetSession, rGetSession := utils.CreateNewHTTPTest(http.MethodGet,
-		map[string]string{"id": userID}, map[string]string{},
-		map[string]string{
-			"loginName": "test",
-		},
-		"/session",
-		nil)
-	h.UserGetSession(&wGetSession, rGetSession)
-	if wGetSession.Code != http.StatusOK {
-		t.Fatalf("Should have returned 200, but got %d", wGetSession.Code)
+	// Put Secret
+	s1 := types.Secret{
+		Name: "put1",
+		Key:  "key1",
 	}
-	*/
-	////// TODO: DELETE secret
-
-	////// TODO: Delete User
+	b1 := s1.ToBytes()
+	r1 := bytes.NewReader(b1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status, resp := testRequest(t, ts, "PUT", "/api/v1/protected/user/secret", hdr, r1); status != 201 {
+		t.Log(status)
+		t.Fatalf(resp)
+	}
+	if status, resp := testRequest(t, ts, "GET", "/api/v1/protected/user", hdr, nil); status != 200 {
+		t.Fatalf(resp)
+	} else {
+		if u, err := sqlite.NewUserFromJSON(resp); err != nil {
+			t.Fatal(err)
+		} else if len(u.Secrets) != 2 {
+			t.Fatal("Expected 2 secrets")
+		}
+	}
+	usrSects, err := h.mag.UserManagement.GetSecrets(ctx, adminID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range usrSects {
+		if s.Name == s1.Name {
+			s1.SqlID = s.SqlID
+		}
+	}
+	// Delete Secret
+	assert.Greater(t, s1.SqlID, int64(0))
+	url := fmt.Sprintf("/api/v1/protected/user/secret/%d", s1.SqlID)
+	if status, resp := testRequest(t, ts, http.MethodDelete, url, hdr, nil); status != 200 {
+		t.Log(status)
+		t.Fatalf(resp)
+	}
+	if status, resp := testRequest(t, ts, "GET", "/api/v1/protected/user", hdr, nil); status != 200 {
+		t.Fatalf(resp)
+	} else {
+		if u, err := sqlite.NewUserFromJSON(resp); err != nil {
+			t.Fatal(err)
+		} else {
+			assert.Equal(t, 1, len(u.Secrets))
+		}
+	}
+	//
+	s2 := types.Secret{
+		Name: "put2",
+		Key:  "key2",
+	}
+	b2 := s2.ToBytes()
+	r2 := bytes.NewReader(b2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status, resp := testRequest(t, ts, "PUT", "/api/v1/protected/user/secret", hdr, r2); status != 201 {
+		t.Log(status)
+		t.Fatalf(resp)
+	}
+	if status, resp := testRequest(t, ts, "GET", "/api/v1/protected/user", hdr, nil); status != 200 {
+		t.Fatalf(resp)
+	} else {
+		if u, err := sqlite.NewUserFromJSON(resp); err != nil {
+			t.Fatal(err)
+		} else {
+			assert.Equal(t, 2, len(u.Secrets))
+		}
+	}
+	// Delete
+	url = "/api/v1/protected/user/secret/put2"
+	if status, resp := testRequest(t, ts, http.MethodDelete, url, hdr, nil); status != 200 {
+		t.Log(status)
+		t.Fatalf(resp)
+	}
+	if status, resp := testRequest(t, ts, "GET", "/api/v1/protected/user", hdr, nil); status != 200 {
+		t.Fatalf(resp)
+	} else {
+		if u, err := sqlite.NewUserFromJSON(resp); err != nil {
+			t.Fatal(err)
+		} else {
+			assert.Equal(t, 1, len(u.Secrets))
+		}
+	}
 }

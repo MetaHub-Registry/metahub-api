@@ -290,18 +290,15 @@ func (h Handlers) BlobUploadPostHandler(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
-	l := logrus.WithFields(logrus.Fields{
-		"package": "api/handler/oci_blob.go",
-		"func":    "BlobHandler",
-	})
 	ctx := r.Context()
-	ctx, span := tracer.Start(ctx, "BlobHandler")
 	req := types.NewRequest(ctx, r)
-	span.SetAttributes(
-		attribute.Key("method").String(r.Method),
-		attribute.Key("repo").String(req.Repo),
-		attribute.Key("tag").String(req.Tag),
-	)
+	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
+		"package": pkgNameOCIBlob,
+		"func":    "BlobHandler",
+		"method":  r.Method,
+		"repo":    req.Repo,
+		"tag":     req.Tag,
+	})
 	defer span.End()
 	msg := fmt.Sprintf("%-5s BlobHandler(%s, ", r.Method, req.Repo)
 	if req.Tag == "" {
@@ -309,7 +306,7 @@ func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
 	} else {
 		msg += fmt.Sprintf("%s)", req.Tag)
 	}
-	logrus.Info(msg)
+	utils.Debug(l, span, msg)
 	// Check for blob in Graph
 	up := upstream.UpstreamTriple{
 		Reg:    req.Host,
@@ -329,12 +326,7 @@ func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !blobFound {
-		msg := fmt.Sprintf("blob for w/ digest '%s' not found", utils.ShortenDigest(req.Digest))
-		l.Error(msg)
-		span.AddEvent("log", trace.WithAttributes(
-			attribute.String("log.severity", "debug"),
-			attribute.String("log.message", msg),
-		))
+		utils.Debug(l, span, "blob for w/ digest '%s' not found", utils.ShortenDigest(req.Digest))
 		// Not found
 		msg = "could not find blob"
 		det := helper.NewDetailFromReq(req)
@@ -343,29 +335,51 @@ func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
 		helper.WriteOCIErrror(w, http.StatusNotFound, e)
 		return
 	}
-	msg = fmt.Sprintf("blob for w/ digest '%s' found: %s", utils.ShortenDigest(req.Digest), mediaType)
-	span.AddEvent("log", trace.WithAttributes(
-		attribute.String("log.severity", "debug"),
-		attribute.String("log.message", msg),
-	))
-	l.Debug(msg)
+	utils.Debug(l, span, "blob for w/ digest '%s' found w/ mediaType '%s'", utils.ShortenDigest(req.Digest), mediaType)
 	switch mediaType {
 	case
 		"application/vnd.docker.image.rootfs.diff.tar.gzip",
 		"application/vnd.oci.image.layer.v1.tar+gzip",
 		"unknownLayer":
 		// If redirect is enabled, we need to fetch the PreSignedURL
-		if r.Method == "GET" && h.mag.Minio.GetLayerBucketConfig().Redirect {
-			psUrl, err := h.mag.Layer_GetPresignedUrlByHTTPRequest(r)
-			if err != nil {
-				det := helper.NewDetailFromReq(req)
-				e := helper.NewErrPayload("INTERNAL_ERROR", "failed to fetch layer presigned url", det)
-				helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
-			} else {
-				tracing.SpanLog(span, "debug", "307 temporariy redirect blob from '%s' to MinIO/S3 presigend URL: %s", req.Repo, psUrl)
-				span.SetStatus(http.StatusTemporaryRedirect, "temporariy redirect blob to MinIO/S3 presigend URL")
-				http.Redirect(w, r, psUrl, http.StatusTemporaryRedirect)
+		if r.Method == "GET" {
+			utils.Debug(l, span, "GET request for blob")
+			// 307 Temporary Redirect
+			// Location: <blob location>
+			// Docker-Content-Digest: <digest>
+			if lyrUp, found, e := h.mag.Database.UpstreamGetByLayerDigest(ctx, req.Digest); e != nil {
+				utils.ErrorHandler(l, span, e, "failed to fetch layer by digest")
 				return
+			} else if found {
+				// Redirct allows BLOB fetch (registry.gitlab.com does not)
+				if h.mag.AllowsUnauthorizedPull(lyrUp) {
+					utils.Debug(l, span, "upstream redirect found: %s (reqDig: %s / upstreamDig: %s)", lyrUp.GetLabel(), utils.ShortenDigest(req.Digest), utils.ShortenDigest(lyrUp.Digest.String()))
+					w.Header().Set("Docker-Content-Digest", req.Digest)
+					redUrl := lyrUp.GetBlobUrl(req.Digest)
+					utils.Debug(l, span, "redirecting to upstream: %s", redUrl)
+					w.Header().Set("Location", redUrl)
+					w.Header().Del("Authorization")
+					http.Redirect(w, r, redUrl, http.StatusTemporaryRedirect)
+					return
+				} else {
+					utils.Warn(l, span, "upstream does not allow unauthorized pull: %s", lyrUp.GetLabel())
+				}
+			} else {
+				utils.Debug(l, span, "upstream redirect not found: %s (digest: %s)", up.GetLabel(), utils.ShortenDigest(req.Digest))
+			}
+			if h.mag.Minio.GetLayerBucketConfig().Redirect {
+				utils.Info(l, span, "redirecting to MinIO/S3 presigned URL")
+				psUrl, err := h.mag.Layer_GetPresignedUrlByHTTPRequest(r)
+				if err != nil {
+					det := helper.NewDetailFromReq(req)
+					e := helper.NewErrPayload("INTERNAL_ERROR", "failed to fetch layer presigned url", det)
+					helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
+				} else {
+					tracing.SpanLog(span, "debug", "307 temporariy redirect blob from '%s' to MinIO/S3 presigend URL: %s", req.Repo, psUrl)
+					span.SetStatus(http.StatusTemporaryRedirect, "temporariy redirect blob to MinIO/S3 presigend URL")
+					http.Redirect(w, r, psUrl, http.StatusTemporaryRedirect)
+					return
+				}
 			}
 		}
 		layer, found, err := h.mag.Layer_GetByHTTPRequest(r)
@@ -390,6 +404,7 @@ func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
 	case
 		"application/vnd.oci.image.config.v1+json",
 		"application/vnd.docker.container.image.v1+json",
+		"application/vnd.unknownConfig",
 		"unknownConfig":
 		cfg, found, err := h.mag.ConfigBlob_GetByHTTPRequest(ctx, r)
 		if err != nil {

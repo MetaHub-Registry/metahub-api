@@ -7,11 +7,16 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/go-chi/jwtauth/v5"
 	"github.com/go-chi/render"
 	"github.com/riandyrn/otelchi"
 	"github.com/sirupsen/logrus"
 	"github.com/metahub-registry/metahub-api/pkg/api/v1/handlers"
 	"github.com/metahub-registry/metahub-core/pkg/backends/magazine"
+)
+
+const (
+	apiTimeout = 5 * time.Second
 )
 
 func Initialize(mag magazine.Magazine) *chi.Mux {
@@ -32,31 +37,41 @@ func Initialize(mag magazine.Magazine) *chi.Mux {
 		logger.Logger("router", log),
 		middleware.Recoverer,            //middleware to recover from panics
 		middleware.Heartbeat("/health"), //for heartbeat process such as Kubernetes liveprobeness
-		cors.Handler(cors.Options{
-			// AllowedOrigins:   []string{"https://foo.com"}, // Use this to allow specific origin hosts
-			AllowedOrigins: []string{"https://*", "http://*"},
-			// AllowOriginFunc:  func(r *http.Request, origin string) bool { return true },
+	)
+	if mag.Config.CORS.Enabled {
+		router.Use(cors.Handler(cors.Options{
+			AllowedOrigins:   []string{"https://*", "http://*"},
 			AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 			AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
 			ExposedHeaders:   []string{"Link"},
 			AllowCredentials: true,
 			MaxAge:           300, // Maximum value not ignored by any of major browsers
-		}),
-	)
+		}))
+	}
 
 	//Sets context for all requests
-	router.Use(middleware.Timeout(30 * time.Second))
 	router.Route("/api/v1", func(r chi.Router) {
+		r.Use(middleware.Timeout(apiTimeout))
 		r.Post("/collections", h.CollectionGetAll)
 		r.Post("/collection", h.CollectionGetOne)
-		r.Get("/users/{id}", h.UserGetOne)
-		r.Post("/users", h.UserPost)
-		r.Put("/users/{id}/secrets", h.UserPutSecret)
+		// Oauth2
+		r.Get("/login", h.GitHubLogin)
+
+	})
+	router.Route("/api/v1/protected", func(r chi.Router) {
+		r.Use(middleware.Timeout(apiTimeout))
+		r.Use(jwtauth.Verifier(handlers.TokenAuth))
+		r.Use(jwtauth.Authenticator)
+		// Seek, verify and validate JWT tokens
+		r.Get("/logout", h.GitHubLogout)
 		r.Get("/session", h.UserGetSession)
+		r.Get("/user", h.UserGetOne)
+		r.Get("/users/{id}", h.UserGetOne)
+		r.Put("/users/{id}/secrets", h.UserPutSecret)
+		r.Put("/user/secret", h.UserPutSecret)
+		r.Delete("/user/secret/{id}", h.UserDelSecret)
 	})
 	router.Get("/auth", h.AuthHandler)
-	// Oauth2
-	router.Get("/login", h.GitHubLogin)
 	//router.Get("/logout", h.GitHubLogout)
 	router.Get("/github_oauth_cb", h.GitHubCallback)
 	/////// Subroute with AuthMiddleware to trigger login

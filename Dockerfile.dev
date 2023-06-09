@@ -1,0 +1,40 @@
+# syntax=docker/dockerfile:1.4
+FROM alpine:3.18.0 AS gonja
+RUN apk add --no-cache wget \
+ && wget -qO- https://gitlab.com/qnib-golang/gonja-cli/-/releases/v0.0.2/downloads/gonja-cli_0.0.2_linux_amd64.tar.gz |tar xfz - -C /usr/local/bin
+
+
+FROM golang:1.20.4-alpine3.18 AS go
+RUN apk add --no-cache git gcc musl-dev bash vim curl wget
+WORKDIR /go/metahub-api
+COPY --from=metalib . ./ext/metalib
+COPY . ./
+RUN go mod edit -replace github.com/metahub-registry/metahub-core=/go/metahub-api/ext/metalib \
+ && go mod edit -replace github.com/metahub-registry/metahub-core/pkg/backends/minio=/go/metahub-api/ext/metalib/pkg/backends/minio \
+ && go mod edit -replace github.com/metahub-registry/metahub-core/pkg/types=/go/metahub-api/ext/metalib/pkg/types \
+ && go mod edit -replace github.com/metahub-registry/metahub-core/pkg/backends/sqlite=/go/metahub-api/ext/metalib/pkg/backends/sqlite \
+ && go mod edit -replace github.com/metahub-registry/metahub-core/pkg/backends/neo=/go/metahub-api/ext/metalib/pkg/backends/neo
+RUN go mod tidy
+RUN --mount=type=cache,target=/go/pkg/mod go mod tidy
+ENV CGO_ENABLED=1 GOOS=linux
+RUN --mount=type=cache,target=/go/pkg/mod go build -a -ldflags '-extldflags "-static"' .
+
+FROM alpine:3.18.0
+ARG USERDB_FILE=./metahub.db
+ENV METAHUB_API_PORT=80 \
+    METAHUB_DB=/var/lib/metahub/metahub.db \
+    CFG_FILE=/etc/metahub/api.yaml \
+    CONFIGS_BUCKET=configs \
+    LAYERS_BUCKET=layers \
+    MANIFESTS_BUCKET=manifests
+
+COPY --from=gonja /usr/local/bin/gonja-cli /usr/local/bin/gonja-cli
+RUN apk add bash
+COPY --from=go /go/metahub-api/metahub-api /usr/bin/metahub-api
+COPY ./misc/config/metahub-api.yaml.tpl /opt/metahub-api/
+COPY ${USERDB_FILE} /var/lib/metahub/metahub.db
+VOLUME /var/lib/metahub
+VOLUME /etc/metahub/
+COPY ./misc/docker/bin/start.sh /usr/local/bin/start.sh
+RUN mkdir -p /var/metahub/run/
+CMD ["/usr/local/bin/start.sh"]

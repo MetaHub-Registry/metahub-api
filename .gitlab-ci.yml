@@ -3,26 +3,7 @@ stages:
   - build
   - qa
 
-test:mr:main:
-    stage: coveragetest
-    image: registry.gitlab.com/qnib-pub-containers/cicd/golang:1.19.1
-    before_script:
-      - git clone https://gitlab-ci-token:${CI_JOB_TOKEN}@github.com/metahub-registry/metahub-core /tmp/github.com/metahub-registry/metahub-core
-      - go mod edit -replace github.com/metahub-registry/metahub-core=/tmp/github.com/metahub-registry/metahub-core   
-    script: 
-      - go mod tidy
-      - go test -short -timeout 120s ./... -coverprofile coverage.txt
-      - gocover-cobertura < coverage.txt > coverage.xml
-      - gocoverstats -v -f coverage.txt --percent
-    rules:
-      - if: '$CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main" && $CI_PIPELINE_SOURCE == "merge_request_event"'
-    coverage: /^Global weighted coverage:\s+(\d+(?:\.\d+)?%)/
-    artifacts:
-      reports:
-        coverage_report:
-          coverage_format: cobertura
-          path: coverage.xml
-test:mr:dev:
+mrtest:
     stage: coveragetest
     image: registry.gitlab.com/qnib-pub-containers/cicd/golang:1.19.1
     before_script:
@@ -33,8 +14,6 @@ test:mr:dev:
       - go test -short -timeout 120s ./... -coverprofile coverage.txt
       - gocover-cobertura < coverage.txt > coverage.xml
       - gocoverstats -v -f coverage.txt --percent
-    rules:
-      - if: '$CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "develop" && $CI_PIPELINE_SOURCE == "merge_request_event"'
     coverage: /^Global weighted coverage:\s+(\d+(?:\.\d+)?%)/
     artifacts:
       untracked: true
@@ -42,11 +21,13 @@ test:mr:dev:
         coverage_report:
           coverage_format: cobertura
           path: coverage.txt
+    only:
+      - merge_requests
 
 sonarqube-check:
   stage: qa
   dependencies:
-    - test:mr:dev
+    - mrtest
   retry: 2
   image: 
     name: sonarsource/sonar-scanner-cli:latest

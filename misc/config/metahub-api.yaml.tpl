@@ -18,6 +18,12 @@ neo4j:
   url: bolt://{{ NEO4J_HOST |default("neo4j") }}:{{ NEO_BOLT_PORT |default("7687") }}
 frontend:
   redirect: {{ FRONTEND_REDIRECT | default("https://frontend.metahub-registry.org") }}
-{% if LOGSTASH_URL %}logging:
-  gelf: {{ LOGSTASH_URL }}:12201
-  level: debug{% endif %}
+cors:
+  enabled: {{ CORS_ENABLED |default("false")}}
+logging:
+  level: {{ LOGSTASH_URL |default("debug") }}{% if LOGSTASH_URL %}
+  gelf: {{ LOGSTASH_URL }}:12201{% endif %}
+{% if OAUTH_CLIENTID %}oauth:
+  clientid: {{ OAUTH_CLIENTID }}
+  secret: {{ OAUTH_SECRET }}
+  state: {{ OAUTH_STATE |default("supersecretsalt") }}{% endif %}
