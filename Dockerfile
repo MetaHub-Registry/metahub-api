@@ -17,6 +17,11 @@ RUN --mount=type=cache,target=/go/pkg/mod go mod tidy
 ENV CGO_ENABLED=1 GOOS=linux
 RUN --mount=type=cache,target=/go/pkg/mod go build -a -ldflags '-extldflags "-static"' .
 
+FROM alpine:3.16.2 AS gonja
+RUN apk add --no-cache wget \
+ && wget -qO- https://gitlab.com/qnib-golang/gonja-cli/-/releases/v0.0.2/downloads/gonja-cli_0.0.2_linux_amd64.tar.gz |tar xfz - -C /usr/local/bin
+
+
 FROM golang:1.19.1-alpine3.16 AS dev
 RUN apk add --no-cache git gcc musl-dev bash vim curl wget openssh-client
 RUN mkdir -p -m 0700 ~/.ssh && ssh-keyscan gitlab.com >> ~/.ssh/known_hosts
@@ -36,17 +41,30 @@ ENV CFG_PATH=./misc/config/compose-config.yaml
 COPY ./misc/docker/dev/bash_history /root/.bash_history
 
 FROM alpine:3.16.2 AS prod
+ARG USERDB_FILE=./metahub.db
 ENV METAHUB_SERVER_PORT=80
 COPY --from=go /go/metahub-api/metahub-api /usr/bin/metahub-api
-COPY ./metahub.db /var/lib/metahub.db
+COPY ${USERDB_FILE} /var/lib/metahub.db
 COPY --from=go /go/metahub-api/metahub-api /usr/bin/metahub-api
 RUN mkdir -p /var/metahub/run/
 CMD ["/usr/local/bin/start.sh"]
 
-FROM alpine:3.16.2
-ENV METAHUB_SERVER_PORT=80 \
-    CFG_FILE=/etc/metahub/api.yaml 
-COPY ./misc/docker/bin/start.sh /usr/local/bin/start.sh
+FROM alpine:3.18.0
+ARG USERDB_FILE=./metahub.db
+ENV METAHUB_API_PORT=80 \
+    METAHUB_DB=/var/lib/metahub/metahub.db \
+    CFG_FILE=/etc/metahub/api.yaml \
+    CONFIGS_BUCKET=configs \
+    LAYERS_BUCKET=layers \
+    MANIFESTS_BUCKET=manifests
+
+COPY --from=gonja /usr/local/bin/gonja-cli /usr/local/bin/gonja-cli
+RUN apk add bash
 COPY --from=go /go/metahub-api/metahub-api /usr/bin/metahub-api
+COPY ./misc/config/metahub-api.yaml.tpl /opt/metahub-api/
+COPY ${USERDB_FILE} /var/lib/metahub/metahub.db
+VOLUME /var/lib/metahub
+VOLUME /etc/metahub/
+COPY ./misc/docker/bin/start.sh /usr/local/bin/start.sh
 RUN mkdir -p /var/metahub/run/
 CMD ["/usr/local/bin/start.sh"]

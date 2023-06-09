@@ -152,6 +152,13 @@ func TeardownTest(bs utils.Bootstrap) {
 	if err != nil {
 		logrus.Fatal(err)
 	}
+	if bs.CopySqlite != "" {
+		logrus.Warnf("Backup sqlite to %s", bs.CopySqlite)
+		err = h.mag.UserManagement.Backup(bs.CopySqlite)
+		if err != nil {
+			logrus.Fatal(err)
+		}
+	}
 	err = h.mag.UserManagement.EmptyData(bs.EmptyAll)
 	if err != nil {
 		logrus.Fatal(err)

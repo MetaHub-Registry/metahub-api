@@ -1,14 +1,17 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
-	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/jwtauth/v5"
+	"github.com/metahub-registry/metahub-core/pkg/backends/sqlite"
 	"github.com/metahub-registry/metahub-core/pkg/helper"
 	"github.com/metahub-registry/metahub-core/pkg/types"
 	"github.com/metahub-registry/metahub-core/pkg/types/www"
@@ -19,71 +22,85 @@ const (
 	pkgNameUser = "hanlders/user.go"
 )
 
+func getUserClaim(ctx context.Context, r *http.Request) (uname, ghid string, err error) {
+	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
+		"package": pkgNameUser,
+		"func":    "getUserClaim",
+	})
+	defer span.End()
+	_ = ctx
+	if _, claims, e := jwtauth.FromContext(r.Context()); e != nil {
+		return "", "", utils.ErrorHandler(l, span, e, "failed to get claims")
+	} else if usr, ok := claims["user"]; !ok {
+		err = utils.NewError(l, span, "failed to get user from claims")
+		return "", "", err
+
+	} else {
+		utils.Debug(l, span, "Got user '%v'", claims)
+		uname = usr.(string)
+		if val, ok := claims["id"]; ok {
+			ghid = val.(string)
+		} else {
+			err = utils.NewError(l, span, "failed to get ID from claims")
+			return "", "", err
+		}
+	}
+	return
+}
+
 func (h Handlers) UserGetOne(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := chi.URLParam(r, "id")
 	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
 		"package": pkgNameUser,
 		"func":    "UserGetOne",
-		"userID":  userID,
 	})
-	_ = l
 	defer span.End()
-	if uID, err := strconv.Atoi(userID); err != nil {
-		utils.NewErrorPlainWWW(w, l, span, "BAD_REQUEST", "failed to get user with uid '%s' (not an int?)", userID)
-		return
-	} else {
-		utils.Debug(l, span, "Get user with id '%d'", uID)
-		sqlUsr, e := h.mag.UserManagement.GetOne(ctx, uID)
-		if e != nil {
-			utils.ErrorHandlerPlainWWW(w, l, span, e, "INTERNAL_ERROR", "failed to get user with uid '%d'", uID)
-			return
-		}
+
+	if sqlUsr, isLoggedIn, err := h.userCheckLoginGetUser(ctx, w, r); err != nil {
+		utils.ErrorHandlerPlainWWW(w, l, span, err, "INTERNAL_ERROR", "failed to get user")
+	} else if isLoggedIn {
 		wwwUsr := sqlUsr.ToResponse()
 		wwwByte := wwwUsr.ToBytes()
 		helper.WriteResponse(w, http.StatusOK, wwwByte)
 	}
 }
 
-func (h Handlers) UserPost(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+func (h Handlers) userCheckLoginGetUser(ctx context.Context, w http.ResponseWriter, r *http.Request) (su *sqlite.User, isLoggedIn bool, err error) {
 	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
 		"package": pkgNameUser,
-		"func":    "UserPost",
+		"func":    "userCheckLogin",
 	})
 	defer span.End()
-	buf, err := io.ReadAll(r.Body)
+	userName, ghID, err := getUserClaim(ctx, r)
 	if err != nil {
-		log.Fatal("request", err)
-	}
-	var wwwUser www.User
-	if e := json.Unmarshal(buf, &wwwUser); e != nil {
-		utils.ErrorHandlerPlainWWW(w, l, span, e, "INTERNAL_ERROR", "failed to unmarshal request")
 		return
 	}
-	utils.Debug(l, span, "Got user '%s'", wwwUser.GithubUsername)
-	if found, e := h.mag.UserManagement.UserNameExists(ctx, wwwUser.GithubUsername); e != nil {
-		utils.ErrorHandlerPlainWWW(w, l, span, e, "INTERNAL_ERROR", "failed to check if user '%s' exists", wwwUser.GithubUsername)
-		return
-	} else if found {
-		utils.ErrorHandlerPlainWWW(w, l, span, e, "BAD_REQUEST", "user '%s' already exists", wwwUser.GithubUsername)
+	utils.Debug(l, span, "User '%s' (GHID: %s) attempts to get his user", userName, ghID)
+	sqlUsr, err := h.mag.UserManagement.GetByUsername(ctx, userName)
+	if err != nil {
 		return
 	}
+	if sqlUsr.IsLoggedIn == 0 {
+		e := fmt.Errorf("user '%s' is not logged in", sqlUsr.UserName)
+		utils.ErrorHandlerPlainWWW(w, l, span, e, "UNAUTHORIZED", "")
+		return
+	}
+	return sqlUsr, sqlUsr.IsLoggedIn == 1, nil
+}
 
-	if uID, e := h.mag.UserManagement.CreateWWWUser(ctx, wwwUser); e != nil {
-		utils.ErrorHandlerPlainWWW(w, l, span, e, "INTERNAL_ERROR", "failed to insert user")
-		return
-	} else {
-		sqlUsr, e := h.mag.UserManagement.GetOne(ctx, int(uID))
-		if e != nil {
-			utils.ErrorHandlerPlainWWW(w, l, span, e, "INTERNAL_ERROR", "failed to get user with uid '%d'", uID)
-			return
-		}
-		wwwUser = sqlUsr.ToResponse()
-		wwwByte := wwwUser.ToBytes()
-		helper.WriteResponse(w, http.StatusCreated, wwwByte)
+func (h Handlers) getUsername(ctx context.Context, r *http.Request) (uname string, err error) {
+	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
+		"package": pkgNameUser,
+		"func":    "getUsername",
+	})
+	defer span.End()
+	_ = ctx
+	uname, _, err = getUserClaim(ctx, r)
+	if err != nil {
+		err = utils.ErrorHandler(l, span, err, "failed to get user claim")
 		return
 	}
+	return uname, nil
 }
 
 func (h Handlers) UserGetSession(w http.ResponseWriter, r *http.Request) {
@@ -92,71 +109,91 @@ func (h Handlers) UserGetSession(w http.ResponseWriter, r *http.Request) {
 		"package": pkgNameUser,
 		"func":    "UserGetSession",
 	})
-	_ = l
+	utils.Debug(l, span, "Get session")
 	defer span.End()
-	cookie, err := r.Cookie("loginName")
-	if err != nil {
-		switch {
-		case errors.Is(err, http.ErrNoCookie):
-			http.Error(w, "cookie not found", http.StatusBadRequest)
-		default:
-			log.Println(err)
-			http.Error(w, "server error", http.StatusInternalServerError)
+	if sqlUser, isLoggedIn, err := h.userCheckLoginGetUser(ctx, w, r); err != nil {
+		utils.ErrorHandlerPlainWWW(w, l, span, err, "INTERNAL_ERROR", "failed to get user")
+	} else if isLoggedIn {
+		wwwSession := www.Session{
+			ID:     sqlUser.GithubID,
+			Login:  sqlUser.UserName,
+			Avatar: sqlUser.AvatarURL,
 		}
-		return
+		wwwByte := wwwSession.ToBytes()
+		helper.WriteResponse(w, http.StatusOK, wwwByte)
 	}
-	sqlUser, err := h.mag.UserManagement.GetByUsername(ctx, cookie.Value)
-	if err != nil {
-		utils.ErrorHandlerPlainWWW(w, l, span, err, "INTERNAL_ERROR", "failed to get user '%s'", cookie.Value)
-		return
-	}
-	wwwSession := www.Session{
-		ID:     sqlUser.GithubID,
-		Login:  sqlUser.UserName,
-		Avatar: sqlUser.AvatarURL,
-	}
-	wwwByte := wwwSession.ToBytes()
-	helper.WriteResponse(w, http.StatusOK, wwwByte)
 }
 
 func (h Handlers) UserPutSecret(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	userID := chi.URLParam(r, "id")
+
 	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
 		"package": pkgNameUser,
 		"func":    "UserPutSecret",
-		"userID":  userID,
 	})
-	_ = l
 	defer span.End()
 	_ = ctx
-	if uID, err := strconv.Atoi(userID); err != nil {
-		utils.NewErrorPlainWWW(w, l, span, "BAD_REQUEST", "failed to get user with uid '%s' (not an int?)", userID)
+	sqlUsr, isLoggedIn, err := h.userCheckLoginGetUser(ctx, w, r)
+	if err != nil {
+		utils.ErrorHandlerPlainWWW(w, l, span, err, "INTERNAL_ERROR", "failed to get user")
+	}
+	if !isLoggedIn {
+		// error was already written
+		return
+	}
+	// TODO: Add Secrets to userID
+	buf, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Fatal("request", err)
+	}
+	var wwwScrt www.Secret
+	if e := json.Unmarshal(buf, &wwwScrt); e != nil {
+		utils.ErrorHandlerPlainWWW(w, l, span, e, "INTERNAL_ERROR", "failed to unmarshal request")
+		return
+	}
+	tScrt := types.SecretFromWWW(wwwScrt)
+	if scrtID, err := h.mag.UserManagement.InsertSecret(ctx, int64(sqlUsr.ID), tScrt); err != nil {
+		utils.ErrorHandlerPlainWWW(w, l, span, err, "INTERNAL_ERROR", "failed to insert secret")
 		return
 	} else {
-		utils.Debug(l, span, "Get user with id '%d'", uID)
-		sqlUsr, e := h.mag.UserManagement.GetOne(ctx, uID)
-		if e != nil {
-			utils.ErrorHandlerPlainWWW(w, l, span, e, "INTERNAL_ERROR", "failed to get user with uid '%d'", uID)
-			return
-		}
-		// TODO: Add Secrets to userID
-		buf, err := io.ReadAll(r.Body)
-		if err != nil {
-			log.Fatal("request", err)
-		}
-		var wwwScrt www.Secret
-		if e := json.Unmarshal(buf, &wwwScrt); e != nil {
-			utils.ErrorHandlerPlainWWW(w, l, span, e, "INTERNAL_ERROR", "failed to unmarshal request")
-			return
-		}
-		tScrt := types.SecretFromWWW(wwwScrt)
-		if scrtID, err := h.mag.UserManagement.InsertSecret(ctx, int64(sqlUsr.ID), tScrt); err != nil {
-			utils.ErrorHandlerPlainWWW(w, l, span, err, "INTERNAL_ERROR", "failed to insert secret")
-			return
-		} else {
-			utils.Debug(l, span, "Inserted secret with id '%d'", scrtID)
-		}
-		helper.WriteResponse(w, http.StatusCreated, nil)
+		utils.Debug(l, span, "Inserted secret with id '%d'", scrtID)
 	}
+	h.writeJSON(w, http.StatusCreated, envelope{"name": wwwScrt.Name, "secret_key": wwwScrt.Key})
+
+}
+
+func (h Handlers) UserDelSecret(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	secretID := chi.URLParam(r, "id")
+	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
+		"package": pkgNameUser,
+		"func":    "UserDelSecret",
+		"id":      secretID,
+	})
+	defer span.End()
+	_ = ctx
+	sqlUsr, isLoggedIn, err := h.userCheckLoginGetUser(ctx, w, r)
+	if err != nil {
+		utils.ErrorHandlerPlainWWW(w, l, span, err, "INTERNAL_ERROR", "failed to get user")
+	}
+	if !isLoggedIn {
+		// error was already written
+		return
+	}
+	_, err = strconv.Atoi(secretID)
+	if err == nil {
+		utils.Debug(l, span, "Deleting secret by ID '%s'", secretID)
+		if err := h.mag.UserManagement.DelSecret(ctx, sqlUsr.ID, secretID); err != nil {
+			utils.ErrorHandlerPlainWWW(w, l, span, err, "INTERNAL_ERROR", "failed to delete secret")
+			return
+		}
+		h.writeJSON(w, http.StatusOK, envelope{"message": "deleted secret by ID, please transition to secret name"})
+		return
+	}
+	utils.Debug(l, span, "Deleting secret by name '%s'", secretID)
+	if err := h.mag.UserManagement.DelSecretByName(ctx, sqlUsr.ID, secretID); err != nil {
+		utils.ErrorHandlerPlainWWW(w, l, span, err, "INTERNAL_ERROR", "failed to delete secret")
+		return
+	}
+	helper.WriteResponse(w, http.StatusOK, nil)
 }

@@ -23,6 +23,7 @@ const (
 	defaultProfile = "generic"
 	pkgNameAuth    = "api/auth.go"
 	realFrmt       = "Realm: %s"
+	uknAccTok      = "unknown access token"
 )
 
 var (
@@ -30,6 +31,7 @@ var (
 	invalidToken   oauthError = "invalid_token"
 	userReg                   = regexp.MustCompile(`(?P<user>[\w\-\.\_]+)(\/(?P<profile>[\/\w\-\.\_#]+))?`)
 	debugUser                 = map[string]int{"oci": 4}
+	FailGetToken              = fmt.Errorf("failed to get token")
 )
 
 func getAccessTokenFromBearerToken(r *http.Request) (at *types.AccessToken, user string, err error) {
@@ -143,27 +145,27 @@ func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		l.Infof("error getting access token: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
-		return fmt.Errorf("error getting token")
+		return FailGetToken
 	}
 	if at == nil {
-		l.Error("unknown access token")
+		l.Error(uknAccTok)
 		det := helper.NewDetail("repository", req.Repo, req.Method)
 		w.WriteHeader(http.StatusUnauthorized)
 		logrus.Infof(realFrmt, realm)
-		unauthorized(w, realm, det, invalidToken, "unknown access token")
-		return fmt.Errorf("error getting token")
+		unauthorized(w, realm, det, invalidToken, uknAccTok)
+		return FailGetToken
 	}
 	var username, profile, password string
 	// The access token is the base64 encoded username and password we need to check
 	decoded := at.GetUser()
 	parts := strings.Split(string(decoded), ":")
 	if len(parts) != 2 {
-		l.Error("unknown access token")
+		l.Error(uknAccTok)
 		det := helper.NewDetail("repository", req.Repo, req.Method)
 		w.WriteHeader(http.StatusUnauthorized)
 		utils.Debug(l, span, realFrmt, realm)
-		unauthorized(w, realm, det, invalidToken, "unknown access token")
-		return fmt.Errorf("error getting token")
+		unauthorized(w, realm, det, invalidToken, uknAccTok)
+		return FailGetToken
 	}
 	password = parts[1]
 	m, err := utils.ReSubMatchMap(userReg, parts[0])

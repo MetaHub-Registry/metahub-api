@@ -80,10 +80,6 @@ func (h Handlers) CollectionGetOne(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	mlibUtils.Debug(l, span, " -> %s:%s", col.Repo, col.Tag)
-	if err != nil {
-		h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
-		return
-	}
 	// Create Breadcrumbs for the collection
 	reps := set.NewLinkedHashSetString()
 	for idx, r := range strings.Split(col.Repo, "/") {

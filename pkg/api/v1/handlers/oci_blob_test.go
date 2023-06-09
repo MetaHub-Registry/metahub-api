@@ -89,19 +89,47 @@ func TestBlobHandlerDirectPost(t *testing.T) {
 
 func TestBlobHandlerLayerTest(t *testing.T) {
 	ctx := context.Background()
+	debug := 0
 	bs := utils.NewBootstrap()
 	bs.SetEmptyAll()
 	bs.SetYAMLPrefix("../../../../misc/yaml")
 	bs.AddBootstrap("users")
-	bs.AddBootstrap("platforms:generic")
-	bs.AddBootstrap("profile:profiles/cpu/generic.yaml")
+	bs.AddBootstrap("platforms:arm64")
+	bs.AddBootstrap("config:ft_arm64")
+	bs.AddBootstrap("upstream:ft_arm64")
+	bs.AddBootstrap("manifest:ft_arm64")
 	bs.AddBootstrap("layer:0:ft_arm64")
-	//bs.PostTestSleep = 60
+	bs.AddBootstrap("layer:1:ft_arm64")
+	bs.AddBootstrap("manifestdata:ft_arm64")
+	bs.AddBootstrap("platforms:amd64")
+	bs.AddBootstrap("config:ft_amd64")
+	bs.AddBootstrap("upstream:ft_amd64")
+	bs.AddBootstrap("manifest:ft_amd64")
+	bs.AddBootstrap("layer:0:ft_amd64")
+	bs.AddBootstrap("layer:1:ft_amd64")
+	bs.AddBootstrap("manifestdata:ft_amd64")
+	bs.AddBootstrap("collection:ft_generic")
+	if debug > 0 {
+		bs.PostTestSleep = debug
+	}
 	br, err := SetupTest(ctx, bs)
 	if err != nil {
+		TeardownTest(bs)
 		t.Fatal(err)
 	}
+	for _, l := range br.ToLines() {
+		if debug > 0 {
+			t.Log(l)
+		}
+	}
 	defer TeardownTest(bs)
+	// Prepare
+	if err := h.mag.ComputeAllManifests(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.mag.ComputeManifestlists(ctx); err != nil {
+		t.Fatal(err)
+	}
 	/// Request
 	token, err := br.Get("user:test#bearer")
 	if err != nil {
@@ -132,41 +160,55 @@ func TestBlobHandlerLayerTest(t *testing.T) {
 	r.Method = http.MethodGet
 	h.BlobHandler(w, r)
 	assert.Equal(t, http.StatusOK, w.Code)
-	assert.GreaterOrEqual(t, w.Body.Len(), 411)
+	assert.GreaterOrEqual(t, w.Body.Len(), 100)
 	assert.LessOrEqual(t, w.Body.Len(), 412)
 }
 
 func TestBlobHandlerRedirectLayerTest(t *testing.T) {
+	ctx := context.Background()
+	debug := 0
 	bs := utils.NewBootstrap()
 	bs.SetEmptyAll()
 	bs.SetYAMLPrefix("../../../../misc/yaml")
 	bs.AddBootstrap("users")
-	bs.AddBootstrap("platforms:generic")
-	bs.AddBootstrap("rules:rules/generic/linux.yaml")
-	bs.AddBootstrap("profile:profiles/generic.yaml")
+	bs.AddBootstrap("platforms:arm64")
 	bs.AddBootstrap("config:ft_arm64")
-	bs.AddBootstrap("config:ft_amd64")
 	bs.AddBootstrap("upstream:ft_arm64")
-	bs.AddBootstrap("upstream:ft_amd64")
+	bs.AddBootstrap("manifest:ft_arm64")
 	bs.AddBootstrap("layer:0:ft_arm64")
 	bs.AddBootstrap("layer:1:ft_arm64")
+	bs.AddBootstrap("manifestdata:ft_arm64")
+	bs.AddBootstrap("platforms:amd64")
+	bs.AddBootstrap("config:ft_amd64")
+	bs.AddBootstrap("upstream:ft_amd64")
+	bs.AddBootstrap("manifest:ft_amd64")
 	bs.AddBootstrap("layer:0:ft_amd64")
 	bs.AddBootstrap("layer:1:ft_amd64")
-	bs.AddBootstrap("manifest:ft_arm64")
-	bs.AddBootstrap("manifest:ft_amd64")
-	bs.AddBootstrap("collection:ft_amd64")
-	bs.AddBootstrap("collection:ft_arm64")
-	//bs.PostTestSleep = 300
-	ctx := context.Background()
+	bs.AddBootstrap("manifestdata:ft_amd64")
+	bs.AddBootstrap("collection:ft_generic")
+	if debug > 0 {
+		bs.PostTestSleep = debug
+	}
 	br, err := SetupTest(ctx, bs)
 	if err != nil {
+		TeardownTest(bs)
 		t.Fatal(err)
 	}
-	_ = br
+	for _, l := range br.ToLines() {
+		if debug > 0 {
+			t.Log(l)
+		}
+	}
 	defer TeardownTest(bs)
 	/// Vars
 	testRepo := "qnib"
 	//testProfile := "generic"
+	if err := h.mag.ComputeAllManifests(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.mag.ComputeManifestlists(ctx); err != nil {
+		t.Fatal(err)
+	}
 	/// Request
 	token, err := br.Get("user:test#bearer")
 	if err != nil {

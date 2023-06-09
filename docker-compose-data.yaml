@@ -34,13 +34,22 @@ services:
      - neo4j:/var/lib/neo4j/data
      - ${PWD}/misc/backup:/backup
   registry:
-    image: quay.io/cqnib/testcontainer-registry:2023-05-23-amd64
+    image: registry:2.8.1
     ports:
       - 5050:5050
     networks:
       - mh-data
+    volumes:
+      - ce-registry:/opt/registry
+    environment: 
+      - REGISTRY_HTTP_ADDR=0.0.0.0:5050 
+      - REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY=/opt/registry
+
 volumes:
   neo4j:
+  # ce-registry volume is external so that it sticks around after the stack is removed
+  ce-registry:
+    external: true
 
 networks:
   api-internal:

@@ -18,10 +18,15 @@ neo4j:
   password: test
   url: bolt://neo4j:7687
 frontend:
-  redirect: http://localhost:8081
+  redirect: http://localhost:8082
 logging:
   gelf: logstash:12201
   level: debug
 tracing:
   name: "metahub-api"
   endpoint: "http://jaeger:14268/api/traces"
+cors:
+  enabled: false
+oauth:
+  clientid: "Iv1.dd76eb11191acb93"
+  secret: "REDACTED-IN-HISTORY"
