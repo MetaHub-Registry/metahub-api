@@ -1,0 +1,32 @@
+{
+    "build": {
+        "dockerfile": "Dockerfile"
+    },
+    "name": "Go",
+    "features": {
+        "ghcr.io/devcontainers/features/go:1": {
+            "version": "1.19"
+        },
+        "ghcr.io/devcontainers/features/aws-cli:1": {},
+        "ghcr.io/devcontainers/features/docker-in-docker:2.12.2": {
+            "moby": false
+        }
+
+    },
+    "customizations": {
+        "vscode": {
+            "settings": {},
+            "extensions": []
+        }
+    },
+    "remoteUser": "root",
+    "portsAttributes": {
+        "9000": {
+            "label": "Hello Remote World",
+            "onAutoForward": "notify"
+        }
+    },
+    "mounts": [
+        "source=${localWorkspaceFolder}/../metahub-core,target=/Users/kniepbert/go/src/github.com/metahub-registry/metahub-core,type=bind,consistency=cached"
+    ]
+}
