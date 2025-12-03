@@ -1,7 +1,15 @@
 #!/bin/bash
 set -e
 
-source ~/gocd_func.sh
+if [[ -f ~/gocd_func.sh ]];then
+   FUNC_SRC=~/gocd_func.sh
+elif [[ -f /opt/qnib/gocd/src/gocd_func.sh ]];then
+   FUNC_SRC=/opt/qnib/gocd/src/gocd_func.sh
+else 
+    echo "ERROR: No gocd_func.sh found"
+    exit 1
+fi
+source ${FUNC_SRC}
 dumpEnv
 
 
@@ -12,11 +20,6 @@ dumpEnv
 #    exit 1
 #fi
 TOPDIR=$(git rev-parse --show-toplevel)
-
-source ~/gocd.env
-if [[ -z ${CI_JOB_TOKEN} ]];then
-   CI_JOB_TOKEN=${GITLAB_TOKEN}
-fi
 cat go.mod|awk '!/^replace/' > go.mod.tmp
 mv go.mod.tmp go.mod
 
@@ -28,21 +31,17 @@ if [[ -d exp/metalib ]];then
 fi
 
 if [[ "${DEPLOYMENT}" == "dev" ]];then
-   echo "> git clone --branch=develop https://gitlab-ci-token:CI_JOB_TOKEN@github.com/metahub-registry/metahub-core exp/metalib"
-   git clone --branch=develop https://gitlab-ci-token:${CI_JOB_TOKEN}@github.com/metahub-registry/metahub-core exp/metalib
+   echo "> git clone --branch=develop https://gitlab-ci-token:GITLAB_REPO_RO@github.com/metahub-registry/metahub-core.git exp/metalib"
+   git clone --branch=develop https://gitlab-ci-token:${GITLAB_REPO_RO}@github.com/metahub-registry/metahub-core.git exp/metalib
 elif [[ "${DEPLOYMENT}" == "prod" ]];then
-   echo "> git clone --branch=main https://gitlab-ci-token:CI_JOB_TOKEN@github.com/metahub-registry/metahub-core exp/metalib"
-   git clone --branch=main https://gitlab-ci-token:${CI_JOB_TOKEN}@github.com/metahub-registry/metahub-core exp/metalib
+   echo "> git clone --branch=main https://gitlab-ci-token:GITLAB_REPO_RO@github.com/metahub-registry/metahub-core.git exp/metalib"
+   git clone --branch=main https://gitlab-ci-token:${GITLAB_REPO_RO}@github.com/metahub-registry/metahub-core.git exp/metalib
 else 
    echo "ERROR: DEPLOYMENT '${DEPLOYMENT} not known or not set (dev|prod)"
    exit 1
 fi
 go mod edit -replace github.com/metahub-registry/metahub-core=/go/metahub-api/exp/metalib  
 
-rm -f metahub.db
-## Fetch Artefact
-curl -sH "Authorization: bearer ${GOCD_TOKEN}" \
-     -o metahub.db "${GO_SERVER_URL}/files/${GO_DEPENDENCY_LOCATOR_METAHUB_ADMIN}/RunQnib/misc/gocd/bin/metahub.db"
 NEW_IMAGE=metahub-api-test:${GO_PIPELINE_LABEL}
 docker build -f Dockerfile.legacy -t ${NEW_IMAGE} .
 docker save -o ${TOPDIR}/metahub-api.tar ${NEW_IMAGE}

@@ -8,7 +8,7 @@
             "version": "1.19"
         },
         "ghcr.io/devcontainers/features/aws-cli:1": {},
-        "ghcr.io/devcontainers/features/docker-in-docker:2.12.2": {
+        "ghcr.io/devcontainers/features/docker-in-docker:2.12.4": {
             "moby": false
         }
 
