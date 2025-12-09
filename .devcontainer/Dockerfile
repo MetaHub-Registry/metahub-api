@@ -1,7 +1,6 @@
-FROM sonarsource/sonar-scanner-cli:10.0.3.1430_5.0.1 AS sonar
-
+FROM sonarsource/sonar-scanner-cli:12.0.0.3214_8.0.1 AS sonar
 FROM mcr.microsoft.com/devcontainers/go:1-1.19-bullseye
-COPY --from=sonar /opt/sonar-scanner/lib/sonar-scanner-cli-5.0.1.3006.jar /usr/local/lib/
+COPY --from=sonar /opt/sonar-scanner/lib/sonar-scanner-cli-8.0.1.6346.jar /usr/local/lib/
 COPY --from=sonar /opt/sonar-scanner/bin/sonar-scanner /usr/local/bin/
 
 RUN apt update \
