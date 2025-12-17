@@ -17,8 +17,7 @@ FROM alpine:3.21
 ENV METAHUB_API_PORT=80 \
     METAHUB_DB=/var/lib/metahub/metahub.db \
     CFG_FILE=/etc/metahub/api.yaml \
-    CONFIGS_BUCKET=configs \
-    LAYERS_BUCKET=layers \
+    BLOB_BUCKET=blobs \
     MANIFESTS_BUCKET=manifests
 
 COPY --from=gonja /usr/local/bin/gonja-cli /usr/local/bin/gonja-cli

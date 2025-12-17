@@ -1,0 +1,21 @@
+meta {
+  name: delManifestDigest
+  type: http
+  seq: 3
+}
+
+delete {
+  url: {{registry}}/v2/{{repo}}/manifests/{{manifestDigest}}
+  body: none
+  auth: inherit
+}
+
+vars:pre-request {
+  manifestDigest: 1677ae43e0228db3b2452abbd957b4d42af063597fd254665dd26e3287b5452d
+  repo: oci/conformance
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

@@ -67,7 +67,7 @@ func TestGithubLogout(t *testing.T) {
 	h.mag.UserManagement.SetLoggedIn(ctx, adminID)
 	hdr := newAuthHeader((map[string]interface{}{"user": userName, "id": "1234", "exp": jwtauth.ExpireIn(5 * time.Minute)}))
 	if status, resp := testRequest(t, ts, "GET", "/api/v1/protected/logout", hdr, nil); status != 200 {
-		t.Fatalf(resp)
+		t.Fatalf("%s", resp)
 	}
 	sqlUsr, err := h.mag.UserManagement.GetByUsername(ctx, userName)
 	if err != nil {
@@ -137,6 +137,6 @@ func TestGithubCallback(t *testing.T) {
 	hdr.Set("User", userName)
 
 	if status, resp := testRequest(t, ts, "GET", "/github_oauth_cb", hdr, nil); status != 401 || resp != "token is unauthorized\n" {
-		t.Fatalf(resp)
+		t.Fatalf("%s", resp)
 	}
 }

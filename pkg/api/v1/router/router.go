@@ -126,6 +126,11 @@ func Initialize(mag magazine.Magazine) *chi.Mux {
 		// Delete Blobs
 		r.Delete("/{repo}/{image}/blobs/{reference}", h.BlobDelHandler)
 		r.Delete("/{image}/blobs/{reference}", h.BlobDelHandler)
+		// Referrers
+		r.Get("/{image}/referrers/{reference}", h.ReferrersGetHandler)
+		r.Get("/{repo}/{image}/referrers/{reference}", h.ReferrersGetHandler)
+		r.Get("/{repo}/{repo2}/{image}/referrers/{reference}", h.ReferrersGetHandler)
+		r.Get("/{repo}/{repo2}/{repo3}/{image}/referrers/{reference}", h.ReferrersGetHandler)
 	})
 	router.Get("/", h.RedirectToWWW)
 	return router

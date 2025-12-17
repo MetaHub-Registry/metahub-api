@@ -177,7 +177,7 @@ func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) 
 		msg := fmt.Sprintf("username needs to prefix with profile (defaults to %s): '<user>/<profile>'", defaultProfile)
 		logrus.Error(msg)
 		w.WriteHeader(http.StatusBadRequest)
-		return fmt.Errorf(msg)
+		return fmt.Errorf("%s", msg)
 	}
 	username = m["user"]
 	if _, ok := m["profile"]; !ok {

@@ -62,9 +62,21 @@ func (h Handlers) BlobUploadPutHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Length > 0 {
+		logrus.Infof("completing upload UUID:%s with final chunk of size %d", req.UUID, len(buf))
 		// We do not have a PATH but directly a PUT request with the data
 		dig := digest.FromBytes(buf)
 		bu.Digest = dig.String()
+		/// Create New Chunk
+		_, err := h.mag.Database.UploadChunk_Create(ctx, &bu, 0, int64(req.Length))
+		if err != nil {
+			msg := "failed to create chunk upload"
+			err = errors.Wrap(err, msg)
+			logrus.Error(err)
+			det := helper.NewDetailFromReq(req)
+			e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+			helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
+			return
+		}
 		err = h.mag.StoreBlobUpload(ctx, &bu, buf)
 		if err != nil {
 			msg := "failed to store blob upload"
@@ -87,6 +99,29 @@ func (h Handlers) BlobUploadPutHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 	}
+	// How many chunks do we have?
+	chunks, err := h.mag.Database.UploadChunk_Get_ByUUID(ctx, bu.ID)
+	if err != nil {
+		msg := "failed to fetch blob upload"
+		err = errors.Wrap(err, msg)
+		logrus.Error(err)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
+		return
+	}
+
+	err = h.mag.ComposeFromChunks(ctx, &bu, chunks)
+	if err != nil {
+		msg := "failed to compose blob from chunks"
+		err = errors.Wrap(err, msg)
+		logrus.Error(err)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
+		return
+	}
+
 	// Finish the upload
 	err = h.mag.Database.BlobUpload_Complete(ctx, &bu)
 	if err != nil {
@@ -160,8 +195,14 @@ func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request)
 			helper.WriteOCIErrror(w, http.StatusRequestedRangeNotSatisfiable, e)
 		}
 	}
+	buf, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Fatal("request", err)
+	}
+	dig := digest.FromBytes(buf)
+	bu.Digest = dig.String()
 	/// Create New Chunk
-	chunk, err := h.mag.Database.UploadChunk_Create(ctx, bu.ID, req.RangeStartByte, req.RangeBytes)
+	chunk, err := h.mag.Database.UploadChunk_Create(ctx, &bu, req.RangeStartByte, req.RangeBytes)
 	if err != nil {
 		msg := "failed to create chunk upload"
 		err = errors.Wrap(err, msg)
@@ -172,13 +213,6 @@ func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	_ = chunk
-	buf, err := io.ReadAll(r.Body)
-	if err != nil {
-		log.Fatal("request", err)
-	}
-	dig := digest.FromBytes(buf)
-	bu.Digest = dig.String()
-	logrus.Warnf("  >> Before StoreBlobUpload(): bu.ID:%d, UUID:%s", bu.ID, bu.UUID)
 	err = h.mag.StoreBlobUpload(ctx, &bu, buf)
 	if err != nil {
 		msg := "failed to store blob upload"
@@ -211,6 +245,8 @@ func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request)
 }
 
 func (h Handlers) BlobUploadPostHandler(w http.ResponseWriter, r *http.Request) {
+	// POST blob update can either only initiate an upload or include the data in one go
+	// > if digest=ASDASD is included, the data is added
 	ctx := r.Context()
 	req := types.NewRequest(ctx, r)
 	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
@@ -222,6 +258,7 @@ func (h Handlers) BlobUploadPostHandler(w http.ResponseWriter, r *http.Request) 
 		"user":    req.User,
 		"role":    req.UserRole,
 	})
+
 	defer span.End()
 	mt := "NONE"
 	msg := fmt.Sprintf("%-5s BlobUploadPostHandler(%s, Type:%s, Len:%d", r.Method, mt, req.Repo, req.Length)
@@ -242,14 +279,15 @@ func (h Handlers) BlobUploadPostHandler(w http.ResponseWriter, r *http.Request) 
 	bu := types.OCIBlobUpload{
 		UploadUser:    req.User,
 		UploadProfile: req.Profile,
-		Digest:        req.Digest,
-		Repo:          req.Repo,
+		//Digest:        req.Digest,
+		Repo: req.Repo,
 	}
 	err := h.mag.Database.BlobUpload_Create_ByOCI(ctx, &bu)
 	if err != nil {
 		utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "push", e, "INTERNAL_ERROR", "failed to create blob upload")
 		return
 	}
+	bu.Digest = req.Digest
 	tracing.SpanDebug(span, "request.length:%d", req.Length)
 	if req.Length > 0 {
 		// Successful completion of the request MUST return a 201 Created and MUST include the following header:
@@ -261,11 +299,45 @@ func (h Handlers) BlobUploadPostHandler(w http.ResponseWriter, r *http.Request) 
 		}
 		dig := digest.FromBytes(buf)
 		bu.Digest = dig.String()
+		/// Create New Chunk
+		chunk, err := h.mag.Database.UploadChunk_Create(ctx, &bu, 0, int64(req.Length))
+		if err != nil {
+			msg := "failed to create chunk upload"
+			err = errors.Wrap(err, msg)
+			logrus.Error(err)
+			det := helper.NewDetailFromReq(req)
+			e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+			helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
+			return
+		}
 		err = h.mag.StoreBlobUpload(ctx, &bu, buf)
 		if err != nil {
 			utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "push", e, "INTERNAL_ERROR", "failed to store blob upload")
 			return
 		}
+		err = h.mag.ComposeFromChunks(ctx, &bu, []types.BlobChunk{chunk})
+		if err != nil {
+			msg := "failed to compose blob from chunks"
+			err = errors.Wrap(err, msg)
+			logrus.Error(err)
+			det := helper.NewDetailFromReq(req)
+			e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+			helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
+			return
+		}
+
+		// Finish the upload
+		err = h.mag.Database.BlobUpload_Complete(ctx, &bu)
+		if err != nil {
+			msg := "failed to update blob in DB"
+			err = errors.Wrap(err, msg)
+			logrus.Error(err)
+			det := helper.NewDetailFromReq(req)
+			e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+			helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
+			return
+		}
+
 		span.AddEvent("log", trace.WithAttributes(
 			attribute.String("log.severity", "debug"),
 			attribute.String("Location", bu.Location),
@@ -306,7 +378,7 @@ func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
 	} else {
 		msg += fmt.Sprintf("%s)", req.Tag)
 	}
-	utils.Debug(l, span, msg)
+	utils.Debug(l, span, "%s", msg)
 	// Check for blob in Graph
 	up := upstream.UpstreamTriple{
 		Reg:    req.Host,
@@ -314,18 +386,20 @@ func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
 		Tag:    req.Tag,
 		Digest: digest.Digest(req.Digest),
 	}
-	mediaType, blobFound, err := h.mag.BlobExists(ctx, up)
+
+	blob, found, err := h.mag.Blob_GetByHTTPRequest(r)
 	if err != nil {
-		msg := fmt.Sprintf("failed to check if blob exists: %v", err)
-		l.Error(msg)
-		err := errors.New(msg)
-		span.RecordError(err)
+		// 1. FALSE
+		msg := fmt.Sprintf("failed to fetch layer: %v", err)
+		logrus.Error(msg)
+		msg = "failed to fetch layer blob"
 		det := helper.NewDetailFromReq(req)
 		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+		span.SetStatus(http.StatusInternalServerError, e.Message)
 		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 		return
 	}
-	if !blobFound {
+	if !found {
 		utils.Debug(l, span, "blob for w/ digest '%s' not found", utils.ShortenDigest(req.Digest))
 		// Not found
 		msg = "could not find blob"
@@ -335,104 +409,73 @@ func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
 		helper.WriteOCIErrror(w, http.StatusNotFound, e)
 		return
 	}
-	utils.Debug(l, span, "blob for w/ digest '%s' found w/ mediaType '%s'", utils.ShortenDigest(req.Digest), mediaType)
-	switch mediaType {
-	case
-		"application/vnd.docker.image.rootfs.diff.tar.gzip",
-		"application/vnd.oci.image.layer.v1.tar+gzip",
-		"unknownLayer":
-		// If redirect is enabled, we need to fetch the PreSignedURL
-		if r.Method == "GET" {
-			utils.Debug(l, span, "GET request for blob")
-			// 307 Temporary Redirect
-			// Location: <blob location>
-			// Docker-Content-Digest: <digest>
-			if lyrUp, found, e := h.mag.Database.UpstreamGetByLayerDigest(ctx, req.Digest); e != nil {
-				utils.ErrorHandler(l, span, e, "failed to fetch layer by digest")
+	utils.Debug(l, span, "blob for w/ digest '%s' found", utils.ShortenDigest(req.Digest))
+	// If redirect is enabled, we need to fetch the PreSignedURL
+	switch r.Method {
+	case "HEAD":
+		utils.Debug(l, span, "HEAD request for blob")
+		blob.WriteWWWHeader(w)
+		return
+	case "GET":
+		utils.Debug(l, span, "GET request for blob")
+		// 307 Temporary Redirect
+		// Location: <blob location>
+		// Docker-Content-Digest: <digest>
+		if lyrUp, found, e := h.mag.Database.UpstreamGetByLayerDigest(ctx, req.Digest); e != nil {
+			utils.ErrorHandler(l, span, e, "failed to fetch layer by digest")
+			return
+		} else if found {
+			// Redirct allows BLOB fetch (registry.gitlab.com does not)
+			if h.mag.AllowsUnauthorizedPull(lyrUp) {
+				utils.Debug(l, span, "upstream redirect found: %s (reqDig: %s / upstreamDig: %s)", lyrUp.GetLabel(), utils.ShortenDigest(req.Digest), utils.ShortenDigest(lyrUp.Digest.String()))
+				w.Header().Set("Docker-Content-Digest", req.Digest)
+				redUrl := lyrUp.GetBlobUrl(req.Digest)
+				utils.Debug(l, span, "redirecting to upstream: %s", redUrl)
+				w.Header().Set("Location", redUrl)
+				w.Header().Del("Authorization")
+				http.Redirect(w, r, redUrl, http.StatusTemporaryRedirect)
 				return
-			} else if found {
-				// Redirct allows BLOB fetch (registry.gitlab.com does not)
-				if h.mag.AllowsUnauthorizedPull(lyrUp) {
-					utils.Debug(l, span, "upstream redirect found: %s (reqDig: %s / upstreamDig: %s)", lyrUp.GetLabel(), utils.ShortenDigest(req.Digest), utils.ShortenDigest(lyrUp.Digest.String()))
-					w.Header().Set("Docker-Content-Digest", req.Digest)
-					redUrl := lyrUp.GetBlobUrl(req.Digest)
-					utils.Debug(l, span, "redirecting to upstream: %s", redUrl)
-					w.Header().Set("Location", redUrl)
-					w.Header().Del("Authorization")
-					http.Redirect(w, r, redUrl, http.StatusTemporaryRedirect)
-					return
-				} else {
-					utils.Warn(l, span, "upstream does not allow unauthorized pull: %s", lyrUp.GetLabel())
-				}
 			} else {
-				utils.Debug(l, span, "upstream redirect not found: %s (digest: %s)", up.GetLabel(), utils.ShortenDigest(req.Digest))
+				utils.Warn(l, span, "upstream does not allow unauthorized pull: %s", lyrUp.GetLabel())
 			}
-			if h.mag.Minio.GetLayerBucketConfig().Redirect {
-				utils.Info(l, span, "redirecting to MinIO/S3 presigned URL")
-				psUrl, err := h.mag.Layer_GetPresignedUrlByHTTPRequest(r)
-				if err != nil {
-					det := helper.NewDetailFromReq(req)
-					e := helper.NewErrPayload("INTERNAL_ERROR", "failed to fetch layer presigned url", det)
-					helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
-				} else {
-					tracing.SpanLog(span, "debug", "307 temporariy redirect blob from '%s' to MinIO/S3 presigend URL: %s", req.Repo, psUrl)
-					span.SetStatus(http.StatusTemporaryRedirect, "temporariy redirect blob to MinIO/S3 presigend URL")
-					http.Redirect(w, r, psUrl, http.StatusTemporaryRedirect)
-					return
-				}
-			}
+		} else {
+			utils.Debug(l, span, "upstream redirect not found: %s (digest: %s)", up.GetLabel(), utils.ShortenDigest(req.Digest))
 		}
-		layer, found, err := h.mag.Layer_GetByHTTPRequest(r)
-		if err != nil {
-			// 1. FALSE
-			msg := fmt.Sprintf("failed to fetch layer: %v", err)
-			logrus.Error(msg)
-			msg = "failed to fetch layer blob"
-			det := helper.NewDetailFromReq(req)
-			e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
-			span.SetStatus(http.StatusInternalServerError, e.Message)
-			helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
-			return
-		}
-		if found {
-			if r.Method == "GET" {
-				layer.WriteWWW(w)
-			}
-			layer.WriteWWWHeader(w)
-			return
-		}
-	case
-		"application/vnd.oci.image.config.v1+json",
-		"application/vnd.docker.container.image.v1+json",
-		"application/vnd.unknownConfig",
-		"unknownConfig":
-		cfg, found, err := h.mag.ConfigBlob_GetByHTTPRequest(ctx, r)
-		if err != nil {
-			// 1. FALSE
-			msg := fmt.Sprintf("failed to fetch config: %v", err)
-			logrus.Error(msg)
-			msg = "failed to fetch config blob"
-			det := helper.NewDetailFromReq(req)
-			e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
-			helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
-			return
-		}
-		if found {
-			if r.Method == "GET" {
-				cfg.WriteWWW(w)
+		if h.mag.Minio.GetBlobBucketConfig().Redirect {
+			utils.Info(l, span, "redirecting to MinIO/S3 presigned URL")
+			psUrl, err := h.mag.Layer_GetPresignedUrlByHTTPRequest(r)
+			if err != nil {
+				det := helper.NewDetailFromReq(req)
+				e := helper.NewErrPayload("INTERNAL_ERROR", "failed to fetch layer presigned url", det)
+				helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 			} else {
-				cfg.WriteWWWHeader(w)
+				tracing.SpanLog(span, "debug", "307 temporariy redirect blob from '%s' to MinIO/S3 presigend URL: %s", req.Repo, psUrl)
+				span.SetStatus(http.StatusTemporaryRedirect, "temporariy redirect blob to MinIO/S3 presigend URL")
+				http.Redirect(w, r, psUrl, http.StatusTemporaryRedirect)
+				return
 			}
-			return
 		}
-	default:
-		msg := fmt.Sprintf("unkown mediaType '%s'", mediaType)
-		l.Error(msg)
+	}
+	layer, found, err := h.mag.Layer_GetByHTTPRequest(r)
+	if err != nil {
+		// 1. FALSE
+		msg := fmt.Sprintf("failed to fetch layer: %v", err)
+		logrus.Error(msg)
+		msg = "failed to fetch layer blob"
 		det := helper.NewDetailFromReq(req)
 		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+		span.SetStatus(http.StatusInternalServerError, e.Message)
 		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 		return
 	}
+	if found {
+		if r.Method == "GET" {
+			layer.WriteWWW(w)
+		}
+		layer.WriteWWWHeader(w)
+		return
+	}
+
 	// Not found
 	msg = "could not find blob"
 	det := helper.NewDetailFromReq(req)

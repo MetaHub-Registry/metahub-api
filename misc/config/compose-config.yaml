@@ -7,10 +7,8 @@ minio:
   ssl: false
   manifests:
     bucket: manifests
-  configs:
-    bucket: configs
-  layers:
-    bucket: layers
+  blobs:
+    bucket: blobs
     redirect: false
 neo4j:
   dbname: neo4j

@@ -30,7 +30,14 @@ if [[ -d exp/metalib ]];then
    fi
 fi
 
-if [[ "${DEPLOYMENT}" == "dev" ]];then
+if [[ -f metalib.tar ]];then
+   echo ">> tar -xf metalib.tar -C exp/"
+   mkdir -p exp
+   tar -xf metalib.tar -C exp/
+   echo ">> pwd: $(pwd)"
+   echo ">> ls -la exp/metalib"
+   ls -la exp/metalib
+elif [[ "${DEPLOYMENT}" == "dev" ]];then
    echo "> git clone --branch=develop https://gitlab-ci-token:GITLAB_REPO_RO@github.com/metahub-registry/metahub-core.git exp/metalib"
    git clone --branch=develop https://gitlab-ci-token:${GITLAB_REPO_RO}@github.com/metahub-registry/metahub-core.git exp/metalib
 elif [[ "${DEPLOYMENT}" == "prod" ]];then

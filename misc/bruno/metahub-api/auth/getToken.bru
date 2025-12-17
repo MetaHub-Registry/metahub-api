@@ -1,0 +1,24 @@
+meta {
+  name: getToken
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{oci_realm}}
+  body: none
+  auth: inherit
+}
+
+script:post-response {
+  const body = res.body;
+  const token = body.token || body.access_token;
+  if (!token) throw new Error("No token/access_token in response: " + JSON.stringify(body));
+  
+  bru.setEnvVar("oci_bearer", token)
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

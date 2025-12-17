@@ -1,5 +1,6 @@
 FROM sonarsource/sonar-scanner-cli:12.0.0.3214_8.0.1 AS sonar
-FROM mcr.microsoft.com/devcontainers/go:1-1.19-bullseye
+
+FROM mcr.microsoft.com/devcontainers/go:1-1.24-bullseye
 COPY --from=sonar /opt/sonar-scanner/lib/sonar-scanner-cli-8.0.1.6346.jar /usr/local/lib/
 COPY --from=sonar /opt/sonar-scanner/bin/sonar-scanner /usr/local/bin/
 
@@ -22,3 +23,18 @@ COPY <<-"EOT" /root/.alias
  alias gd='git diff'
  alias gco='git checkout'
 EOT
+RUN <<eot
+   apt-get install ca-certificates curl gnupg lsb-release
+   curl -fsSL https://azlux.fr/repo.gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/azlux-archive-keyring.gpg
+   echo \
+   "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/azlux-archive-keyring.gpg] http://packages.azlux.fr/debian \
+   $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/azlux.list >/dev/null
+   apt-get update
+   apt-get install -y docker-ctop
+eot
+RUN <<eot
+   curl -1sLf 'https://dl.cloudsmith.io/public/task/task/setup.deb.sh' | bash
+   apt install -y task
+eot
+COPY homelab-rootCA.pem /usr/local/share/ca-certificates/homelab-rootCA.crt
+RUN update-ca-certificates

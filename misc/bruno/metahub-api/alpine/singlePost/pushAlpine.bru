@@ -1,0 +1,38 @@
+meta {
+  name: pushAlpine
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{registry}}/v2/{{repo}}/blobs/uploads/?digest={{alpineLayerDigest}}
+  body: file
+  auth: inherit
+}
+
+params:query {
+  digest: {{alpineLayerDigest}}
+}
+
+headers {
+  Content-Type: application/octet-stream
+  Content-Length: {{alpineLayerSize}}
+}
+
+body:file {
+  file: @file(/Users/christian.kniep/temp/metahub/oci/alpine/alpine.tar) @contentType(application/x-tar)
+}
+
+script:post-response {
+  const location = res.headers['location'];
+  if (location) {
+    bru.setVar('layerUploadUrl', location);
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 5000
+  followRedirects: true
+  maxRedirects: 5
+}

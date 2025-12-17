@@ -1,0 +1,16 @@
+meta {
+  name: getManifest
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{registry}}/v2/{{repo}}/manifests/{{tag}}
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

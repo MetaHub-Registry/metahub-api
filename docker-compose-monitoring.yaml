@@ -1,4 +1,3 @@
-version: '3'
 services:
   prometheus:
     image: prom/prometheus:latest
@@ -13,8 +12,6 @@ services:
     image: jaegertracing/all-in-one:latest
     container_name: jaeger
     ports:
-      - '6831:6831'
-      - '14268:14268'
       - '16686:16686'
     networks:
       - mon-internal
@@ -31,15 +28,21 @@ services:
     ports:
       - 3000:3000
   opensearch:
-    image: opensearchproject/opensearch:2.2.0
+    image: opensearchproject/opensearch:3.3.2
     container_name: opensearch
     environment:
       - cluster.name=opensearch-cluster
       - node.name=opensearch
-      - discovery.seed_hosts=opensearch
-      - cluster.initial_master_nodes=opensearch
+      - discovery.type=single-node
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=0dd319bcbbb3A$
       - bootstrap.memory_lock=true # along with the memlock settings below, disables swapping
       - "OPENSEARCH_JAVA_OPTS=-Xms2048m -Xmx2048m" # minimum and maximum Java heap size, recommend setting both to 50% of system RAM
+    healthcheck:
+      test: ["CMD", "curl", "-k","--fail", "--silent","-u", "admin:0dd319bcbbb3A$", "https://localhost:9200/_cluster/health"]
+      interval: 10s
+      timeout: 30s
+      retries: 12
+      start_period: 30s
     ulimits:
       memlock:
         soft: -1
@@ -73,7 +76,6 @@ services:
       - source: grok_patterns
         target: /usr/share/logstash/patterns/grok-patterns
         mode: 0444
-      
       - source: logstash_pipeline_metahub
         target: /usr/share/logstash/pipeline/metahub.conf
         mode: 0444

@@ -1,6 +1,6 @@
 module github.com/metahub-registry/metahub-api
 
-go 1.19
+go 1.24
 
 require (
 	github.com/StudioSol/set v1.0.0
@@ -133,7 +133,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/metahub-registry/metahub-core => /workspaces/metalib
+replace github.com/metahub-registry/metahub-core => /Users/christian.kniep/go/src/github.com/metahub-registry/metahub-core
 
 replace github.com/metahub-registry/metahub-core/pkg/backends/minio => /workspaces/metalib/pkg/backends/minio
 

@@ -1,5 +1,24 @@
-version: '3.9'
 services:
+  # garage:
+  #   image: dxflrs/garage:v2.1.0
+  #   ports:
+  #     - 3900:3900
+  #     - 3901:3901
+  #     - 3902:3902
+  #     - 3903:3903
+  #   volumes:
+  #   - /var/lib/garage
+  #   - ./misc/compose/garage/config.toml:/etc/garage.toml:ro
+  # webui:
+  #   image: khairul169/garage-webui:latest
+  #   container_name: garage-webui
+  #   restart: unless-stopped
+  #   volumes:
+  #     - ./misc/compose/garage/config.toml:/etc/garage.toml:ro
+  #   ports:
+  #     - 3909:3909
+  #   environment:
+  #     API_BASE_URL: "http://garage:3903"
   minio:
     image: quay.io/minio/minio:RELEASE.2023-01-02T09-40-09Z
     ports:
@@ -14,6 +33,12 @@ services:
       MINIO_ROOT_USER: "minio"
       MINIO_ROOT_PASSWORD: "miniominio"
     command: ["server", "/minio", "--console-address=0.0.0.0:9001"]
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 10s
+      retries: 12
+      start_period: 60s
   #backup:
   #  image: alpine:3.16.2
   #  volumes:
@@ -33,6 +58,12 @@ services:
     volumes:
      - neo4j:/var/lib/neo4j/data
      - ${PWD}/misc/backup:/backup
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "test", "RETURN 1"]
+      interval: 5s
+      timeout: 10s
+      retries: 12
+      start_period: 30s
   registry:
     image: registry:2.8.1
     ports:
