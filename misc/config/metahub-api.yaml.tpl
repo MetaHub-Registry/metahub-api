@@ -7,10 +7,8 @@ minio:
   ssl: {{ MINIO_SSL |default("false") }}
   manifests:
     bucket: {{ MINIO_BUCKET_MANIFESTS |default("manifests") }}
-  configs:
-    bucket: {{ MINIO_BUCKET_CONFIGS |default("configs") }}
-  layers:
-    bucket: {{ MINIO_BUCKET_LAYERS |default("layers") }}
+  BlobUploadPostHandler:
+    bucket: {{ MINIO_BUCKET_BLOBS |default("blobs") }}
 neo4j:
   dbname: {{ NEO4J_DB_NAME |default("neo4j") }}
   user: {{ NEO4J_USER |default("neo4j") }}

@@ -76,14 +76,12 @@ func TestMain(m *testing.M) {
 		logrus.Fatal(err)
 	}
 	defer minioC.Terminate(ctx)
-	configsBucketKey := minio.GetConfigsBucketKey()
-	layersBucketKey := minio.GetLayersBucketKey()
+	blobBucketKey := minio.GetBlobBucketKey()
 	manifestsBucketKey := minio.GetManifestsBucketKey()
-	layerCfg := minio.NewBucketConfig(layersBucketKey, minioC.HttpURI, minioC.ConsoleURI)
-	layerCfg.Redirect = true
+	blobCfg := minio.NewBucketConfig(blobBucketKey, minioC.HttpURI, minioC.ConsoleURI)
+	blobCfg.Redirect = true
 	bc := map[string]minio.BucketConfig{
-		configsBucketKey:   minio.NewBucketConfig(configsBucketKey, minioC.HttpURI, minioC.ConsoleURI),
-		layersBucketKey:    layerCfg,
+		blobBucketKey:      blobCfg,
 		manifestsBucketKey: minio.NewBucketConfig(manifestsBucketKey, minioC.HttpURI, minioC.ConsoleURI),
 	}
 	min, err := minio.NewMiniWithCfg(bc)
@@ -136,8 +134,12 @@ func TestMain(m *testing.M) {
 	logrus.Infof("Jaeger HTTP: http://%s", jeagerC.HttpURI)
 	h = NewHandlers("test", mag)
 	code := m.Run()
-	os.Exit(code)
-	logrus.Info("End TestMain")
+	switch code {
+	case 0:
+		logrus.Info("Tests OK")
+	default:
+		logrus.Infof("Tests FAILED with code %d", code)
+	}
 }
 
 func TeardownTest(bs utils.Bootstrap) {
@@ -152,6 +154,7 @@ func TeardownTest(bs utils.Bootstrap) {
 	if err != nil {
 		logrus.Fatal(err)
 	}
+	logrus.Info(" > CopySqlite")
 	if bs.CopySqlite != "" {
 		logrus.Warnf("Backup sqlite to %s", bs.CopySqlite)
 		err = h.mag.UserManagement.Backup(bs.CopySqlite)
@@ -159,6 +162,7 @@ func TeardownTest(bs utils.Bootstrap) {
 			logrus.Fatal(err)
 		}
 	}
+	logrus.Info(" > EmptyData")
 	err = h.mag.UserManagement.EmptyData(bs.EmptyAll)
 	if err != nil {
 		logrus.Fatal(err)

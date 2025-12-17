@@ -4,12 +4,12 @@
     },
     "name": "Go",
     "features": {
-        "ghcr.io/devcontainers/features/go:1": {
-            "version": "1.19"
-        },
+        // "ghcr.io/devcontainers/features/go:1": {
+        //     "version": "1.24"
+        // },
         "ghcr.io/devcontainers/features/aws-cli:1": {},
         "ghcr.io/devcontainers/features/docker-in-docker:2.12.4": {
-            "moby": false
+            "moby": true
         }
 
     },
@@ -19,14 +19,26 @@
             "extensions": []
         }
     },
+    "workspaceFolder": "${localEnv:HOME}/go/src/github.com/metahub-registry/metahub-api",
     "remoteUser": "root",
     "portsAttributes": {
-        "9000": {
-            "label": "Hello Remote World",
+        "7474": {
+            "label": "Neo4j UI",
+            "onAutoForward": "notify"
+        },
+        "9001": {
+            "label": "Minio Console",
+            "onAutoForward": "notify"
+        },
+        "16686": {
+            "label": "Jaeger UI",
             "onAutoForward": "notify"
         }
     },
     "mounts": [
-        "source=${localWorkspaceFolder}/../metahub-core,target=/Users/kniepbert/go/src/github.com/metahub-registry/metahub-core,type=bind,consistency=cached"
+        "source=${localEnv:HOME}/go/src/github.com/metahub-registry/metahub-api,target=${localEnv:HOME}/go/src/github.com/metahub-registry/metahub-api,type=bind,consistency=cached",
+        "source=${localEnv:HOME}/src/gitlab.com/qnib-metahub/community-edition,target=${localEnv:HOME}/src/gitlab.com/qnib-metahub/community-edition,type=bind,consistency=cached",
+        "source=${localEnv:HOME}/go/src/github.com/metahub-registry/metahub-admin,target=${localEnv:HOME}/go/src/github.com/metahub-registry/metahub-admin,type=bind,consistency=cached",
+        "source=${localEnv:HOME}/go/src/github.com/metahub-registry/metahub-core,target=${localEnv:HOME}/go/src/github.com/metahub-registry/metahub-core,type=bind,consistency=cached"
     ]
 }

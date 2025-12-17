@@ -1,0 +1,23 @@
+meta {
+  name: configUploadStart
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{registry}}/v2/{{repo}}/blobs/uploads/
+  body: json
+  auth: inherit
+}
+
+script:post-response {
+  const location = res.headers['location'];
+  if (location) {
+    bru.setVar('configUploadUrl', location);
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

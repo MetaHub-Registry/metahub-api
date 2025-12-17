@@ -1,0 +1,26 @@
+meta {
+  name: layerUploadPatchAB
+  type: http
+  seq: 3
+}
+
+patch {
+  url: {{registry}}{{layerUploadUrl}}
+  body: file
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/octet-stream
+  Content-Range: 41943041-83886080
+  Content-Length: 41943040
+}
+
+body:file {
+  file: @file(/Users/christian.kniep/temp/metahub/oci/layer/ubuntu.tar.part-ab)
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

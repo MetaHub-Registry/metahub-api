@@ -1,0 +1,46 @@
+meta {
+  name: pushManifest copy
+  type: http
+  seq: 1
+}
+
+put {
+  url: {{registry}}/v2/{{repo}}/manifests/{{tag}}
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/vnd.docker.distribution.manifest.v2+json
+}
+
+body:json {
+  {
+        "schemaVersion": 2,
+        "config": {
+          "mediaType": "application/vnd.oci.image.config.v1+json",
+          "digest": "sha256:22f68afca98941fc10a8c6c87f881065b075c1c2f4678b8f579d1b77bc060ef0",
+          "size": 129,
+          "data": "ewoJImF1dGhvciI6ICJUbmVLZFFYSFhJQ3NTWHdSIiwKCSJhcmNoaXRlY3R1cmUiOiAiYW1kNjQiLAoJIm9zIjogImxpbnV4IiwKCSJyb290ZnMiOiB7CgkJInR5cGUiOiAibGF5ZXJzIiwKCQkiZGlmZl9pZHMiOiBbXQoJfQp9",
+          "newUnspecifiedField": "aGVsbG8gd29ybGQ="
+        },
+        "layers": [
+          {
+            "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+            "digest": "sha256:88ecf269dec31566a8e6b05147732fe34d32bc608de0d636dffaba659230a515",
+            "size": 2796496,
+            "data": null,
+            "newUnspecifiedField": null
+          }
+        ]
+      }
+}
+
+body:file {
+  file: @file()
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

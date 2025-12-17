@@ -380,7 +380,6 @@ func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 		utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "push", e, "INTERNAL_ERROR", "")
 		return
 	}
-
 	switch req.ContentType {
 	case "application/vnd.docker.distribution.manifest.v2+json":
 		// Put manifest in object store

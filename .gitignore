@@ -14,3 +14,5 @@ misc/data/**
 .scannerwork/**
 .env
 misc/compose/sonarqube/**
+.devcontainer/homelab-rootCA.pem
+misc/sqlite/*

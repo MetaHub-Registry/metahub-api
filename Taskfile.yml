@@ -8,3 +8,62 @@ tasks:
     cmds:
       - git commit -{{.GCMD}} "{{.CLI_ARGS}}"
       - git push
+  test:
+    cmds:
+      - ./test.sh
+  sonar:
+    cmds:
+      - ./misc/bin/sonar.sh
+
+  up:*:
+    vars:
+      UPTYPE: '{{index .MATCH 0}}' 
+    cmds:
+      - docker-compose -f docker-compose-{{.UPTYPE}}.yaml up -d --wait
+  up:
+    cmds:
+      - task: up:data
+      - task: up:monitoring
+      - docker-compose -f docker-compose.yaml up -d --wait
+      #docker network create mh-data
+      #docker volume create ce-registry
+  down:
+    cmds:
+      - docker-compose stop
+      - docker-compose -f docker-compose-monitoring.yaml down -v
+      - docker-compose -f docker-compose-data.yaml down -v
+  upAPI:
+    cmds:
+      - docker compose exec -ti -w /Users/christian.kniep/go/src/github.com/metahub-registry/metahub-api dev go run main.go serve --config ./misc/config/compose-config.yaml --user-db ./misc/sqlite/metahub_20251209.db
+  seedAdmin:
+    cmds:
+      - docker compose exec -ti -w /etc/metahub-admin admin ./misc/bin/run-local.sh /community-edition/collections/qnib/featuretest
+  compute:
+    cmds:
+      - task: compute:manifests
+      - task: compute:manifestlists
+  compute:*:
+    vars:
+      ele: '{{index .MATCH 0}}' 
+    cmds:
+      - docker compose exec -ti -w /etc/metahub-admin admin metahub-admin --config ./misc/config/compose-config.yaml compute {{ .ele }}
+  seedMinimal:
+    cmds:
+      - docker compose exec -ti -w /etc/metahub-admin admin ./misc/bin/parse-profiles-rules.sh
+  loginDind:*:
+    vars:
+      PROF: '{{index .MATCH 0}}' 
+    cmds:
+      - docker compose exec -ti dind sh -c "echo qnib | docker login dev:80 -u qnib#{{.PROF }} --password-stdin"
+  testDind:
+    cmds:
+      - docker compose exec -ti dind sh -c "docker pull dev:80/qnib/featuretest:latest"
+      - docker compose exec -ti dind sh -c "docker run -ti --rm dev:80/qnib/featuretest:latest"
+  execDind:
+    cmds:
+      - docker compose exec -ti dind bash
+  exec:*:
+    vars:
+      SERVICE: '{{index .MATCH 0}}' 
+    cmds:
+      - docker compose exec -ti {{.SERVICE}} bash

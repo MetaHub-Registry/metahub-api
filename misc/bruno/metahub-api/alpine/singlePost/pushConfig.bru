@@ -1,0 +1,50 @@
+meta {
+  name: pushConfig
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{registry}}/v2/{{repo}}/blobs/uploads/?digest={{simpleConfigDigest}}
+  body: file
+  auth: inherit
+}
+
+params:query {
+  digest: {{simpleConfigDigest}}
+}
+
+headers {
+  Content-Type: application/octet-stream
+  Content-Length: 377
+}
+
+body:json {
+  {
+    "architecture": "amd64",
+    "os": "linux",
+    "rootfs": {
+      "type": "layers",
+      "diff_ids": []
+    },
+    "config": {}
+  }
+}
+
+body:file {
+  file: @file(/Users/christian.kniep/temp/metahub/oci/alpine/config.json) @contentType(application/json; charset=utf-8)
+}
+
+script:post-response {
+  const location = res.headers['location'];
+  if (location) {
+    bru.setVar('layerUploadUrl', location);
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 5000
+  followRedirects: true
+  maxRedirects: 5
+}

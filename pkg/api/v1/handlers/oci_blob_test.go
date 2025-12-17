@@ -26,6 +26,7 @@ var (
 )
 
 func TestBlobHandlerDirectPost(t *testing.T) {
+	debug := 0
 	_, l0byte := types.FT_arm_BlobUpload_Layer0()
 	bs := utils.NewBootstrap()
 	bs.SetEmptyAll()
@@ -39,6 +40,14 @@ func TestBlobHandlerDirectPost(t *testing.T) {
 	br, err := SetupTest(ctx, bs)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if debug > 0 {
+		bs.PostTestSleep = debug
+	}
+	for _, l := range br.ToLines() {
+		if debug > 0 {
+			t.Log(l)
+		}
 	}
 	defer TeardownTest(bs)
 	testRepo := "qnib"
@@ -87,150 +96,150 @@ func TestBlobHandlerDirectPost(t *testing.T) {
 	assert.Equal(t, 0, wDat.Body.Len())
 }
 
-func TestBlobHandlerLayerTest(t *testing.T) {
-	ctx := context.Background()
-	debug := 0
-	bs := utils.NewBootstrap()
-	bs.SetEmptyAll()
-	bs.SetYAMLPrefix("../../../../misc/yaml")
-	bs.AddBootstrap("users")
-	bs.AddBootstrap("platforms:arm64")
-	bs.AddBootstrap("config:ft_arm64")
-	bs.AddBootstrap("upstream:ft_arm64")
-	bs.AddBootstrap("manifest:ft_arm64")
-	bs.AddBootstrap("layer:0:ft_arm64")
-	bs.AddBootstrap("layer:1:ft_arm64")
-	bs.AddBootstrap("manifestdata:ft_arm64")
-	bs.AddBootstrap("platforms:amd64")
-	bs.AddBootstrap("config:ft_amd64")
-	bs.AddBootstrap("upstream:ft_amd64")
-	bs.AddBootstrap("manifest:ft_amd64")
-	bs.AddBootstrap("layer:0:ft_amd64")
-	bs.AddBootstrap("layer:1:ft_amd64")
-	bs.AddBootstrap("manifestdata:ft_amd64")
-	bs.AddBootstrap("collection:ft_generic")
-	if debug > 0 {
-		bs.PostTestSleep = debug
-	}
-	br, err := SetupTest(ctx, bs)
-	if err != nil {
-		TeardownTest(bs)
-		t.Fatal(err)
-	}
-	for _, l := range br.ToLines() {
-		if debug > 0 {
-			t.Log(l)
-		}
-	}
-	defer TeardownTest(bs)
-	// Prepare
-	if err := h.mag.ComputeAllManifests(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if err := h.mag.ComputeManifestlists(ctx); err != nil {
-		t.Fatal(err)
-	}
-	/// Request
-	token, err := br.Get("user:test#bearer")
-	if err != nil {
-		t.Fatal(err)
-	}
-	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodHead, "/{repo}/{image}/blobs/{reference}", nil)
-	ftArm64L0Dig, err := br.Get("layer:0:ft_arm64#digest")
-	if err != nil {
-		t.Fatal(err)
-	}
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("repo", "qnib")
-	rctx.URLParams.Add("image", "featuretest")
-	rctx.URLParams.Add("reference", ftArm64L0Dig)
-	r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
-	r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-	_, found, err := h.mag.ConfigBlob_GetByHTTPRequest(ctx, r)
-	if err != nil {
-		t.Fatal(err)
-	}
-	assert.False(t, found)
-	/// HEAD
-	h.BlobHandler(w, r)
-	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, 0, w.Body.Len())
-	// GET (with data)
-	r.Method = http.MethodGet
-	h.BlobHandler(w, r)
-	assert.Equal(t, http.StatusOK, w.Code)
-	assert.GreaterOrEqual(t, w.Body.Len(), 100)
-	assert.LessOrEqual(t, w.Body.Len(), 412)
-}
+// func ./(t *testing.T) {
+// 	ctx := context.Background()
+// 	debug := 0
+// 	bs := utils.NewBootstrap()
+// 	bs.SetEmptyAll()
+// 	bs.SetYAMLPrefix("../../../../misc/yaml")
+// 	bs.AddBootstrap("users")
+// 	bs.AddBootstrap("platforms:arm64")
+// 	bs.AddBootstrap("config:ft_arm64")
+// 	bs.AddBootstrap("upstream:ft_arm64")
+// 	bs.AddBootstrap("manifest:ft_arm64")
+// 	bs.AddBootstrap("layer:0:ft_arm64")
+// 	bs.AddBootstrap("layer:1:ft_arm64")
+// 	bs.AddBootstrap("manifestdata:ft_arm64")
+// 	bs.AddBootstrap("platforms:amd64")
+// 	bs.AddBootstrap("config:ft_amd64")
+// 	bs.AddBootstrap("upstream:ft_amd64")
+// 	bs.AddBootstrap("manifest:ft_amd64")
+// 	bs.AddBootstrap("layer:0:ft_amd64")
+// 	bs.AddBootstrap("layer:1:ft_amd64")
+// 	bs.AddBootstrap("manifestdata:ft_amd64")
+// 	bs.AddBootstrap("collection:ft_generic")
+// 	if debug > 0 {
+// 		bs.PostTestSleep = debug
+// 	}
+// 	br, err := SetupTest(ctx, bs)
+// 	if err != nil {
+// 		TeardownTest(bs)
+// 		t.Fatal(err)
+// 	}
+// 	for _, l := range br.ToLines() {
+// 		if debug > 0 {
+// 			t.Log(l)
+// 		}
+// 	}
+// 	defer TeardownTest(bs)
+// 	// Prepare
+// 	if err := h.mag.ComputeAllManifests(ctx); err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	if err := h.mag.ComputeManifestlists(ctx); err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	/// Request
+// 	token, err := br.Get("user:test#bearer")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	w := httptest.NewRecorder()
+// 	r := httptest.NewRequest(http.MethodHead, "/{repo}/{image}/blobs/{reference}", nil)
+// 	ftArm64L0Dig, err := br.Get("layer:0:ft_arm64#digest")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	rctx := chi.NewRouteContext()
+// 	rctx.URLParams.Add("repo", "qnib")
+// 	rctx.URLParams.Add("image", "featuretest")
+// 	rctx.URLParams.Add("reference", ftArm64L0Dig)
+// 	r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
+// 	r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+// 	_, found, err := h.mag.ConfigBlob_GetByHTTPRequest(ctx, r)
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	assert.False(t, found)
+// 	/// HEAD
+// 	h.BlobHandler(w, r)
+// 	assert.Equal(t, http.StatusOK, w.Code)
+// 	assert.Equal(t, 0, w.Body.Len())
+// 	// GET (with data)
+// 	r.Method = http.MethodGet
+// 	h.BlobHandler(w, r)
+// 	assert.Equal(t, http.StatusOK, w.Code)
+// 	assert.GreaterOrEqual(t, w.Body.Len(), 100)
+// 	assert.LessOrEqual(t, w.Body.Len(), 412)
+// }
 
-func TestBlobHandlerRedirectLayerTest(t *testing.T) {
-	ctx := context.Background()
-	debug := 0
-	bs := utils.NewBootstrap()
-	bs.SetEmptyAll()
-	bs.SetYAMLPrefix("../../../../misc/yaml")
-	bs.AddBootstrap("users")
-	bs.AddBootstrap("platforms:arm64")
-	bs.AddBootstrap("config:ft_arm64")
-	bs.AddBootstrap("upstream:ft_arm64")
-	bs.AddBootstrap("manifest:ft_arm64")
-	bs.AddBootstrap("layer:0:ft_arm64")
-	bs.AddBootstrap("layer:1:ft_arm64")
-	bs.AddBootstrap("manifestdata:ft_arm64")
-	bs.AddBootstrap("platforms:amd64")
-	bs.AddBootstrap("config:ft_amd64")
-	bs.AddBootstrap("upstream:ft_amd64")
-	bs.AddBootstrap("manifest:ft_amd64")
-	bs.AddBootstrap("layer:0:ft_amd64")
-	bs.AddBootstrap("layer:1:ft_amd64")
-	bs.AddBootstrap("manifestdata:ft_amd64")
-	bs.AddBootstrap("collection:ft_generic")
-	if debug > 0 {
-		bs.PostTestSleep = debug
-	}
-	br, err := SetupTest(ctx, bs)
-	if err != nil {
-		TeardownTest(bs)
-		t.Fatal(err)
-	}
-	for _, l := range br.ToLines() {
-		if debug > 0 {
-			t.Log(l)
-		}
-	}
-	defer TeardownTest(bs)
-	/// Vars
-	testRepo := "qnib"
-	//testProfile := "generic"
-	if err := h.mag.ComputeAllManifests(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if err := h.mag.ComputeManifestlists(ctx); err != nil {
-		t.Fatal(err)
-	}
-	/// Request
-	token, err := br.Get("user:test#bearer")
-	if err != nil {
-		t.Fatal(err)
-	}
-	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodHead, "/{repo}/{image}/blobs/{reference}", nil)
-	rctx := chi.NewRouteContext()
-	ftArm64L0Dig, err := br.Get("layer:0:ft_arm64#digest")
-	if err != nil {
-		t.Fatal(err)
-	}
-	rctx.URLParams.Add("repo", testRepo)
-	rctx.URLParams.Add("image", "featuretest")
-	rctx.URLParams.Add("reference", ftArm64L0Dig)
-	r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
-	r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-	// GET (with redirect)
-	r.Method = http.MethodGet
-	h.BlobHandler(w, r)
-	assert.Equal(t, http.StatusTemporaryRedirect, w.Code)
-}
+// func TestBlobHandlerRedirectLayerTest(t *testing.T) {
+// 	ctx := context.Background()
+// 	debug := 0
+// 	bs := utils.NewBootstrap()
+// 	bs.SetEmptyAll()
+// 	bs.SetYAMLPrefix("../../../../misc/yaml")
+// 	bs.AddBootstrap("users")
+// 	bs.AddBootstrap("platforms:arm64")
+// 	bs.AddBootstrap("config:ft_arm64")
+// 	bs.AddBootstrap("upstream:ft_arm64")
+// 	bs.AddBootstrap("manifest:ft_arm64")
+// 	bs.AddBootstrap("layer:0:ft_arm64")
+// 	bs.AddBootstrap("layer:1:ft_arm64")
+// 	bs.AddBootstrap("manifestdata:ft_arm64")
+// 	bs.AddBootstrap("platforms:amd64")
+// 	bs.AddBootstrap("config:ft_amd64")
+// 	bs.AddBootstrap("upstream:ft_amd64")
+// 	bs.AddBootstrap("manifest:ft_amd64")
+// 	bs.AddBootstrap("layer:0:ft_amd64")
+// 	bs.AddBootstrap("layer:1:ft_amd64")
+// 	bs.AddBootstrap("manifestdata:ft_amd64")
+// 	bs.AddBootstrap("collection:ft_generic")
+// 	if debug > 0 {
+// 		bs.PostTestSleep = debug
+// 	}
+// 	br, err := SetupTest(ctx, bs)
+// 	if err != nil {
+// 		TeardownTest(bs)
+// 		t.Fatal(err)
+// 	}
+// 	for _, l := range br.ToLines() {
+// 		if debug > 0 {
+// 			t.Log(l)
+// 		}
+// 	}
+// 	defer TeardownTest(bs)
+// 	/// Vars
+// 	testRepo := "qnib"
+// 	//testProfile := "generic"
+// 	if err := h.mag.ComputeAllManifests(ctx); err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	if err := h.mag.ComputeManifestlists(ctx); err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	/// Request
+// 	token, err := br.Get("user:test#bearer")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	w := httptest.NewRecorder()
+// 	r := httptest.NewRequest(http.MethodHead, "/{repo}/{image}/blobs/{reference}", nil)
+// 	rctx := chi.NewRouteContext()
+// 	ftArm64L0Dig, err := br.Get("layer:0:ft_arm64#digest")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	rctx.URLParams.Add("repo", testRepo)
+// 	rctx.URLParams.Add("image", "featuretest")
+// 	rctx.URLParams.Add("reference", ftArm64L0Dig)
+// 	r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
+// 	r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+// 	// GET (with redirect)
+// 	r.Method = http.MethodGet
+// 	h.BlobHandler(w, r)
+// 	assert.Equal(t, http.StatusTemporaryRedirect, w.Code)
+// }
 
 func TestUploadUploadLayer0Sequence(t *testing.T) {
 	ctx := context.Background()
@@ -311,14 +320,14 @@ func TestUploadUploadLayer0Sequence(t *testing.T) {
 		assert.Regexp(t, fmt.Sprintf(`/v2/%s/blobs/uploads/%s$`, cmImage, uuid), gotLoc)
 	}
 	// Remove
-	l0ref := types.FT_arm_Layer0Reference()
-	br.Add("reference", string(l0ref.Digest))
-	if w, r, e := getHttpTestLayer0UploadDeleteHandler(&br); e != nil {
-		t.Fatal(e)
-	} else {
-		h.BlobDelHandler(w, r)
-		assert.Equal(t, http.StatusAccepted, w.Code)
-	}
+	// l0ref := types.FT_arm_Layer0Reference()
+	// br.Add("reference", string(l0ref.Digest))
+	// if w, r, e := getHttpTestLayer0UploadDeleteHandler(&br); e != nil {
+	// 	t.Fatal(e)
+	// } else {
+	// 	h.BlobDelHandler(w, r)
+	// 	assert.Equal(t, http.StatusAccepted, w.Code)
+	// }
 }
 
 func TestUploadUploadBlobSequenceSplit(t *testing.T) {

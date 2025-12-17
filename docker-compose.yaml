@@ -1,16 +1,15 @@
-version: '3'
 
 services:
   admin:
-    image: registry.github.com/metahub-registry/metahub-admin:v1.2.5
+    image: registry.github.com/metahub-registry/metahub-admin:v1.4.3
     networks:
       - api-internal
       - mh-data
     command: ["sleep", "inf"]
     working_dir: /etc/metahub-admin/
     volumes:
-      - /Users/kniepbert/src/gitlab.com/qnib-metahub/community-edition:/community-edition
-      - /Users/kniepbert/go/src/github.com/metahub-registry/metahub-admin/misc:/etc/metahub-admin/misc
+      - /Users/christian.kniep/src/gitlab.com/qnib-metahub/community-edition:/community-edition
+      - /Users/christian.kniep/go/src/github.com/metahub-registry/metahub-admin/misc:/etc/metahub-admin/misc
   dev:
     build: 
       context: .
@@ -19,19 +18,20 @@ services:
         - default
     #image: registry.github.com/metahub-registry/metahub-api:2023-03-01-arm64-dev
     environment:
-      - SQLITE_FILE=/go/metahub-api/misc/sqlite/metahub_20221017.db
+      - SQLITE_FILE=./misc/sqlite/metahub_20251209.db
       - PATH=/go/metahub:/go/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     ports:
       - 8080:80
     volumes:
-      - /Users/kniepbert/src/gitlab.com/qnib-metahub/community-edition:/community-edition
-      - /Users/kniepbert/go/src/github.com/metahub-registry/metahub-core:/Users/kniepbert/go/src/github.com/metahub-registry/metahub-core
-      - /Users/kniepbert/go/src/github.com/metahub-registry/metahub-admin:/Users/kniepbert/go/src/github.com/metahub-registry/metahub-admin
-      - /Users/kniepbert/go/src/github.com/metahub-registry/metahub-api:/Users/kniepbert/go/src/github.com/metahub-registry/metahub-api
+      - goMod:/go/pkg/mod
+      - /Users/christian.kniep/src/gitlab.com/qnib-metahub/community-edition:/community-edition
+      - /Users/christian.kniep/go/src/github.com/metahub-registry/metahub-core:/Users/christian.kniep/go/src/github.com/metahub-registry/metahub-core
+      - /Users/christian.kniep/go/src/github.com/metahub-registry/metahub-admin:/Users/christian.kniep/go/src/github.com/metahub-registry/metahub-admin
+      - /Users/christian.kniep/go/src/github.com/metahub-registry/metahub-api:/Users/christian.kniep/go/src/github.com/metahub-registry/metahub-api
     networks:
       - api-internal
       - mh-data
-    working_dir: /Users/kniepbert/go/src/github.com/metahub-registry/metahub-api
+    working_dir: /Users/christian.kniep/go/src/github.com/metahub-registry/metahub-api
     command: ["sleep", "inf"]
   dind:
     build: misc/docker/dind/
@@ -40,12 +40,12 @@ services:
     volumes:
       - .:/go/metahub
       - ./misc/docker/dind/daemon.json:/etc/docker/daemon.json:ro
-      - /Users/kniepbert/go/src/github.com/metahub-registry/metahub-core:/Users/kniepbert/go/src/github.com/metahub-registry/metahub-core
+      - ${HOME}/go/src/github.com/metahub-registry/metahub-core:${HOME}/go/src/github.com/metahub-registry/metahub-core
     networks:
      - api-internal
      - mh-data
     environment:
-      PATH: /Users/kniepbert/go/src/github.com/metahub-registry/metahub-core/misc/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      PATH: /Users/christian.kniep/go/src/github.com/metahub-registry/metahub-core/misc/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       DEV_URL: dev:80
       CE_URL: ce:80
       PS1: 'dind > '
@@ -64,3 +64,6 @@ networks:
   api-internal:
   mh-data:
     external: true
+
+volumes:
+  goMod:

@@ -5,6 +5,7 @@
         "metahub:80",
         "dev:80",
         "ce:80",
-        "registry:5050"
+        "registry:5050",
+        "host.docker.internal:15005"
       ]
 }
