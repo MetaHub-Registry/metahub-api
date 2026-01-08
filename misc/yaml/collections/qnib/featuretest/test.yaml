@@ -1,0 +1,12 @@
+name: qnib/featuretest
+tag: test
+manifests:
+  - image: quay.io/cqnib/plain-featuretest:generic
+    platform:
+      os: linux
+      arch: amd64
+  - image: quay.io/cqnib/plain-featuretest:cpu-broadwell
+    platform:
+      os: linux
+      arch: amd64
+      features: [cpu:broadwell]

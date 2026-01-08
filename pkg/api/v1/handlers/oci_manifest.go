@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
@@ -18,7 +19,11 @@ import (
 )
 
 const (
-	pkgNameOciMani = "api/handler/oci_manifest.go"
+	pkgNameOciMani              = "api/handler/oci_manifest.go"
+	ociManifestMediaType        = "application/vnd.oci.image.manifest.v1+json"
+	ociManifestListMediaType    = "application/vnd.oci.image.index.v1+json"
+	dockerManifestMediaType     = "application/vnd.docker.distribution.manifest.v2+json"
+	dockerManifestListMediaType = "application/vnd.docker.distribution.manifest.list.v2+json"
 )
 
 func (h Handlers) ManifestHeadHandler_Digest(ctx context.Context, w http.ResponseWriter, r *http.Request, up upstream.UpstreamTriple) {
@@ -46,7 +51,7 @@ func (h Handlers) ManifestHeadHandler_Digest(ctx context.Context, w http.Respons
 	}
 	utils.Debug(l, span, "Manifest found: %t - MediaType '%s'", maniFound, mediaType)
 	switch mediaType {
-	case "application/vnd.oci.image.index.v1+json":
+	case ociManifestListMediaType, dockerManifestListMediaType:
 		ml, found, e := h.mag.ManifestList_GetByHTTPRequest(ctx, r)
 		if e != nil {
 			utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "head", e, "INTERNAL_ERROR", "failed to fetch ManifestList")
@@ -56,7 +61,7 @@ func (h Handlers) ManifestHeadHandler_Digest(ctx context.Context, w http.Respons
 			ml.WriteWWW(w)
 			return
 		}
-	case "application/vnd.oci.image.manifest.v1+json":
+	case ociManifestMediaType, dockerManifestMediaType:
 		m, found, err := h.mag.ManifestGetByHTTPRequest(ctx, r)
 		if err != nil {
 			utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "head", e, "INTERNAL_ERROR", "failed to fetch Manifest")
@@ -67,6 +72,7 @@ func (h Handlers) ManifestHeadHandler_Digest(ctx context.Context, w http.Respons
 			return
 		}
 	default:
+		e := fmt.Errorf("unkown mediaType for manifest: '%s'", mediaType)
 		utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "head", e, "INTERNAL_ERROR", "unkown mediaType '%s'", mediaType)
 		return
 	}
@@ -112,7 +118,7 @@ func (h Handlers) ManifestHeadHandler_Tag(ctx context.Context, w http.ResponseWr
 		}
 		if !upstreamFound {
 			switch md {
-			case "application/vnd.docker.distribution.manifest.list.v2+json":
+			case dockerManifestListMediaType:
 				err := fmt.Errorf("image indexes are not supported (yet): %s", md)
 				utils.ErrorHandler_WithWWW(w, l, span, req.Repo,
 					"head", err, "MANIFEST_UNKNOWN", "")
@@ -148,13 +154,13 @@ func (h Handlers) ManifestHeadHandler_Tag(ctx context.Context, w http.ResponseWr
 		//return
 	}
 	if tpUpstreamFound {
-		tpMediaType = "application/vnd.oci.image.index.v1+json"
+		tpMediaType = ociManifestListMediaType
 		utils.Debug(l, span, "Manifest was fetched upstream, set mediaType to '%s'", tpMediaType)
 	} else {
 		utils.Debug(l, span, "Manifest found with type '%s'", tpMediaType)
 	}
 	switch tpMediaType {
-	case "application/vnd.oci.image.index.v1+json":
+	case ociManifestListMediaType:
 		ml, found, err := h.mag.ManifestList_GetByHTTPRequest(ctx, r)
 		if err != nil {
 			utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "head", e, "INTERNAL_ERROR", "failed to fetch ManifestList")
@@ -164,7 +170,7 @@ func (h Handlers) ManifestHeadHandler_Tag(ctx context.Context, w http.ResponseWr
 			ml.WriteWWW(w)
 			return
 		}
-	case "application/vnd.oci.image.manifest.v1+json":
+	case ociManifestMediaType:
 		m, found, e := h.mag.ManifestGetByHTTPRequest(ctx, r)
 		if e != nil {
 			utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "head", e, "INTERNAL_ERROR", "failed to fetch Manifest")
@@ -185,7 +191,7 @@ func (h Handlers) ManifestHeadHandler(w http.ResponseWriter, r *http.Request) {
 	req := types.NewRequest(ctx, r)
 	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
 		"package": pkgNameOciMani,
-		"func":    "api.ManifestHeadHandler",
+		"func":    "ManifestHeadHandler",
 		"method":  r.Method,
 		"repo":    req.Repo,
 		"tag":     req.Tag,
@@ -292,7 +298,7 @@ func (h Handlers) ManifestGetHandler(w http.ResponseWriter, r *http.Request) {
 	))
 	l.Debug(msg)
 	switch mediaType {
-	case "application/vnd.oci.image.index.v1+json":
+	case ociManifestListMediaType:
 		ml, found, err := h.mag.ManifestList_GetByHTTPRequest(ctx, r)
 		if err != nil {
 			// 1. FALSE
@@ -308,8 +314,8 @@ func (h Handlers) ManifestGetHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	case
-		"application/vnd.oci.image.manifest.v1+json",
-		"application/vnd.docker.distribution.manifest.v2+json":
+		ociManifestMediaType,
+		dockerManifestMediaType:
 		m, found, err := h.mag.ManifestGetByHTTPRequest(ctx, r)
 		if err != nil {
 			// 1. FALSE
@@ -381,7 +387,7 @@ func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch req.ContentType {
-	case "application/vnd.docker.distribution.manifest.v2+json":
+	case dockerManifestMediaType:
 		// Put manifest in object store
 		m, err := h.mag.StoreManifestUpload(ctx, req, buf)
 		if err != nil {
@@ -420,17 +426,7 @@ func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 		m.WriteWWWHeader(w)
 		w.Header().Set("Location", fmt.Sprintf("%s://%s/v2/%s/manifests/%s", req.Protocol, req.Host, req.Repo, req.Tag))
 		w.WriteHeader(http.StatusCreated)
-	case "application/vnd.docker.distribution.manifest.v1+prettyjws":
-		m, err := h.mag.StoreManifestUpload(ctx, req, buf)
-		if err != nil {
-			utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "push", err, "MANIFEST_INVALID", "failed to store manifest: %v", err)
-			return
-		}
-		utils.Debug(l, span, "successfully stored maniefst with digest '%s'", m.Digest)
-		m.WriteWWWHeader(w)
-		w.Header().Set("Location", fmt.Sprintf("%s://%s/v2/%s/manifests/%s", req.Protocol, req.Host, req.Repo, req.Tag))
-		w.WriteHeader(http.StatusCreated)
-	case "application/vnd.oci.image.manifest.v1+json":
+	case ociManifestMediaType:
 		// Put manifest in object store
 		m, err := h.mag.StoreManifestUpload(ctx, req, buf)
 		if err != nil {
@@ -442,8 +438,8 @@ func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Location", fmt.Sprintf("%s://%s/v2/%s/manifests/%s", req.Protocol, req.Host, req.Repo, req.Tag))
 		w.WriteHeader(http.StatusCreated)
 	default:
-		e = fmt.Errorf("unsupported content type: %s", req.ContentType)
-		utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "push", e, "MANIFEST_UNKNOWN", "")
+		e = fmt.Errorf("unsupported content type: %s (supported: %s)", req.ContentType, strings.Join([]string{dockerManifestMediaType, ociManifestMediaType}, ","))
+		utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "push", e, "MANIFEST_INVALID", "")
 		return
 	}
 }

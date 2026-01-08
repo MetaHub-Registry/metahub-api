@@ -1,0 +1,8 @@
+name: qnib/featuretest
+tag: generic
+manifests:
+  - image: quay.io/cqnib/plain-featuretest:generic
+  - image: registry.gitlab.com/qnib-pub-containers/qnib/plain-featuretest:20220715-arm64-generic
+    platform:
+      os: linux
+      arch: arm64

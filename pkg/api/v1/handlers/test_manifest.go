@@ -47,7 +47,7 @@ var (
 		}`)
 )
 
-func getHttpTestManifestDeleteByDigest(br *utils.BootstrapResult) (w httptest.ResponseRecorder, r *http.Request, err error) {
+func getHttpTestManifestDeleteByDigest(br *utils.BootstrapResult) (w *httptest.ResponseRecorder, r *http.Request, err error) {
 	var testRepo, maniDigest, testImage string
 	if testRepo, err = br.Get("repo"); err != nil {
 		return w, r, err
@@ -62,7 +62,7 @@ func getHttpTestManifestDeleteByDigest(br *utils.BootstrapResult) (w httptest.Re
 	if err != nil {
 		return w, r, err
 	}
-	w, r = utils.CreateNewHTTPTest(http.MethodDelete, map[string]string{
+	wVal, r := utils.CreateNewHTTPTest(http.MethodDelete, map[string]string{
 		"repo":      testRepo,
 		"image":     testImage,
 		"reference": maniDigest,
@@ -73,6 +73,7 @@ func getHttpTestManifestDeleteByDigest(br *utils.BootstrapResult) (w httptest.Re
 	}, map[string]string{
 		"Authorization": fmt.Sprintf("Bearer %s", token),
 	}, "/{repo}/{image}/manifests/{reference}", nil)
+	w = &wVal
 	return w, r, err
 }
 
@@ -112,6 +113,115 @@ func getHttpTestManifestUploadPutOnlyHandlerWithoutLayers(br *utils.BootstrapRes
 
 // Populate registry with test manifest (with single put)
 func getHttpTestManifestUploadPutOnlyHandler(br *utils.BootstrapResult) (w *httptest.ResponseRecorder, r *http.Request, err error) {
+	var testRepo, testProfile, testImage, testTag, testMediaType string
+	if testRepo, err = br.Get("repo"); err != nil {
+		return w, r, err
+	}
+	if testProfile, err = br.Get("profile"); err != nil {
+		return w, r, err
+	}
+	if testImage, err = br.Get("image"); err != nil {
+		return w, r, err
+	}
+	token, err := br.Get("user:test#bearer")
+	if err != nil {
+		return w, r, err
+	}
+	if testTag, err = br.Get("tag"); err != nil {
+		return w, r, err
+	}
+	if testMediaType, err = br.Get("mediaType"); err != nil {
+		return w, r, err
+	}
+	w = httptest.NewRecorder()
+	putUrl := "/{repo}/{image}/manifests/{reference}"
+	r = httptest.NewRequest(http.MethodPut, putUrl, bytes.NewReader(testManifestBytes))
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("repo", testRepo)
+	rctx.URLParams.Add("image", testImage)
+	rctx.URLParams.Add("reference", testTag)
+	r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
+	gCtx.Set(r, "accountName", token)
+	gCtx.Set(r, "userName", testRepo)
+	gCtx.Set(r, "profileName", testProfile)
+	r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	r.Header.Set("Content-Type", testMediaType)
+	return w, r, nil
+}
+
+func getHttpTestManifestByDigest(br *utils.BootstrapResult) (w *httptest.ResponseRecorder, r *http.Request, err error) {
+	var testRepo, testProfile, testImage, testRef, testMethod string
+	if testRepo, err = br.Get("repo"); err != nil {
+		return w, r, err
+	}
+	if testProfile, err = br.Get("profile"); err != nil {
+		return w, r, err
+	}
+	if testImage, err = br.Get("image"); err != nil {
+		return w, r, err
+	}
+	token, err := br.Get("user:test#bearer")
+	if err != nil {
+		return w, r, err
+	}
+	if testRef, err = br.Get("reference"); err != nil {
+		return w, r, err
+	}
+	if testMethod, err = br.Get("method"); err != nil {
+		return w, r, err
+	}
+
+	w = httptest.NewRecorder()
+	url := "/{repo}/{image}/manifests/{reference}"
+	r = httptest.NewRequest(testMethod, url, nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("repo", testRepo)
+	rctx.URLParams.Add("image", testImage)
+	rctx.URLParams.Add("reference", testRef)
+	r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
+	gCtx.Set(r, "accountName", token)
+	gCtx.Set(r, "userName", testRepo)
+	gCtx.Set(r, "profileName", testProfile)
+	r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	r.Header.Set("Content-Type", schema2.MediaTypeManifest)
+	return w, r, nil
+}
+
+func getHttpTestManifestHeadByDigest(br *utils.BootstrapResult) (w *httptest.ResponseRecorder, r *http.Request, err error) {
+	var testRepo, testProfile, testImage, testDigest string
+	if testRepo, err = br.Get("repo"); err != nil {
+		return w, r, err
+	}
+	if testProfile, err = br.Get("profile"); err != nil {
+		return w, r, err
+	}
+	if testImage, err = br.Get("image"); err != nil {
+		return w, r, err
+	}
+	token, err := br.Get("user:test#bearer")
+	if err != nil {
+		return w, r, err
+	}
+	if testDigest, err = br.Get("digest"); err != nil {
+		return w, r, err
+	}
+	w = httptest.NewRecorder()
+	url := "/{repo}/{image}/manifests/{reference}"
+	r = httptest.NewRequest(http.MethodHead, url, nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("repo", testRepo)
+	rctx.URLParams.Add("image", testImage)
+	rctx.URLParams.Add("reference", testDigest)
+	r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
+	gCtx.Set(r, "accountName", token)
+	gCtx.Set(r, "userName", testRepo)
+	gCtx.Set(r, "profileName", testProfile)
+	r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	r.Header.Set("Content-Type", schema2.MediaTypeManifest)
+	return w, r, nil
+}
+
+func getHttpTestManifestHeadByTag(br *utils.BootstrapResult) (w *httptest.ResponseRecorder, r *http.Request, err error) {
 	var testRepo, testProfile, testImage, testTag string
 	if testRepo, err = br.Get("repo"); err != nil {
 		return w, r, err
@@ -130,8 +240,8 @@ func getHttpTestManifestUploadPutOnlyHandler(br *utils.BootstrapResult) (w *http
 		return w, r, err
 	}
 	w = httptest.NewRecorder()
-	putUrl := "/{repo}/{image}/manifests/{reference}"
-	r = httptest.NewRequest(http.MethodPut, putUrl, bytes.NewReader(testManifestBytes))
+	url := "/{repo}/{image}/manifests/{reference}"
+	r = httptest.NewRequest(http.MethodHead, url, nil)
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("repo", testRepo)
 	rctx.URLParams.Add("image", testImage)

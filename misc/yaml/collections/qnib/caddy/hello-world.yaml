@@ -1,0 +1,5 @@
+name: qnib/caddy
+tag: hello-world
+manifests:
+  - image: quay.io/cqnib/caddy/hello-world:2023-05-08-arm64
+  - image: quay.io/cqnib/caddy/hello-world:2023-05-08-amd64

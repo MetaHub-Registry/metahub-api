@@ -227,13 +227,15 @@ func (h Handlers) AuthMiddlewareFunc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	uName := gCtx.Get(r, "userName")
+
+	uRole := gCtx.Get(r, "userRole")
 	debug, ok := debugUser[uName.(string)]
 	if ok {
 		gCtx.Set(r, "debug", debug)
 	} else {
 		gCtx.Set(r, "debug", 0)
 	}
-	utils.Debug(l, span, "set debug for user '%s' to level '%d'", uName, debug)
+	utils.Debug(l, span, "set debug for user '%s' (role: %s) to level '%d'", uName, uRole, debug)
 
 }
 

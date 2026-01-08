@@ -1,0 +1,55 @@
+name: qnib/featuretest
+tag: latest
+manifests:
+  - image: docker.io/qnib/plain-featuretest:generic
+  - image: quay.io/cqnib/plain-featuretest:arch-cascadelake
+    platform: 
+      features: [cpu:cascadelake]
+  - image: docker.io/qnib/plain-featuretest:arch-skylake
+    platform: 
+      features: [cpu:skylake]
+  - image: quay.io/cqnib/plain-featuretest:arch-skylake_avx512
+    platform: 
+      features: [cpu:skylake_avx512]
+  - image: quay.io/cqnib/plain-featuretest:arch-zen
+    platform: 
+      features: [cpu:zen]
+  - image: quay.io/cqnib/plain-featuretest:arch-zen2
+    platform: 
+      features: [cpu:zen2]
+  - image: quay.io/cqnib/plain-featuretest:arch-zen3
+    platform: 
+      features: [cpu:zen3]
+  - image: quay.io/cqnib/plain-featuretest:cpu-broadwell
+    platform: 
+      features: [cpu:broadwell]
+  - image: registry.gitlab.com/qnib-pub-containers/qnib/plain-featuretest:20220715-arm64-generic
+    platform:
+      os: linux
+      arch: arm64
+  - image: registry.gitlab.com/qnib-pub-containers/qnib/plain-featuretest:20220715-arm64-graviton2
+    platform:
+      os: linux
+      arch: arm64
+      features: [graviton2]
+  - image: registry.gitlab.com/qnib-pub-containers/qnib/plain-featuretest:20220715-arm64-graviton2
+    platform:
+      os: linux
+      arch: arm64
+      features: [graviton3]
+  - image: registry.gitlab.com/qnib-pub-containers/qnib/plain-featuretest:20220715-arm_v6-generic
+    platform:
+      os: linux
+      arch: arm
+      variant: v6
+  - image: registry.gitlab.com/qnib-pub-containers/qnib/plain-featuretest:20220715-arm_v7-generic
+    platform:
+      os: linux
+      arch: arm
+      variant: v7
+  - image: registry.gitlab.com/qnib-pub-containers/qnib/plain-featuretest:20220715-riscv64-generic
+    platform:
+      os: linux
+      arch: riscv64
+    
+    

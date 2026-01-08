@@ -15,6 +15,7 @@ import (
 	"github.com/metahub-registry/metahub-core/pkg/upstream"
 	"github.com/metahub-registry/metahub-core/pkg/utils"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -48,7 +49,7 @@ func (h Handlers) BlobUploadPutHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Fatal("request", err)
 	}
-	bu, found, err := h.mag.Database.BlobUpload_GetOCI_ByUUID(ctx, req.UUID)
+	bu, found, err := h.mag.Database.BlobUploadGetOCIByUUID(ctx, req.UUID)
 	if err != nil {
 		log.Fatal("request", err)
 	}
@@ -67,7 +68,7 @@ func (h Handlers) BlobUploadPutHandler(w http.ResponseWriter, r *http.Request) {
 		dig := digest.FromBytes(buf)
 		bu.Digest = dig.String()
 		/// Create New Chunk
-		_, err := h.mag.Database.UploadChunk_Create(ctx, &bu, 0, int64(req.Length))
+		_, err := h.mag.Database.UploadChunkCreate(ctx, &bu, 0, int64(req.Length))
 		if err != nil {
 			msg := "failed to create chunk upload"
 			err = errors.Wrap(err, msg)
@@ -87,7 +88,7 @@ func (h Handlers) BlobUploadPutHandler(w http.ResponseWriter, r *http.Request) {
 			helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 			return
 		}
-		err = h.mag.Database.BlobUpload_Update_ByUUID(ctx, &bu)
+		err = h.mag.Database.BlobUploadUpdateByUUID(ctx, &bu)
 		if err != nil {
 			msg := "failed to update blob upload"
 			err = errors.Wrap(err, msg)
@@ -123,7 +124,7 @@ func (h Handlers) BlobUploadPutHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Finish the upload
-	err = h.mag.Database.BlobUpload_Complete(ctx, &bu)
+	err = h.mag.Database.BlobUploadComplete(ctx, &bu)
 	if err != nil {
 		msg := "failed to update blob in DB"
 		err = errors.Wrap(err, msg)
@@ -164,7 +165,7 @@ func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request)
 		helper.WriteOCIErrror(w, http.StatusBadRequest, e)
 		return
 	}
-	bu, found, err := h.mag.Database.BlobUpload_GetOCI_ByUUID(ctx, req.UUID)
+	bu, found, err := h.mag.Database.BlobUploadGetOCIByUUID(ctx, req.UUID)
 	if err != nil || !found {
 		msg := "failed to fetch blob upload"
 		err = errors.Wrap(err, msg)
@@ -202,7 +203,7 @@ func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request)
 	dig := digest.FromBytes(buf)
 	bu.Digest = dig.String()
 	/// Create New Chunk
-	chunk, err := h.mag.Database.UploadChunk_Create(ctx, &bu, req.RangeStartByte, req.RangeBytes)
+	chunk, err := h.mag.Database.UploadChunkCreate(ctx, &bu, req.RangeStartByte, req.RangeBytes)
 	if err != nil {
 		msg := "failed to create chunk upload"
 		err = errors.Wrap(err, msg)
@@ -223,7 +224,7 @@ func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request)
 		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 		return
 	}
-	err = h.mag.Database.BlobUpload_Update_ByUUID(ctx, &bu)
+	err = h.mag.Database.BlobUploadUpdateByUUID(ctx, &bu)
 	if err != nil {
 		msg := "failed to update blob upload"
 		err = errors.Wrap(err, msg)
@@ -282,7 +283,7 @@ func (h Handlers) BlobUploadPostHandler(w http.ResponseWriter, r *http.Request) 
 		//Digest:        req.Digest,
 		Repo: req.Repo,
 	}
-	err := h.mag.Database.BlobUpload_Create_ByOCI(ctx, &bu)
+	err := h.mag.Database.BlobUploadCreateByOCI(ctx, &bu)
 	if err != nil {
 		utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "push", e, "INTERNAL_ERROR", "failed to create blob upload")
 		return
@@ -300,7 +301,7 @@ func (h Handlers) BlobUploadPostHandler(w http.ResponseWriter, r *http.Request) 
 		dig := digest.FromBytes(buf)
 		bu.Digest = dig.String()
 		/// Create New Chunk
-		chunk, err := h.mag.Database.UploadChunk_Create(ctx, &bu, 0, int64(req.Length))
+		chunk, err := h.mag.Database.UploadChunkCreate(ctx, &bu, 0, int64(req.Length))
 		if err != nil {
 			msg := "failed to create chunk upload"
 			err = errors.Wrap(err, msg)
@@ -327,7 +328,7 @@ func (h Handlers) BlobUploadPostHandler(w http.ResponseWriter, r *http.Request) 
 		}
 
 		// Finish the upload
-		err = h.mag.Database.BlobUpload_Complete(ctx, &bu)
+		err = h.mag.Database.BlobUploadComplete(ctx, &bu)
 		if err != nil {
 			msg := "failed to update blob in DB"
 			err = errors.Wrap(err, msg)
@@ -363,15 +364,13 @@ func (h Handlers) BlobUploadPostHandler(w http.ResponseWriter, r *http.Request) 
 
 func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	req := types.NewRequest(ctx, r)
 	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
 		"package": pkgNameOCIBlob,
 		"func":    "BlobHandler",
 		"method":  r.Method,
-		"repo":    req.Repo,
-		"tag":     req.Tag,
 	})
 	defer span.End()
+	req := types.NewRequest(ctx, r)
 	msg := fmt.Sprintf("%-5s BlobHandler(%s, ", r.Method, req.Repo)
 	if req.Tag == "" {
 		msg += fmt.Sprintf("%s)", req.Digest)
@@ -387,7 +386,7 @@ func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
 		Digest: digest.Digest(req.Digest),
 	}
 
-	blob, found, err := h.mag.Blob_GetByHTTPRequest(r)
+	blob, found, err := h.mag.BlobGetByHTTPRequest(ctx, r)
 	if err != nil {
 		// 1. FALSE
 		msg := fmt.Sprintf("failed to fetch layer: %v", err)
@@ -469,6 +468,7 @@ func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if found {
+		span.SetStatus(codes.Ok, "found blob")
 		if r.Method == "GET" {
 			layer.WriteWWW(w)
 		}

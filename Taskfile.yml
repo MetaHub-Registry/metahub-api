@@ -67,3 +67,9 @@ tasks:
       SERVICE: '{{index .MATCH 0}}' 
     cmds:
       - docker compose exec -ti {{.SERVICE}} bash
+  ociBuild:
+    cmds:
+      - docker compose exec -ti -w /opt/results/distribution-spec/conformance oci go test -c
+  ociTest:
+    cmds:
+      - docker compose exec -ti oci /opt/results/distribution-spec/conformance/conformance.test

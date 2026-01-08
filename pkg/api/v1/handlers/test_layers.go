@@ -15,7 +15,7 @@ import (
 )
 
 func getHttpTestLayer0UploadPutHandler(br *utils.BootstrapResult) (w *httptest.ResponseRecorder, r *http.Request, err error) {
-	var testRepo, testProfile, testImage string
+	var testRepo, testProfile, testImage, testUser string
 	if testRepo, err = br.Get("repo"); err != nil {
 		return w, r, err
 	}
@@ -25,7 +25,10 @@ func getHttpTestLayer0UploadPutHandler(br *utils.BootstrapResult) (w *httptest.R
 	if testImage, err = br.Get("image"); err != nil {
 		return w, r, err
 	}
-	token, err := br.Get("user:test#bearer")
+	if testUser, err = br.Get("user"); err != nil {
+		return w, r, err
+	}
+	token, err := br.Get(fmt.Sprintf("user:%s#bearer", testUser))
 	if err != nil {
 		return w, r, err
 	}
@@ -123,7 +126,7 @@ func getHttpTestLayer0UploadDeleteHandler(br *utils.BootstrapResult) (w *httptes
 
 // Pull.Setup Populate registry with test blob
 func getHttpTestLayer0UploadPostHandler(br *utils.BootstrapResult) (w *httptest.ResponseRecorder, r *http.Request, err error) {
-	var testRepo, testProfile, testImage string
+	var testRepo, testProfile, testUser, testImage string
 	if testRepo, err = br.Get("repo"); err != nil {
 		return w, r, err
 	}
@@ -133,8 +136,11 @@ func getHttpTestLayer0UploadPostHandler(br *utils.BootstrapResult) (w *httptest.
 	if testImage, err = br.Get("image"); err != nil {
 		return w, r, err
 	}
+	if testUser, err = br.Get("user"); err != nil {
+		return w, r, err
+	}
 	/// Request
-	token, err := br.Get("user:test#bearer")
+	token, err := br.Get(fmt.Sprintf("user:%s#bearer", testUser))
 	if err != nil {
 		return w, r, err
 	} //
@@ -154,15 +160,18 @@ func getHttpTestLayer0UploadPostHandler(br *utils.BootstrapResult) (w *httptest.
 
 // Pull.Cross-mounting of a blob without the from argument should yield session id
 func getHttpTestLayer0UploadPostHandlerMount(br *utils.BootstrapResult) (w *httptest.ResponseRecorder, r *http.Request, err error) {
-	var testRepo, testProfile, testImage string
+	var testRepo, testProfile, testUser, testImage string
 	if testProfile, err = br.Get("profile"); err != nil {
 		return w, r, err
 	}
 	if testImage, err = br.Get("cross-mount-image"); err != nil {
 		return w, r, err
 	}
+	if testUser, err = br.Get("user"); err != nil {
+		return w, r, err
+	}
 	/// Request
-	token, err := br.Get("user:test#bearer")
+	token, err := br.Get(fmt.Sprintf("user:%s#bearer", testUser))
 	if err != nil {
 		return w, r, err
 	} //
@@ -176,6 +185,7 @@ func getHttpTestLayer0UploadPostHandlerMount(br *utils.BootstrapResult) (w *http
 	r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
 	gCtx.Set(r, "accountName", token)
 	gCtx.Set(r, "userName", testRepo)
+	gCtx.Set(r, "userRole", "admin")
 	gCtx.Set(r, "profileName", testProfile)
 	r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	return w, r, nil

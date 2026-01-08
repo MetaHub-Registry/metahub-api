@@ -50,6 +50,27 @@ services:
       CE_URL: ce:80
       PS1: 'dind > '
       MH_USER: qnib
+  oci:
+    build: misc/docker/oci/
+    command: ["sleep", "inf"]
+    volumes:
+      - ./results:/opt/results
+    networks:
+     - api-internal
+     - mh-data
+    environment:
+      OCI_ROOT_URL: "http://dev:80"
+      OCI_NAMESPACE: "oci/confirmance"
+      OCI_CROSSMOUNT_NAMESPACE: "oci/confirmance"
+      OCI_USERNAME: "qnib"
+      OCI_PASSWORD:  "qnib"
+      OCI_TEST_PULL: 1
+      OCI_TEST_PUSH: 0
+      OCI_TEST_CONTENT_DISCOVERY: 0
+      OCI_TEST_CONTENT_MANAGEMENT: 0
+      OCI_HIDE_SKIPPED_WORKFLOWS: 0
+      OCI_DEBUG: 0
+      OCI_DELETE_MANIFEST_BEFORE_BLOBS: 0
   #  start mailhog
   #mailhog:
   #  image: 'mailhog/mailhog:latest'
