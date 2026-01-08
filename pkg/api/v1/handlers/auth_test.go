@@ -73,17 +73,55 @@ func TestAuthAuthHandlerFail(t *testing.T) {
 	h.AuthHandler(w2, r2)
 	assert.Equal(t, http.StatusUnauthorized, w2.Code)
 }
-
-func TestAuthAuthMiddlewareHandlerWithUser(t *testing.T) {
+func TestAuthAuthMiddlewareHandlerWithUsers(t *testing.T) {
 	bs := utils.NewBootstrap()
 	bs.AddBootstrap("users")
 	bs.SetEmptyAll()
+	bs.PostTestSleep = 0
 	ctx := context.Background()
 	br, err := SetupTest(ctx, bs)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer TeardownTest(bs)
+	for _, l := range br.ToLines() {
+		if bs.PostTestSleep > 0 {
+			t.Log(l)
+		}
+	}
+	/// Request
+	token, err := br.Get("user:admin#bearer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Real user
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodHead, "/v2", nil)
+	r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	h.AuthMiddlewareHandler(w, r)
+	assert.Equal(t, http.StatusOK, w.Code)
+	gCtxUser := gCtx.Get(r, "userName")
+	assert.Equal(t, "admin", gCtxUser)
+	gCtxUserRole := gCtx.Get(r, "userRole")
+	assert.Equal(t, "admin", gCtxUserRole)
+}
+
+func TestAuthAuthMiddlewareHandlerWithUser(t *testing.T) {
+	bs := utils.NewBootstrap()
+	bs.AddBootstrap("users")
+	bs.SetEmptyAll()
+	bs.PostTestSleep = 0
+	ctx := context.Background()
+	br, err := SetupTest(ctx, bs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer TeardownTest(bs)
+	for _, l := range br.ToLines() {
+		if bs.PostTestSleep > 0 {
+			t.Log(l)
+		}
+	}
 	/// Request
 	token, err := br.Get("user:test#bearer")
 	if err != nil {
@@ -95,6 +133,10 @@ func TestAuthAuthMiddlewareHandlerWithUser(t *testing.T) {
 	r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	h.AuthMiddlewareHandler(w, r)
 	assert.Equal(t, http.StatusOK, w.Code)
+	gCtxUser := gCtx.Get(r, "userName")
+	assert.Equal(t, "test", gCtxUser)
+	gCtxUserRole := gCtx.Get(r, "userRole")
+	assert.Equal(t, "user", gCtxUserRole)
 	// No auth
 	w0 := httptest.NewRecorder()
 	r0 := httptest.NewRequest(http.MethodHead, "/v2", nil)

@@ -89,17 +89,18 @@ func TestReferrersGetHandlerNotFound(t *testing.T) {
 
 // func TestReferrersGetHandlerHead(t *testing.T) {
 // 	ctx := context.Background()
-// 	debug := 0
+// 	_, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
+// 		"func": "TestManifestPutOnlyWithLayerDelete",
+// 	})
+// 	defer span.End()
+// 	debug := 1
 // 	bs := utils.NewBootstrap()
 // 	bs.SetEmptyAll()
 // 	bs.SetYAMLPrefix("../../../../misc/yaml")
 // 	bs.AddBootstrap("users")
-// 	// bs.AddBootstrap("platforms:generic")
-// 	// bs.AddBootstrap("profile:profiles/cpu/generic.yaml")
-// 	//bs.AddBootstrap("layers:qnib/featuretest:arm64")
-// 	// bs.AddBootstrap("config:qnib/featuretest:arm64")
-// 	// bs.AddBootstrap("manifest:qnib/featuretest:arm64")
-// 	// bs.AddBootstrap("manifestlist:qnib/featuretest:arm64")
+// 	bs.AddBootstrap("platforms:generic")
+// 	bs.AddBootstrap("profile:profiles/cpu/generic.yaml")
+// 	bs.AddBootstrap("config:ft_arm64")
 // 	if debug > 0 {
 // 		bs.PostTestSleep = debug
 // 	}
@@ -129,31 +130,32 @@ func TestReferrersGetHandlerNotFound(t *testing.T) {
 // 	}
 // 	w := httptest.NewRecorder()
 // 	r := httptest.NewRequest(http.MethodHead, "/{repo}/{image}/referrers/{reference}", nil)
-// 	// maniDigest, err := br.Get("manifest:qnib/featuretest:arm64#digest")
-// 	// if err != nil {
-// 	// 	t.Fatal(err)
-// 	// }
+// 	maniDigest, err := br.Get("manifest:qnib/featuretest:arm64#digest")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
 // 	rctx := chi.NewRouteContext()
 // 	rctx.URLParams.Add("repo", "qnib")
 // 	rctx.URLParams.Add("image", "featuretest")
-// 	rctx.URLParams.Add("reference", "FAKEDIGEST1234567890abcdef")
+// 	rctx.URLParams.Add("reference", maniDigest)
 // 	r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
 // 	r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 
-// 	//_, found, err := h.mag.ConfigBlob_GetByHTTPRequest(ctx, r)
-// 	// if err != nil {
-// 	// 	t.Fatal(err)
-// 	// }
-// 	// assert.False(t, found)
+// 	_, found, err := h.mag.ConfigBlobGetByHTTPRequest(ctx, r)
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	assert.False(t, found)
 // 	_ = w
 // 	// /// HEAD
 
-// 	h.ReferrersGetHandler(w, r)
-// 	assert.Equal(t, http.StatusNoContent, w.Code)
+// 	// h.ReferrersGetHandler(w, r)
+// 	// assert.Equal(t, http.StatusNoContent, w.Code)
 // 	// // GET (with data)
 // 	// r.Method = http.MethodGet
 // 	// h.ReferrersGetHandler(w, r)
 // 	// assert.Equal(t, http.StatusOK, w.Code)
 // 	// assert.GreaterOrEqual(t, w.Body.Len(), 100)
 // 	// assert.LessOrEqual(t, w.Body.Len(), 412)
+// 	span.End()
 // }

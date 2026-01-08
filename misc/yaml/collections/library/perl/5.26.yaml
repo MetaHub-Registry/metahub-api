@@ -1,0 +1,9 @@
+name: library/perl
+tag: 5.26
+manifests:
+  - image: docker.io/library/perl:5.26.3-slim-threaded-stretch
+    platform:
+      architecture: arm64
+      variant: v8
+      os: linux
+

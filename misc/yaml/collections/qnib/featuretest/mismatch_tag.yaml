@@ -1,0 +1,7 @@
+name: qnib/featuretest
+tag: fail
+manifests:
+  - image: quay.io/cqnib/plain-featuretest:generic
+    platform:
+      os: linux
+      arch: amd64

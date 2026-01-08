@@ -1,0 +1,7 @@
+name: qnib/featuretest
+tag: arm64
+manifests:
+  - image: registry.gitlab.com/qnib-pub-containers/qnib/plain-featuretest:20220715-arm64-generic
+    platform:
+      os: linux
+      arch: arm64

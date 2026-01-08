@@ -1,6 +1,7 @@
 FROM sonarsource/sonar-scanner-cli:12.0.0.3214_8.0.1 AS sonar
 
 FROM mcr.microsoft.com/devcontainers/go:1-1.24-bullseye
+ARG TARGETPLATFORM
 COPY --from=sonar /opt/sonar-scanner/lib/sonar-scanner-cli-8.0.1.6346.jar /usr/local/lib/
 COPY --from=sonar /opt/sonar-scanner/bin/sonar-scanner /usr/local/bin/
 
@@ -33,8 +34,13 @@ RUN <<eot
    apt-get install -y docker-ctop
 eot
 RUN <<eot
-   curl -1sLf 'https://dl.cloudsmith.io/public/task/task/setup.deb.sh' | bash
-   apt install -y task
+   cd /usr/bin
+   if [ "${TARGETPLATFORM}" = "linux/amd64" ]; then
+      wget -qO - https://github.com/go-task/task/releases/download/nightly/task_linux_amd64.tar.gz |tar xfz - task
+   elif [ "${TARGETPLATFORM}" = "linux/arm64" ]; then
+      wget -qO - https://github.com/go-task/task/releases/download/nightly/task_linux_arm64.tar.gz |tar xfz - task
+   fi
 eot
+#RUN pipx install sqlit-tui
 COPY homelab-rootCA.pem /usr/local/share/ca-certificates/homelab-rootCA.crt
 RUN update-ca-certificates

@@ -15,8 +15,9 @@
     },
     "customizations": {
         "vscode": {
-            "settings": {},
-            "extensions": []
+            "extensions": [
+                "stateful.runme"
+            ]
         }
     },
     "workspaceFolder": "${localEnv:HOME}/go/src/github.com/metahub-registry/metahub-api",

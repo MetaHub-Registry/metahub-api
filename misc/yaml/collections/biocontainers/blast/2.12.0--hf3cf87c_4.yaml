@@ -1,0 +1,4 @@
+name: biocontainers/blast
+tag: 2.12.0--hf3cf87c_4
+manifests:
+  - image: quay.io/biocontainers/blast:2.12.0--hf3cf87c_4
