@@ -40,7 +40,7 @@ func TestListTags(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer TeardownTest(bs)
+	defer TeardownTest(bs, br)
 	_ = br
 	/// Request
 	assert.NotNil(t, h.mag.Database)

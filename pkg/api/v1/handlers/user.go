@@ -44,6 +44,7 @@ func getUserClaim(ctx context.Context, r *http.Request) (uname, ghid string, err
 			err = utils.NewError(l, span, "failed to get ID from claims")
 			return "", "", err
 		}
+		utils.Debug(l, span, "Got username '%s' and ghid '%s' from claims", uname, ghid)
 	}
 	return
 }

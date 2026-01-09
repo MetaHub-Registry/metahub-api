@@ -93,9 +93,9 @@ func (h Handlers) ManifestHeadHandler_Tag(ctx context.Context, w http.ResponseWr
 	})
 	defer span.End()
 	l.Infof("%-5s ManifestHeadHandler_Tag(%s:%s) Profile:%s", r.Method, req.Repo, req.Tag, req.Profile)
-	_, _, e := h.mag.Database.Collection_GetCreate_ByRepoTag(ctx, req.Repo, req.Tag)
+	_, _, e := h.mag.Database.CollectionGetCreateByRepoTag(ctx, req.Repo, req.Tag)
 	if e != nil {
-		utils.ErrorHandler(l, span, e, "failed to Collection_GetCreate_ByRepoTag")
+		utils.ErrorHandler(l, span, e, "failed to CollectionGetCreateByRepoTag")
 		return
 	}
 	// 1. Check if a manifest with repo:tag exists

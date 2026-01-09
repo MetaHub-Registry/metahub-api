@@ -6,7 +6,7 @@ tasks:
     vars:
       GCMD: '{{index .MATCH 0}}' 
     cmds:
-      - git commit -{{.GCMD}} "{{.CLI_ARGS}}"
+      - git commit -{{.GCMD}} {{.CLI_ARGS}}
       - git push
   test:
     cmds:
@@ -73,3 +73,7 @@ tasks:
   ociTest:
     cmds:
       - docker compose exec -ti oci /opt/results/distribution-spec/conformance/conformance.test
+  ociTestDev:
+    cmds:
+      - docker compose exec -ti -e OCI_TEST_PUSH=0 -e OCI_TEST_PULL=1 oci /opt/results/distribution-spec/conformance/conformance.test
+  

@@ -23,7 +23,7 @@ func TestAuthAuthHandlerSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer TeardownTest(bs)
+	defer TeardownTest(bs, br)
 	/// Request
 	token, err := br.Get("user:test#bearer")
 	if err != nil {
@@ -48,11 +48,11 @@ func TestAuthAuthHandlerFail(t *testing.T) {
 	ctx := context.Background()
 	bs := utils.NewBootstrap()
 	bs.SetEmptyAll()
-	_, err := SetupTest(ctx, bs)
+	br, err := SetupTest(ctx, bs)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer TeardownTest(bs)
+	defer TeardownTest(bs, br)
 	/// Request
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodHead, "/auth", nil)
@@ -83,7 +83,7 @@ func TestAuthAuthMiddlewareHandlerWithUsers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer TeardownTest(bs)
+	defer TeardownTest(bs, br)
 	for _, l := range br.ToLines() {
 		if bs.PostTestSleep > 0 {
 			t.Log(l)
@@ -116,7 +116,7 @@ func TestAuthAuthMiddlewareHandlerWithUser(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer TeardownTest(bs)
+	defer TeardownTest(bs, br)
 	for _, l := range br.ToLines() {
 		if bs.PostTestSleep > 0 {
 			t.Log(l)
@@ -169,7 +169,7 @@ func TestAuthAuthMiddlewareHandlerWithScope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer TeardownTest(bs)
+	defer TeardownTest(bs, br)
 	/// Request
 	token, err := br.Get("user:test#bearer")
 	if err != nil {

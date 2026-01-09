@@ -49,7 +49,7 @@ func TestBlobHandlerDirectPost(t *testing.T) {
 			t.Log(l)
 		}
 	}
-	defer TeardownTest(bs)
+	defer TeardownTest(bs, br)
 	testRepo := "qnib"
 	testImage := "test"
 	testProfile := "generic"
@@ -127,7 +127,7 @@ func TestBlobHandlerLayerTest(t *testing.T) {
 	}
 	br, err := SetupTest(ctx, bs)
 	if err != nil {
-		TeardownTest(bs)
+		TeardownTest(bs, br)
 		t.Fatal(err)
 	}
 
@@ -136,7 +136,7 @@ func TestBlobHandlerLayerTest(t *testing.T) {
 			t.Log(l)
 		}
 	}
-	defer TeardownTest(bs)
+	defer TeardownTest(bs, br)
 
 	// Prepare
 	if err := h.mag.ComputeAllManifests(ctx); err != nil {
@@ -192,7 +192,7 @@ func TestBlobHandlerRedirectLayerTest(t *testing.T) {
 		"func": "TestBlobHandlerLayerTest",
 	})
 	defer span.End()
-	debug := 1
+	debug := 0
 	bs := utils.NewBootstrap()
 	bs.SetEmptyAll()
 	bs.SetYAMLPrefix("../../../../misc/yaml")
@@ -217,7 +217,7 @@ func TestBlobHandlerRedirectLayerTest(t *testing.T) {
 	}
 	br, err := SetupTest(ctx, bs)
 	if err != nil {
-		TeardownTest(bs)
+		TeardownTest(bs, br)
 		t.Fatal(err)
 	}
 	for _, l := range br.ToLines() {
@@ -225,7 +225,7 @@ func TestBlobHandlerRedirectLayerTest(t *testing.T) {
 			t.Log(l)
 		}
 	}
-	defer TeardownTest(bs)
+	defer TeardownTest(bs, br)
 	/// Vars
 	testRepo := "qnib"
 	//testProfile := "generic"
@@ -273,7 +273,7 @@ func TestUploadUploadLayer0Sequence(t *testing.T) {
 	}
 	br, err := SetupTest(ctx, bs)
 	if err != nil {
-		TeardownTest(bs)
+		TeardownTest(bs, br)
 		t.Fatal(err)
 	}
 	for _, l := range br.ToLines() {
@@ -281,9 +281,8 @@ func TestUploadUploadLayer0Sequence(t *testing.T) {
 			t.Log(l)
 		}
 	}
-	defer TeardownTest(bs)
+	defer TeardownTest(bs, br)
 	/// Vars
-
 	testRepo := "qnib"
 	br.Add("repo", testRepo)
 	br.Add("user", "admin")
@@ -325,20 +324,20 @@ func TestUploadUploadLayer0Sequence(t *testing.T) {
 		assert.Regexp(t, fmt.Sprintf(`/v2/%s/%s/blobs/uploads/%s$`, testRepo, testImage, uuid), gotPutLoc)
 	}
 	// CrossMount
-	// cmImage := "alpine-crossmount"
-	// br.Add("cross-mount-image", cmImage)
-	// if w, r, e := getHttpTestLayer0UploadPostHandlerMount(&br); e != nil {
-	// 	t.Fatal(e)
-	// } else {
-	// 	r.Header.Set("userRole", "admin")
-	// 	h.BlobUploadPostHandler(w, r)
-	// 	assert.Equal(t, http.StatusAccepted, w.Code)
-	// 	// Fetch Upload from DB
-	// 	gotLoc := w.Header().Get("Location")
-	// 	uuid := w.Header().Get("Docker-Upload-UUID")
-	// 	br.Add("uuid-mount", uuid)
-	// 	assert.Regexp(t, fmt.Sprintf(`/v2/%s/blobs/uploads/%s$`, cmImage, uuid), gotLoc)
-	// }
+	cmImage := "alpine-crossmount"
+	br.Add("cross-mount-image", cmImage)
+	if w, r, e := getHttpTestLayer0UploadPostHandlerMount(&br); e != nil {
+		t.Fatal(e)
+	} else {
+		r.Header.Set("userRole", "admin")
+		h.BlobUploadPostHandler(w, r)
+		assert.Equal(t, http.StatusAccepted, w.Code)
+		// Fetch Upload from DB
+		gotLoc := w.Header().Get("Location")
+		uuid := w.Header().Get("Docker-Upload-UUID")
+		br.Add("uuid-mount", uuid)
+		assert.Regexp(t, fmt.Sprintf(`/v2/%s/blobs/uploads/%s$`, cmImage, uuid), gotLoc)
+	}
 	// Remove
 	// l0ref := types.FT_arm_Layer0Reference()
 	// br.Add("reference", string(l0ref.Digest))
@@ -364,7 +363,7 @@ func TestUploadUploadBlobSequenceSplit(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = br
-	defer TeardownTest(bs)
+	defer TeardownTest(bs, br)
 	/// Vars
 	testRepo := "qnib"
 	br.Add("repo", testRepo)

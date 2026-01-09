@@ -25,7 +25,7 @@ func TestGithubLogout(t *testing.T) {
 	}
 	br, err := SetupTest(ctx, bs)
 	if err != nil {
-		TeardownTest(bs)
+		TeardownTest(bs, br)
 		t.Fatal(err)
 	}
 	for _, l := range br.ToLines() {
@@ -33,7 +33,7 @@ func TestGithubLogout(t *testing.T) {
 			t.Log(l)
 		}
 	}
-	defer TeardownTest(bs)
+	defer TeardownTest(bs, br)
 	r := chi.NewRouter()
 	// Protected routes
 	r.Group(func(r chi.Router) {
@@ -90,7 +90,7 @@ func TestGithubCallback(t *testing.T) {
 	}
 	br, err := SetupTest(ctx, bs)
 	if err != nil {
-		TeardownTest(bs)
+		TeardownTest(bs, br)
 		t.Fatal(err)
 	}
 	for _, l := range br.ToLines() {
@@ -98,7 +98,7 @@ func TestGithubCallback(t *testing.T) {
 			t.Log(l)
 		}
 	}
-	defer TeardownTest(bs)
+	defer TeardownTest(bs, br)
 	// Prepare
 	h.mag.Config.OAuth.Enabled = false
 

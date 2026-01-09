@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/metahub-registry/metahub-core/pkg/backends/magazine"
@@ -144,14 +145,35 @@ func TestMain(m *testing.M) {
 	}
 }
 
-func TeardownTest(bs utils.Bootstrap) {
+func TeardownTest(bs utils.Bootstrap, br utils.BootstrapResult) {
 	logrus.Info("> TeardownTest")
 	jh, ok := h.mag.Config.Args["TEST_JAEGER_HTTP"]
 	if ok {
 		logrus.Infof("Jaeger HTTP: http://%s", jh)
 	}
+
 	h.mag.Minio.PreTearDown(bs)
-	h.mag.Database.TeardownTest(bs)
+	h.mag.Database.TeardownTest(bs, br)
+	if bs.PostTestSleep > 0 {
+		sqfile, err := br.Get("sqfile")
+		if err != nil {
+			logrus.Error("No 'sqfile' in BootstrapResult")
+		} else {
+			logrus.Infof("SQLite File: %s", sqfile)
+			sqbC, err := sqlite.SetupSQBrowser(context.Background(), sqfile, "")
+			if err != nil {
+				logrus.Fatal(err)
+			}
+			defer func() {
+				if err := sqbC.Terminate(context.Background()); err != nil {
+					logrus.Fatal(err)
+				}
+			}()
+			logrus.Infof("SQLite Browser at: http://%s", sqbC.HttpURI)
+		}
+		logrus.Infof("Sleep %d seconds for inspection...", bs.PostTestSleep)
+		time.Sleep(time.Duration(bs.PostTestSleep) * time.Second)
+	}
 	err := h.mag.Minio.EmptyAll()
 	if err != nil {
 		logrus.Fatal(err)
