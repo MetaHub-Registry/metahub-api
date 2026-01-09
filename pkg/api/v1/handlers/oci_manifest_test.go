@@ -8,6 +8,7 @@ import (
 
 	"github.com/distribution/distribution/manifest/schema2"
 	"github.com/opencontainers/go-digest"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/metahub-registry/metahub-core/pkg/types"
 	"github.com/metahub-registry/metahub-core/pkg/utils"
@@ -42,11 +43,11 @@ func TestManifestPutOnlyWithLayerDelete(t *testing.T) {
 		}
 	}
 	if err != nil {
-		TeardownTest(bs)
+		TeardownTest(bs, br)
 		t.Fatal(err)
 	}
 
-	defer TeardownTest(bs)
+	defer TeardownTest(bs, br)
 	/// Vars
 	br.Add("repo", "test")
 	br.Add("profile", "generic")
@@ -147,11 +148,11 @@ func TestManifestPutOnlyWithOutLayerDelete(t *testing.T) {
 		}
 	}
 	if err != nil {
-		TeardownTest(bs)
+		TeardownTest(bs, br)
 		t.Fatal(err)
 	}
 
-	defer TeardownTest(bs)
+	defer TeardownTest(bs, br)
 	/// Vars
 	br.Add("repo", "test")
 	br.Add("profile", "generic")
@@ -199,7 +200,7 @@ func TestUploadManifestFTarmShortWithRemove(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer TeardownTest(bs)
+	defer TeardownTest(bs, br)
 	/// Request
 	token, err := br.Get("user:test#bearer")
 	if err != nil {
@@ -290,7 +291,7 @@ func TestUploadManifestFTarm(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer TeardownTest(bs)
+	defer TeardownTest(bs, br)
 	/// Request
 	token, err := br.Get("user:test#bearer")
 	if err != nil {
@@ -421,178 +422,177 @@ func TestUploadManifestFTarm(t *testing.T) {
 	assert.Equal(t, fmt.Sprintf("/v2/qnib/featuretest/blobs/uploads/%s", uuid), gotPutLocL1)
 }
 
-// TODO: Make the test work again
-// func TestManifestOCITest(t *testing.T) {
-// 	ctx := context.Background()
-// 	debug := 0
-// 	bs := utils.NewBootstrap()
-// 	bs.SetEmptyAll()
-// 	bs.SetYAMLPrefix("../../../../misc/yaml")
-// 	bs.AddBootstrap("users")
-// 	bs.AddBootstrap("platforms:generic")
-// 	bs.AddBootstrap("layer:0:ft_amd64")
-// 	bs.AddBootstrap("layer:1:ft_amd64")
-// 	//bs.AddBootstrap("rules:rules/cpu/generic.yaml")
-// 	bs.AddBootstrap("rules:rules/generic/linux.yaml")
-// 	bs.AddBootstrap("profile:profiles/generic.yaml")
-// 	if debug > 0 {
-// 		bs.PostTestSleep = debug
-// 	}
-// 	err := h.mag.Minio.EmptyAll()
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	br, err := SetupTest(ctx, bs)
-// 	for _, l := range br.ToLines() {
-// 		if debug > 0 {
-// 			t.Log(l)
-// 		}
-// 	}
-// 	if err != nil {
-// 		TeardownTest(bs)
-// 		t.Fatal(err)
-// 	}
-// 	defer TeardownTest(bs)
-// 	_ = br
-// 	token, err := br.Get("user:test#bearer")
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	// Tests
-// 	testRepo := "oci"
-// 	testImage := "conformance"
-// 	testTag := "tagtest0"
-// 	cfg := types.Config{
-// 		Data: []byte(`{
-// 			"author": "TneKdQXHXICsSXwR",
-// 			"architecture": "amd64",
-// 			"os": "linux",
-// 			"rootfs": {
-// 				"type": "layers",
-// 				"diff_ids": []
-// 			}
-// 		}`),
-// 	}
-// 	cfgDig := digest.FromBytes(cfg.Data)
-// 	logrus.Errorf("cfgDig: %s", cfgDig)
-// 	/// Direct Post with config
-// 	wCfgPost, rCfgPost := utils.CreateNewHTTPTest(http.MethodPost, map[string]string{
-// 		"repo":  testRepo,
-// 		"image": testImage,
-// 	}, map[string]string{
-// 		"accountName": token,
-// 		"userName":    "oci",
-// 		"profileName": "generic",
-// 	}, map[string]string{
-// 		"Authorization":  fmt.Sprintf("Bearer %s", token),
-// 		"Content-Type":   "application/octet-stream",
-// 		"Content-Range":  fmt.Sprintf("0-%d", len(cfg.Data)-1),
-// 		"Content-Length": fmt.Sprintf("%d", len(cfg.Data)),
-// 	}, "/{repo}/{image}/blobs/uploads/{uuid}", cfg.Data)
-// 	h.BlobUploadPostHandler(&wCfgPost, rCfgPost)
-// 	if wCfgPost.Code != http.StatusCreated {
-// 		t.Fatalf("wManiPut.Code: %d, expected %d", wCfgPost.Code, http.StatusCreated)
-// 	}
-// 	/// Manifest
-// 	mani := types.ManifestData{
-// 		Data: []byte(`{
-// 			"schemaVersion": 2,
-// 			"config": {
-// 				"mediaType": "application/vnd.oci.image.config.v1+json",
-// 				"digest": "sha256:22f68afca98941fc10a8c6c87f881065b075c1c2f4678b8f579d1b77bc060ef0",
-// 				"size": 129,
-// 				"data": "ewoJImF1dGhvciI6ICJUbmVLZFFYSFhJQ3NTWHdSIiwKCSJhcmNoaXRlY3R1cmUiOiAiYW1kNjQiLAoJIm9zIjogImxpbnV4IiwKCSJyb290ZnMiOiB7CgkJInR5cGUiOiAibGF5ZXJzIiwKCQkiZGlmZl9pZHMiOiBbXQoJfQp9",
-// 				"newUnspecifiedField": "aGVsbG8gd29ybGQ="
-// 			},
-// 			"layers": [
-// 				{
-// 					"mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
-// 					"digest": "sha256:88ecf269dec31566a8e6b05147732fe34d32bc608de0d636dffaba659230a515",
-// 					"size": 2796496,
-// 					"data": null,
-// 					"newUnspecifiedField": null
-// 				}
-// 			]
-// 		}`),
-// 	}
-// 	wManiPut, rManiPut := utils.CreateNewHTTPTest(http.MethodPut, map[string]string{
-// 		"repo":      testRepo,
-// 		"image":     testImage,
-// 		"reference": testTag,
-// 	}, map[string]string{
-// 		"accountName": token,
-// 		"userName":    "oci",
-// 		"profileName": "generic",
-// 	}, map[string]string{
-// 		"Authorization": fmt.Sprintf("Bearer %s", token),
-// 		"Content-Type":  "application/vnd.docker.distribution.manifest.v2+json",
-// 	}, "/{repo}/{image}/manifests/{reference}", mani.Data)
-// 	h.ManifestPutHandler(&wManiPut, rManiPut)
-// 	if wManiPut.Code != http.StatusCreated {
-// 		t.Fatalf("wManiPut.Code: %d, expected %d", wManiPut.Code, http.StatusCreated)
-// 	}
-// 	maniDigest := wManiPut.Header().Get("Docker-Content-Digest")
-// 	assert.Equal(t, "sha256:bec9eaec0dddcf1558fd11ef8d1e68d5cf7e526e8d6bdb282f16984febc852bb", maniDigest)
-// 	// Remove
-// 	wManiDel, rManiDel := utils.CreateNewHTTPTest(http.MethodDelete, map[string]string{
-// 		"repo":      testRepo,
-// 		"image":     testImage,
-// 		"reference": maniDigest,
-// 	}, map[string]string{
-// 		"accountName": token,
-// 		"userName":    "oci",
-// 		"profileName": "generic",
-// 	}, map[string]string{
-// 		"Authorization": fmt.Sprintf("Bearer %s", token),
-// 	}, "/{repo}/{image}/manifests/{reference}", nil)
-// 	assert.NotNil(t, rManiDel)
-// 	err = h.mag.ManifestDeleteByHTTPRequest(ctx, rManiDel)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	if wManiDel.Code != http.StatusOK {
-// 		t.Fatalf("wManiDel.Code: %d, expected %d", wManiDel.Code, http.StatusOK)
-// 	}
-// 	// Check Collections
-// 	cols, err := h.mag.Database.CollectionListing_Get_ByRepoLike(ctx, testRepo)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	assert.Equal(t, 1, len(cols))
-// 	ct := cols[0].ColTag
-// 	// remove collectiontag
-// 	wCTDel, rCTDel := utils.CreateNewHTTPTest(http.MethodDelete, map[string]string{
-// 		"repo":      testRepo,
-// 		"image":     testImage,
-// 		"reference": testTag,
-// 	}, map[string]string{
-// 		"accountName": token,
-// 		"userName":    "oci",
-// 		"profileName": "generic",
-// 	}, map[string]string{
-// 		"Authorization": fmt.Sprintf("Bearer %s", token),
-// 	}, "/{repo}/{image}/manifests/{reference}", nil)
-// 	assert.NotNil(t, rCTDel)
-// 	err = h.mag.ManifestDeleteByHTTPRequest(ctx, rCTDel)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	if wCTDel.Code != http.StatusOK {
-// 		t.Fatalf("wCTDel.Code: %d, expected %d", wCTDel.Code, http.StatusOK)
-// 	}
-// 	// Check Collections
-// 	cols, err = h.mag.Database.CollectionListing_Get_ByRepoLike(ctx, testRepo)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	assert.Equal(t, 0, len(cols))
-// 	/// Count CollectionTag after compute manifestlist is done
-// 	cnt, err := h.mag.Database.CollectionTag_CountRelationships(ct.ID)
-// 	if err != nil {
-// 		t.Fatal(err)
-// 	}
-// 	assert.Equal(t, int64(2), cnt)
-// }
+func TestManifestOCITest(t *testing.T) {
+	ctx := context.Background()
+	debug := 0
+	bs := utils.NewBootstrap()
+	bs.SetEmptyAll()
+	bs.SetYAMLPrefix("../../../../misc/yaml")
+	bs.AddBootstrap("users")
+	bs.AddBootstrap("platforms:generic")
+	bs.AddBootstrap("layer:0:ft_amd64")
+	bs.AddBootstrap("layer:1:ft_amd64")
+	//bs.AddBootstrap("rules:rules/cpu/generic.yaml")
+	bs.AddBootstrap("rules:rules/generic/linux.yaml")
+	bs.AddBootstrap("profile:profiles/generic.yaml")
+	if debug > 0 {
+		bs.PostTestSleep = debug
+	}
+	err := h.mag.Minio.EmptyAll()
+	if err != nil {
+		t.Fatal(err)
+	}
+	br, err := SetupTest(ctx, bs)
+	for _, l := range br.ToLines() {
+		if debug > 0 {
+			t.Log(l)
+		}
+	}
+	if err != nil {
+		TeardownTest(bs, br)
+		t.Fatal(err)
+	}
+	defer TeardownTest(bs, br)
+	_ = br
+	token, err := br.Get("user:test#bearer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Tests
+	testRepo := "oci"
+	testImage := "conformance"
+	testTag := "tagtest0"
+	cfg := types.Config{
+		Data: []byte(`{
+			"author": "TneKdQXHXICsSXwR",
+			"architecture": "amd64",
+			"os": "linux",
+			"rootfs": {
+				"type": "layers",
+				"diff_ids": []
+			}
+		}`),
+	}
+	cfgDig := digest.FromBytes(cfg.Data)
+	logrus.Errorf("cfgDig: %s", cfgDig)
+	/// Direct Post with config
+	wCfgPost, rCfgPost := utils.CreateNewHTTPTest(http.MethodPost, map[string]string{
+		"repo":  testRepo,
+		"image": testImage,
+	}, map[string]string{
+		"accountName": token,
+		"userName":    "oci",
+		"profileName": "generic",
+	}, map[string]string{
+		"Authorization":  fmt.Sprintf("Bearer %s", token),
+		"Content-Type":   "application/octet-stream",
+		"Content-Range":  fmt.Sprintf("0-%d", len(cfg.Data)-1),
+		"Content-Length": fmt.Sprintf("%d", len(cfg.Data)),
+	}, "/{repo}/{image}/blobs/uploads/{uuid}", cfg.Data)
+	h.BlobUploadPostHandler(&wCfgPost, rCfgPost)
+	if wCfgPost.Code != http.StatusCreated {
+		t.Fatalf("wManiPut.Code: %d, expected %d", wCfgPost.Code, http.StatusCreated)
+	}
+	/// Manifest
+	mani := types.ManifestData{
+		Data: []byte(`{
+			"schemaVersion": 2,
+			"config": {
+				"mediaType": "application/vnd.oci.image.config.v1+json",
+				"digest": "sha256:22f68afca98941fc10a8c6c87f881065b075c1c2f4678b8f579d1b77bc060ef0",
+				"size": 129,
+				"data": "ewoJImF1dGhvciI6ICJUbmVLZFFYSFhJQ3NTWHdSIiwKCSJhcmNoaXRlY3R1cmUiOiAiYW1kNjQiLAoJIm9zIjogImxpbnV4IiwKCSJyb290ZnMiOiB7CgkJInR5cGUiOiAibGF5ZXJzIiwKCQkiZGlmZl9pZHMiOiBbXQoJfQp9",
+				"newUnspecifiedField": "aGVsbG8gd29ybGQ="
+			},
+			"layers": [
+				{
+					"mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+					"digest": "sha256:88ecf269dec31566a8e6b05147732fe34d32bc608de0d636dffaba659230a515",
+					"size": 2796496,
+					"data": null,
+					"newUnspecifiedField": null
+				}
+			]
+		}`),
+	}
+	wManiPut, rManiPut := utils.CreateNewHTTPTest(http.MethodPut, map[string]string{
+		"repo":      testRepo,
+		"image":     testImage,
+		"reference": testTag,
+	}, map[string]string{
+		"accountName": token,
+		"userName":    "oci",
+		"profileName": "generic",
+	}, map[string]string{
+		"Authorization": fmt.Sprintf("Bearer %s", token),
+		"Content-Type":  "application/vnd.docker.distribution.manifest.v2+json",
+	}, "/{repo}/{image}/manifests/{reference}", mani.Data)
+	h.ManifestPutHandler(&wManiPut, rManiPut)
+	if wManiPut.Code != http.StatusCreated {
+		t.Fatalf("wManiPut.Code: %d, expected %d", wManiPut.Code, http.StatusCreated)
+	}
+	maniDigest := wManiPut.Header().Get("Docker-Content-Digest")
+	assert.Equal(t, "sha256:bec9eaec0dddcf1558fd11ef8d1e68d5cf7e526e8d6bdb282f16984febc852bb", maniDigest)
+	// Remove
+	wManiDel, rManiDel := utils.CreateNewHTTPTest(http.MethodDelete, map[string]string{
+		"repo":      testRepo,
+		"image":     testImage,
+		"reference": maniDigest,
+	}, map[string]string{
+		"accountName": token,
+		"userName":    "oci",
+		"profileName": "generic",
+	}, map[string]string{
+		"Authorization": fmt.Sprintf("Bearer %s", token),
+	}, "/{repo}/{image}/manifests/{reference}", nil)
+	assert.NotNil(t, rManiDel)
+	err = h.mag.ManifestDeleteByHTTPRequest(ctx, rManiDel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if wManiDel.Code != http.StatusOK {
+		t.Fatalf("wManiDel.Code: %d, expected %d", wManiDel.Code, http.StatusOK)
+	}
+	// Check Collections
+	cols, err := h.mag.Database.CollectionListing_Get_ByRepoLike(ctx, testRepo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, 1, len(cols))
+	ct := cols[0].ColTag
+	// remove collectiontag
+	wCTDel, rCTDel := utils.CreateNewHTTPTest(http.MethodDelete, map[string]string{
+		"repo":      testRepo,
+		"image":     testImage,
+		"reference": testTag,
+	}, map[string]string{
+		"accountName": token,
+		"userName":    "oci",
+		"profileName": "generic",
+	}, map[string]string{
+		"Authorization": fmt.Sprintf("Bearer %s", token),
+	}, "/{repo}/{image}/manifests/{reference}", nil)
+	assert.NotNil(t, rCTDel)
+	err = h.mag.ManifestDeleteByHTTPRequest(ctx, rCTDel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if wCTDel.Code != http.StatusOK {
+		t.Fatalf("wCTDel.Code: %d, expected %d", wCTDel.Code, http.StatusOK)
+	}
+	// Check Collections
+	cols, err = h.mag.Database.CollectionListing_Get_ByRepoLike(ctx, testRepo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, 0, len(cols))
+	/// Count CollectionTag after compute manifestlist is done
+	cnt, err := h.mag.Database.CollectionTag_CountRelationships(ct.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, int64(0), cnt)
+}
 
 func TestManifestOCITestNoLayers(t *testing.T) {
 	bs := utils.NewBootstrap()
@@ -611,7 +611,7 @@ func TestManifestOCITestNoLayers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer TeardownTest(bs)
+	defer TeardownTest(bs, br)
 	_ = br
 	token, err := br.Get("user:test#bearer")
 	if err != nil {

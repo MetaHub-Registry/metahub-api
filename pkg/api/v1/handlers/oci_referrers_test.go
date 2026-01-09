@@ -24,7 +24,7 @@ func TestReferrersGetHandlerNotFound(t *testing.T) {
 	}
 	br, err := SetupTest(ctx, bs)
 	if err != nil {
-		TeardownTest(bs)
+		TeardownTest(bs, br)
 		t.Fatal(err)
 	}
 
@@ -33,7 +33,7 @@ func TestReferrersGetHandlerNotFound(t *testing.T) {
 			t.Log(l)
 		}
 	}
-	defer TeardownTest(bs)
+	defer TeardownTest(bs, br)
 	/// Request
 	token, err := br.Get("user:test#bearer")
 	if err != nil {
@@ -93,7 +93,7 @@ func TestReferrersGetHandlerNotFound(t *testing.T) {
 // 		"func": "TestManifestPutOnlyWithLayerDelete",
 // 	})
 // 	defer span.End()
-// 	debug := 1
+// 	debug := 0
 // 	bs := utils.NewBootstrap()
 // 	bs.SetEmptyAll()
 // 	bs.SetYAMLPrefix("../../../../misc/yaml")
@@ -106,7 +106,7 @@ func TestReferrersGetHandlerNotFound(t *testing.T) {
 // 	}
 // 	br, err := SetupTest(ctx, bs)
 // 	if err != nil {
-// 		TeardownTest(bs)
+// 		TeardownTest(bs, br)
 // 		t.Fatal(err)
 // 	}
 
@@ -115,7 +115,7 @@ func TestReferrersGetHandlerNotFound(t *testing.T) {
 // 			t.Log(l)
 // 		}
 // 	}
-// 	defer TeardownTest(bs)
+// 	defer TeardownTest(bs, br)
 // 	// // Prepare
 // 	// if err := h.mag.ComputeAllManifests(ctx); err != nil {
 // 	// 	t.Fatal(err)
