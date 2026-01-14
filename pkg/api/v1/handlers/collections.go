@@ -139,7 +139,7 @@ func (h Handlers) CollectionGetAll(w http.ResponseWriter, r *http.Request) {
 	})
 	l.Infof("CollectionGetAll: '%s'", pl.Repo)
 	repoSlug := strings.Split(pl.Repo, "/")
-	cols, err := h.mag.Database.CollectionListing_Get_ByRepoLike(ctx, pl.Repo)
+	cols, err := h.mag.Database.CollectionListingGetByRepoLike(ctx, pl.Repo)
 	if err != nil {
 		h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
 		return

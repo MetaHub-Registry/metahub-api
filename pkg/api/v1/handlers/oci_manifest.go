@@ -80,11 +80,11 @@ func (h Handlers) ManifestHeadHandler_Digest(ctx context.Context, w http.Respons
 	utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "head", err, "MANIFEST_UNKNOWN", "")
 }
 
-func (h Handlers) ManifestHeadHandler_Tag(ctx context.Context, w http.ResponseWriter, r *http.Request, up upstream.UpstreamTriple) {
+func (h Handlers) ManifestHeadHandlerTag(ctx context.Context, w http.ResponseWriter, r *http.Request, up upstream.UpstreamTriple) {
 	req := types.NewRequest(ctx, r)
 	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
 		"package": pkgNameOciMani,
-		"func":    "api.ManifestHeadHandler_Tag",
+		"func":    "api.ManifestHeadHandlerTag",
 		"method":  r.Method,
 		"repo":    req.Repo,
 		"tag":     req.Tag,
@@ -92,7 +92,7 @@ func (h Handlers) ManifestHeadHandler_Tag(ctx context.Context, w http.ResponseWr
 		"host":    req.Host,
 	})
 	defer span.End()
-	l.Infof("%-5s ManifestHeadHandler_Tag(%s:%s) Profile:%s", r.Method, req.Repo, req.Tag, req.Profile)
+	utils.Info(l, span, "%-5s ManifestHeadHandlerTag(%s:%s) Profile:%s", r.Method, req.Repo, req.Tag, req.Profile)
 	_, _, e := h.mag.Database.CollectionGetCreateByRepoTag(ctx, req.Repo, req.Tag)
 	if e != nil {
 		utils.ErrorHandler(l, span, e, "failed to CollectionGetCreateByRepoTag")
@@ -101,12 +101,11 @@ func (h Handlers) ManifestHeadHandler_Tag(ctx context.Context, w http.ResponseWr
 	// 1. Check if a manifest with repo:tag exists
 	up.Profile = defaultProfile
 	utils.Debug(l, span, "Check if manifest exists for profile '%s'", up.Profile)
-	mediaType, maniFound, e := h.mag.Database.ManifestExists(ctx, up)
+	_, maniFound, e := h.mag.Database.ManifestExists(ctx, up)
 	if e != nil {
 		utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "head", e, "INTERNAL_ERROR", "failed to check if manifest exists")
 		return
 	}
-	utils.Debug(l, span, "Manifest found: %t - MediaType '%s'", maniFound, mediaType)
 	var upstreamFound bool
 	if !maniFound {
 		var md string
@@ -134,7 +133,7 @@ func (h Handlers) ManifestHeadHandler_Tag(ctx context.Context, w http.ResponseWr
 	/// 2. Check if a manifest with repo:tag exists for profile
 	up.Profile = req.Profile
 	utils.Debug(l, span, "Check if manifest exists for profile '%s'", up.Profile)
-	tpMediaType, tpManiFound, e := h.mag.Database.ManifestExists_ForTagProfile(ctx, up)
+	tpMediaType, tpManiFound, e := h.mag.Database.ManifestExistsForTagProfile(ctx, up)
 	if e != nil {
 		utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "head", e, "INTERNAL_ERROR", "failed to check if manifest exists")
 		return
@@ -144,7 +143,7 @@ func (h Handlers) ManifestHeadHandler_Tag(ctx context.Context, w http.ResponseWr
 
 	if !tpManiFound {
 		// TODO: ok, we found a manifest for generic, not we need to specialise it for the profile
-		tpMediaType, tpUpstreamFound, e = h.mag.HeadManistNotFound_ForProfile(ctx, req)
+		tpMediaType, tpUpstreamFound, e = h.mag.HeadManistNotFoundForProfile(ctx, req)
 		if e != nil {
 			utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "head", e, "INTERNAL_ERROR", "failed to HeadManifestNotFound")
 			return
@@ -181,7 +180,8 @@ func (h Handlers) ManifestHeadHandler_Tag(ctx context.Context, w http.ResponseWr
 			return
 		}
 	default:
-		utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "head", fmt.Errorf("unkown mediaType for manifest: '%s'", mediaType), "INTERNAL_ERROR", "")
+		//application/vnd.oci.image.manifest.v1+json
+		utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "head", fmt.Errorf("unkown mediaType for manifest: '%s'", tpMediaType), "INTERNAL_ERROR", "")
 		return
 	}
 }
@@ -201,18 +201,7 @@ func (h Handlers) ManifestHeadHandler(w http.ResponseWriter, r *http.Request) {
 	})
 	_ = l
 	defer span.End()
-	up := upstream.UpstreamTriple{
-		Reg:     req.Host,
-		Repo:    req.Repo,
-		Tag:     req.Tag,
-		Digest:  digest.Digest(req.Digest),
-		Profile: req.Profile,
-	}
-	if req.Digest != "" {
-		h.ManifestHeadHandler_Digest(ctx, w, r, up)
-	} else {
-		h.ManifestHeadHandler_Tag(ctx, w, r, up)
-	}
+	h.ManifestHandler(ctx, w, req)
 }
 
 func (h Handlers) ManifestDelHandler(w http.ResponseWriter, r *http.Request) {
@@ -242,12 +231,86 @@ func (h Handlers) ManifestDelHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusAccepted)
 }
 
-func (h Handlers) ManifestGetHandler(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	req := types.NewRequest(ctx, r)
+func (h Handlers) handleManifest(ctx context.Context, w http.ResponseWriter, req types.Request) (ok bool) {
 	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
 		"package": pkgNameOciMani,
-		"func":    "api.ManifestGetHandler",
+		"func":    "handleManifest",
+		"repo":    req.Repo,
+		"tag":     req.Tag,
+		"digest":  utils.ShortenDigest(req.Digest),
+	})
+	defer span.End()
+	m, found, err := h.mag.ManifestGetByRequest(ctx, req)
+	if err != nil {
+		// 1. FALSE
+		msg := fmt.Sprintf("failed to fetch Manifest: %v", err)
+		l.Error(msg)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+		helper.WriteOCIErrror(w, http.StatusNotFound, e)
+		return true
+	}
+	if found {
+		switch req.Method {
+		case http.MethodGet:
+			m.WriteWWW(w)
+		case http.MethodHead:
+			m.WriteWWWHeader(w)
+		default:
+			msg := fmt.Sprintf("unsupported method '%s' for manifest", strings.ToUpper(req.Method))
+			l.Error(msg)
+			det := helper.NewDetailFromReq(req)
+			e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+			helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
+		}
+		return true
+	}
+	return false
+}
+
+func (h Handlers) handleManifestList(ctx context.Context, w http.ResponseWriter, req types.Request) (ok bool) {
+	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
+		"package": pkgNameOciMani,
+		"func":    "handleManifestList",
+		"repo":    req.Repo,
+		"tag":     req.Tag,
+		"digest":  utils.ShortenDigest(req.Digest),
+	})
+	defer span.End()
+	ml, found, err := h.mag.ManifestListGetByRequest(ctx, req)
+	if err != nil {
+		// 1. FALSE
+		msg := fmt.Sprintf("failed to fetch ManifestList: %v", err)
+		l.Error(msg)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
+		ok = true
+		return
+	}
+	if found {
+		switch req.Method {
+		case http.MethodGet:
+			ml.WriteWWW(w)
+		case http.MethodHead:
+			ml.WriteWWWHeader(w)
+		default:
+			msg := fmt.Sprintf("unsupported method '%s' for manifest list", strings.ToUpper(req.Method))
+			l.Error(msg)
+			det := helper.NewDetailFromReq(req)
+			e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+			helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
+		}
+		ok = true
+		return
+	}
+	return false
+}
+
+func (h Handlers) ManifestHandler(ctx context.Context, w http.ResponseWriter, req types.Request) {
+	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
+		"package": pkgNameOciMani,
+		"func":    "ManifestHandler",
 		"repo":    req.Repo,
 		"tag":     req.Tag,
 		"digest":  utils.ShortenDigest(req.Digest),
@@ -262,9 +325,9 @@ func (h Handlers) ManifestGetHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Digest != "" {
 		span.SetAttributes(attribute.Key("digest").String(req.Digest))
-		l.Infof("%-5s ManifestGetHandler(%s@sha256:%s) Profile:%s", r.Method, req.Repo, utils.ShortenDigest(req.Digest), req.Profile)
+		l.Infof("%-5s ManifestGetHandler(%s@sha256:%s) Profile:%s", req.Method, req.Repo, utils.ShortenDigest(req.Digest), req.Profile)
 	} else {
-		l.Infof("%-5s ManifestGetHandler(%s:%s) Profile:%s", r.Method, req.Repo, req.Tag, req.Profile)
+		l.Infof("%-5s ManifestGetHandler(%s:%s) Profile:%s", req.Method, req.Repo, req.Tag, req.Profile)
 	}
 
 	mediaType, colFound, err := h.mag.Database.ManifestExists(ctx, up)
@@ -299,35 +362,13 @@ func (h Handlers) ManifestGetHandler(w http.ResponseWriter, r *http.Request) {
 	l.Debug(msg)
 	switch mediaType {
 	case ociManifestListMediaType:
-		ml, found, err := h.mag.ManifestList_GetByHTTPRequest(ctx, r)
-		if err != nil {
-			// 1. FALSE
-			msg := fmt.Sprintf("failed to fetch ManifestList: %v", err)
-			l.Error(msg)
-			det := helper.NewDetailFromReq(req)
-			e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
-			helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
-			return
-		}
-		if found {
-			ml.WriteWWW(w)
+		if ok := h.handleManifestList(ctx, w, req); ok {
 			return
 		}
 	case
 		ociManifestMediaType,
 		dockerManifestMediaType:
-		m, found, err := h.mag.ManifestGetByHTTPRequest(ctx, r)
-		if err != nil {
-			// 1. FALSE
-			msg := fmt.Sprintf("failed to fetch Manifest: %v", err)
-			l.Error(msg)
-			det := helper.NewDetailFromReq(req)
-			e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
-			helper.WriteOCIErrror(w, http.StatusNotFound, e)
-			return
-		}
-		if found {
-			m.WriteWWW(w)
+		if ok := h.handleManifest(ctx, w, req); ok {
 			return
 		}
 	default:
@@ -342,6 +383,21 @@ func (h Handlers) ManifestGetHandler(w http.ResponseWriter, r *http.Request) {
 	det := helper.NewDetailFromReq(req)
 	e := helper.NewErrPayload("MANIFEST_UNKNOWN", msg, det)
 	helper.WriteOCIErrror(w, http.StatusNotFound, e)
+}
+
+func (h Handlers) ManifestGetHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	req := types.NewRequest(ctx, r)
+	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
+		"package": pkgNameOciMani,
+		"func":    "api.ManifestGetHandler",
+		"repo":    req.Repo,
+		"tag":     req.Tag,
+		"digest":  utils.ShortenDigest(req.Digest),
+	})
+	defer span.End()
+	_ = l
+	h.ManifestHandler(ctx, w, req)
 }
 
 func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
