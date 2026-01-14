@@ -76,4 +76,13 @@ tasks:
   ociTestDev:
     cmds:
       - docker compose exec -ti -e OCI_TEST_PUSH=0 -e OCI_TEST_PULL=1 oci /opt/results/distribution-spec/conformance/conformance.test
-  
+  deleteGraph:
+    cmds:
+      - docker compose exec -ti neo4j cypher-shell -u neo4j -p test "MATCH (n) WHERE (NOT n:Profile) AND (NOT n:Rule) DETACH DELETE n"
+  mcSetup:
+    cmds:
+      - mc alias set dev http://localhost:9000 minio miniominio
+  mcClean:
+    cmds:
+      - mc rm --recursive --force dev/blobs
+      - mc rm --recursive --force dev/manifests
