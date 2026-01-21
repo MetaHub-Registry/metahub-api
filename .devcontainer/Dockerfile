@@ -37,10 +37,15 @@ RUN <<eot
    cd /usr/bin
    if [ "${TARGETPLATFORM}" = "linux/amd64" ]; then
       wget -qO - https://github.com/go-task/task/releases/download/nightly/task_linux_amd64.tar.gz |tar xfz - task
+      wget -qO /usr/local/bin/mc https://dl.min.io/client/mc/release/linux-amd64/mc
+      chmod +x /usr/local/bin/mc
    elif [ "${TARGETPLATFORM}" = "linux/arm64" ]; then
       wget -qO - https://github.com/go-task/task/releases/download/nightly/task_linux_arm64.tar.gz |tar xfz - task
+      wget -qO /usr/local/bin/mc https://dl.min.io/client/mc/release/linux-arm64/mc
+      chmod +x /usr/local/bin/mc
    fi
 eot
+RUN apt install -y neo4j-client
 #RUN pipx install sqlit-tui
 COPY homelab-rootCA.pem /usr/local/share/ca-certificates/homelab-rootCA.crt
 RUN update-ca-certificates

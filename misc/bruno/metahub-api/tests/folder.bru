@@ -1,8 +1,12 @@
 meta {
   name: tests
-  seq: 7
 }
 
 auth {
   mode: inherit
+}
+
+vars:pre-request {
+  tag: tagtest0
+  repo: oci/confirmance
 }

@@ -70,15 +70,26 @@ tasks:
   ociBuild:
     cmds:
       - docker compose exec -ti -w /opt/results/distribution-spec/conformance oci go test -c
-  ociTest:
+  ociTest:*:*:
+    vars:
+      PUSH: '{{index .MATCH 0}}' 
+      PULL: '{{index .MATCH 1}}' 
     cmds:
-      - docker compose exec -ti oci /opt/results/distribution-spec/conformance/conformance.test
-  ociTestDev:
+      - docker compose exec -ti  -e OCI_TEST_PUSH={{.PUSH}} -e OCI_TEST_PULL={{.PULL}} oci /usr/local/src/distribution-spec/conformance/conformance.test
+  ociTestDev:*:*:*:*:
+    vars:
+      PUSH: '{{index .MATCH 0}}' 
+      PULL: '{{index .MATCH 1}}' 
+      DISCOVER: '{{index .MATCH 2}}' 
+      MANAGEMENT: '{{index .MATCH 3}}'
     cmds:
-      - docker compose exec -ti -e OCI_TEST_PUSH=0 -e OCI_TEST_PULL=1 oci /opt/results/distribution-spec/conformance/conformance.test
+      - docker compose exec -ti -e OCI_TEST_PUSH={{.PUSH}} -e OCI_TEST_PULL={{.PULL}} -e OCI_TEST_CONTENT_DISCOVERY={{.DISCOVER}} -e OCI_TEST_CONTENT_MANAGEMENT={{.MANAGEMENT}} -e OCI_USERNAME=qnib -e OCI_PASSWORD=qnib oci /opt/results/distribution-spec/conformance/conformance.test
   deleteGraph:
     cmds:
       - docker compose exec -ti neo4j cypher-shell -u neo4j -p test "MATCH (n) WHERE (NOT n:Profile) AND (NOT n:Rule) DETACH DELETE n"
+  showGraph:
+    cmds:
+      - docker compose exec -ti neo4j cypher-shell -u neo4j -p test "MATCH (n) RETURN n LIMIT 25"
   mcSetup:
     cmds:
       - mc alias set dev http://localhost:9000 minio miniominio

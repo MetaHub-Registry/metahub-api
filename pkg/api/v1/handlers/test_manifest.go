@@ -47,7 +47,7 @@ var (
 		}`)
 )
 
-func getHttpTestManifestDeleteByDigest(br *utils.BootstrapResult) (w *httptest.ResponseRecorder, r *http.Request, err error) {
+func getHttpTestManifestDeleteByDigest(ctx context.Context, br *utils.BootstrapResult) (w *httptest.ResponseRecorder, r *http.Request, err error) {
 	var testRepo, maniDigest, testImage string
 	if testRepo, err = br.Get("repo"); err != nil {
 		return w, r, err
@@ -62,7 +62,7 @@ func getHttpTestManifestDeleteByDigest(br *utils.BootstrapResult) (w *httptest.R
 	if err != nil {
 		return w, r, err
 	}
-	wVal, r := utils.CreateNewHTTPTest(http.MethodDelete, map[string]string{
+	wVal, r := utils.CreateNewHTTPTest(ctx, http.MethodDelete, map[string]string{
 		"repo":      testRepo,
 		"image":     testImage,
 		"reference": maniDigest,

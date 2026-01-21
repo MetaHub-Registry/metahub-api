@@ -99,7 +99,7 @@ func TestCollectionGetOne(t *testing.T) {
 		TagID: colTagID,
 	}
 	wGet := httptest.NewRecorder()
-	_, rGet := utils.CreateNewHTTPTest(http.MethodGet, map[string]string{
+	_, rGet := utils.CreateNewHTTPTest(ctx, http.MethodGet, map[string]string{
 		"repo":  testRepo,
 		"image": testImage,
 	}, map[string]string{
@@ -168,7 +168,7 @@ func TestCollectionGetAll(t *testing.T) {
 		Repo: "qnib",
 	}
 	wGet := httptest.NewRecorder()
-	_, rGet := utils.CreateNewHTTPTest(http.MethodGet, map[string]string{}, map[string]string{
+	_, rGet := utils.CreateNewHTTPTest(ctx, http.MethodGet, map[string]string{}, map[string]string{
 		"accountName": token,
 		"userName":    testRepo,
 		"profileName": testProfile,
@@ -192,7 +192,7 @@ func TestCollectionGetAll(t *testing.T) {
 		Repo: "qnib/featuretest",
 	}
 	wGetFT := httptest.NewRecorder()
-	_, rGetFT := utils.CreateNewHTTPTest(http.MethodGet, map[string]string{}, map[string]string{
+	_, rGetFT := utils.CreateNewHTTPTest(ctx, http.MethodGet, map[string]string{}, map[string]string{
 		"accountName": token,
 		"userName":    testRepo,
 		"profileName": testProfile,

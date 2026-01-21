@@ -104,4 +104,9 @@ func WriteOCIErrror(w http.ResponseWriter, statusCode int, errPl ...ErrorPayload
 
 }
 
-//[{"Type":"repository","Name":"samalba/my-app","Action":"pull"}
+func WriteReponseWithoutContent(w http.ResponseWriter, statusCode int, headers map[string]string) {
+	for k, v := range headers {
+		w.Header().Add(k, v)
+	}
+	w.WriteHeader(statusCode)
+}

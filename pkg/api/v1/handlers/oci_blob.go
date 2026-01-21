@@ -20,13 +20,23 @@ import (
 )
 
 const (
-	pkgNameOCIBlob = "handlers/oci_blob.go"
+	pkgNameOCIBlob     = "handlers/oci_blob.go"
+	Range              = "Range"
+	Location           = "Location"
+	ContentLength      = "Content-Length"
+	ChunkUploadErr     = "failed to create chunk upload"
+	BlobUploadFetchErr = "failed to fetch blob upload"
 )
 
 func (h Handlers) BlobUploadPutHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	ctx, span := tracer.Start(ctx, "BlobUploadPutHandler")
+	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
+		"package": pkgNameOCIBlob,
+		"func":    "BlobUploadPutHandler",
+		"method":  r.Method,
+	})
 	defer span.End()
+	_ = l
 	req := types.NewRequest(ctx, r)
 	span.SetAttributes(
 		attribute.Key("method").String(r.Method),
@@ -70,7 +80,7 @@ func (h Handlers) BlobUploadPutHandler(w http.ResponseWriter, r *http.Request) {
 		/// Create New Chunk
 		_, err := h.mag.Database.UploadChunkCreate(ctx, &bu, 0, int64(req.Length))
 		if err != nil {
-			msg := "failed to create chunk upload"
+			msg := ChunkUploadErr
 			err = errors.Wrap(err, msg)
 			logrus.Error(err)
 			det := helper.NewDetailFromReq(req)
@@ -101,9 +111,9 @@ func (h Handlers) BlobUploadPutHandler(w http.ResponseWriter, r *http.Request) {
 
 	}
 	// How many chunks do we have?
-	chunks, err := h.mag.Database.UploadChunk_Get_ByUUID(ctx, bu.ID)
+	chunks, err := h.mag.Database.UploadChunkGetByUUID(ctx, bu.ID)
 	if err != nil {
-		msg := "failed to fetch blob upload"
+		msg := BlobUploadFetchErr
 		err = errors.Wrap(err, msg)
 		logrus.Error(err)
 		det := helper.NewDetailFromReq(req)
@@ -136,23 +146,75 @@ func (h Handlers) BlobUploadPutHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	span.AddEvent("log", trace.WithAttributes(
 		attribute.String("log.severity", "debug"),
-		attribute.String("Location", bu.Location),
-		attribute.String("Range", fmt.Sprintf("%d-%d", bu.RangeStart, bu.RangeStop)),
+		attribute.String(Location, bu.Location),
+		attribute.String(Range, fmt.Sprintf("%d-%d", bu.RangeStart, bu.RangeStop)),
 		attribute.String("Docker-Upload-UUID", bu.UUID.String()),
 		attribute.String("Docker-Content-Digest", bu.Digest),
-		attribute.String("Content-Length", fmt.Sprintf("%d", len(bu.Data))),
+		attribute.String(ContentLength, fmt.Sprintf("%d", len(bu.Data))),
 	))
 	span.SetStatus(http.StatusAccepted, "Accepted")
 	bu.WriteOCIPutResponse(w)
 }
 
-func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request) {
+func (h Handlers) BlobUploadGetHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	ctx, span := tracer.Start(ctx, "BlobUploadPatchHandler")
+	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
+		"package": pkgNameOCIBlob,
+		"func":    "BlobUploadGetHandler",
+		"method":  r.Method,
+	})
 	defer span.End()
 	req := types.NewRequest(ctx, r)
 	span.SetAttributes(
 		attribute.Key("length").Int(req.Length),
+		attribute.Key("uuid").String(req.UUID),
+	)
+	utils.Debug(l, span, "%-5s BlobUploadGetHandler(%s, %s) Len:%d", r.Method, req.Repo, req.UUID, req.Length)
+	bu, found, err := h.mag.Database.BlobUploadGetByLocation(ctx, r.URL.Path)
+	if err != nil || !found {
+		if !found {
+			err = utils.NewError(l, span, "BlobUpload with Location '%s' not found", r.URL.Path)
+		}
+		err = utils.ErrorHandler(l, span, err, BlobUploadFetchErr)
+		span.RecordError(err)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("BLOB_UNKNOWN", BlobUploadFetchErr, det)
+		helper.WriteOCIErrror(w, http.StatusNotFound, e)
+		return
+	}
+	utils.Debug(l, span, "bu: %v", bu)
+	chunks, err := h.mag.Database.UploadChunkGetByUUID(ctx, bu.ID)
+	if err != nil {
+		err = utils.ErrorHandler(l, span, err, "failed to fetch blob upload chunks")
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("INTERNAL_ERROR", "failed to fetch blob upload chunks", det)
+		helper.WriteOCIErrror(w, http.StatusNotFound, e)
+	}
+	byteRange := "0-0"
+	for idx, chunk := range chunks {
+		end := chunk.StartByte + chunk.Bytes
+		utils.Debug(l, span, " chunk#%d: %d-%d", idx, chunk.StartByte, end)
+		byteRange = fmt.Sprintf("%d-%d", chunk.StartByte, int(end))
+	}
+	bu.WriteResponse(w, map[string]string{
+		Location: bu.Location,
+		Range:    byteRange,
+	}, http.StatusNoContent)
+}
+
+func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
+		"package": pkgNameOCIBlob,
+		"func":    "BlobUploadPatchHandler",
+		"method":  r.Method,
+	})
+	defer span.End()
+	req := types.NewRequest(ctx, r)
+	span.SetAttributes(
+		attribute.Key("length").Int(req.Length),
+		attribute.Key("Range").String(req.Range),
+		attribute.Key("ContentType").String(req.ContentType),
 		attribute.Key("uuid").String(req.UUID),
 	)
 	logrus.Infof("%-5s BlobUploadPatchHandler(%s, %s) Len:%d", r.Method, req.Repo, req.UUID, req.Length)
@@ -167,7 +229,7 @@ func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request)
 	}
 	bu, found, err := h.mag.Database.BlobUploadGetOCIByUUID(ctx, req.UUID)
 	if err != nil || !found {
-		msg := "failed to fetch blob upload"
+		msg := BlobUploadFetchErr
 		err = errors.Wrap(err, msg)
 		logrus.Error(err)
 		span.RecordError(err)
@@ -176,10 +238,37 @@ func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request)
 		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 		return
 	}
-	// Fetch all chunks already uploaded
-	chunks, err := h.mag.Database.UploadChunk_Get_ByUUID(ctx, bu.ID)
+	utils.Debug(l, span, "req.Length:%d", req.Length)
+	bu.RangeStop = bu.RangeStart + int64(req.Length) - 1
+	buf, err := io.ReadAll(r.Body)
 	if err != nil {
-		msg := "failed to fetch blob upload"
+		log.Fatal("request", err)
+	}
+	dig := digest.FromBytes(buf)
+	bu.Digest = dig.String()
+
+	// Was the chunk already uploaded? (digest match another BlobChunk?)
+	chunks, err := h.mag.Database.UploadChunkGetByBU(ctx, bu)
+	if err != nil {
+		msg := "failed to fetch blob upload chunks by digest"
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+		helper.WriteOCIErrror(w, http.StatusNotFound, e)
+	}
+	if len(chunks) > 0 {
+		lastChunk := chunks[len(chunks)-1]
+		if lastChunk.Digest == bu.Digest && lastChunk.StartByte == req.RangeStartByte {
+			utils.Debug(l, span, "BlobUpload with UUID %s already has chunk with digest %s and the startRange %d uploaded", req.UUID, utils.ShortenDigest(bu.Digest), req.RangeStartByte)
+			span.SetStatus(http.StatusRequestedRangeNotSatisfiable, "RangeNotSatisfiable")
+			bu.WriteOCIPutResponse416(w)
+		}
+		return
+	}
+	_ = chunks
+	// Fetch all chunks already uploaded
+	chunks, err = h.mag.Database.UploadChunkGetByUUID(ctx, bu.ID)
+	if err != nil {
+		msg := BlobUploadFetchErr
 		err = errors.Wrap(err, msg)
 		logrus.Error(err)
 		det := helper.NewDetailFromReq(req)
@@ -187,7 +276,8 @@ func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request)
 		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 		return
 	}
-	if len(chunks) == 0 && req.RangeStartByte != -1 {
+	switch {
+	case len(chunks) == 0 && req.RangeStartByte != -1:
 		// We expect the first chunk to start at offset 0
 		if req.RangeStartByte != 0 {
 			msg := "Range should start at 0"
@@ -195,17 +285,22 @@ func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request)
 			e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
 			helper.WriteOCIErrror(w, http.StatusRequestedRangeNotSatisfiable, e)
 		}
+	case len(chunks) > 0:
+		// We expect the next chunk to start at the end of the last chunk +1
+		lastChunk := chunks[len(chunks)-1]
+		expectedStart := lastChunk.StartByte + lastChunk.Bytes + 1
+		utils.Debug(l, span, "Expected Start: %d", expectedStart)
+		if req.RangeStartByte != expectedStart {
+			msg := fmt.Sprintf("Range should start at %d", expectedStart)
+			det := helper.NewDetailFromReq(req)
+			e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+			helper.WriteOCIErrror(w, http.StatusRequestedRangeNotSatisfiable, e)
+		}
 	}
-	buf, err := io.ReadAll(r.Body)
-	if err != nil {
-		log.Fatal("request", err)
-	}
-	dig := digest.FromBytes(buf)
-	bu.Digest = dig.String()
 	/// Create New Chunk
 	chunk, err := h.mag.Database.UploadChunkCreate(ctx, &bu, req.RangeStartByte, req.RangeBytes)
 	if err != nil {
-		msg := "failed to create chunk upload"
+		msg := ChunkUploadErr
 		err = errors.Wrap(err, msg)
 		logrus.Error(err)
 		det := helper.NewDetailFromReq(req)
@@ -236,13 +331,17 @@ func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request)
 	}
 	span.AddEvent("log", trace.WithAttributes(
 		attribute.String("log.severity", "debug"),
-		attribute.String("Location", bu.Location),
-		attribute.String("Range", fmt.Sprintf("%d-%d", bu.RangeStart, bu.RangeStop)),
+		attribute.String(Location, bu.Location),
+		attribute.String(Range, fmt.Sprintf("%d-%d", req.RangeStartByte, req.RangeBytes+req.RangeStartByte-1)),
 		attribute.String("Docker-Upload-UUID", bu.UUID.String()),
-		attribute.String("Content-Length", fmt.Sprintf("%d", len(bu.Data))),
+		attribute.String(ContentLength, fmt.Sprintf("%d", len(bu.Data))),
 	))
 	span.SetStatus(http.StatusAccepted, "Accepted")
-	bu.WriteOCIPatchResponse(w)
+	bu.WriteResponse(w, map[string]string{
+		Location:      bu.Location,
+		ContentLength: fmt.Sprintf("%d", len(bu.Data)),
+		Range:         req.Range,
+	}, http.StatusAccepted)
 }
 
 func (h Handlers) BlobUploadPostHandler(w http.ResponseWriter, r *http.Request) {
@@ -303,7 +402,7 @@ func (h Handlers) BlobUploadPostHandler(w http.ResponseWriter, r *http.Request) 
 		/// Create New Chunk
 		chunk, err := h.mag.Database.UploadChunkCreate(ctx, &bu, 0, int64(req.Length))
 		if err != nil {
-			msg := "failed to create chunk upload"
+			msg := ChunkUploadErr
 			err = errors.Wrap(err, msg)
 			logrus.Error(err)
 			det := helper.NewDetailFromReq(req)
@@ -341,9 +440,9 @@ func (h Handlers) BlobUploadPostHandler(w http.ResponseWriter, r *http.Request) 
 
 		span.AddEvent("log", trace.WithAttributes(
 			attribute.String("log.severity", "debug"),
-			attribute.String("Location", bu.Location),
+			attribute.String(Location, bu.Location),
 			attribute.String("Docker-Upload-UUID", bu.UUID.String()),
-			attribute.String("Content-Length", fmt.Sprintf("%d", len(bu.Data))),
+			attribute.String(ContentLength, fmt.Sprintf("%d", len(bu.Data))),
 		))
 		span.SetStatus(http.StatusCreated, "Created")
 		bu.WriteOCICreateResponse(w)
@@ -353,9 +452,9 @@ func (h Handlers) BlobUploadPostHandler(w http.ResponseWriter, r *http.Request) 
 		// TODO: Send presigned upload URL
 		span.AddEvent("log", trace.WithAttributes(
 			attribute.String("log.severity", "debug"),
-			attribute.String("Location", bu.Location),
+			attribute.String(Location, bu.Location),
 			attribute.String("Docker-Upload-UUID", bu.UUID.String()),
-			attribute.String("Content-Length", fmt.Sprintf("%d", len(bu.Data))),
+			attribute.String(ContentLength, fmt.Sprintf("%d", len(bu.Data))),
 		))
 		span.SetStatus(http.StatusAccepted, "Accepted")
 		bu.WriteOCIAcceptedResponse(w)
@@ -430,7 +529,7 @@ func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Docker-Content-Digest", req.Digest)
 				redUrl := lyrUp.GetBlobUrl(req.Digest)
 				utils.Debug(l, span, "redirecting to upstream: %s", redUrl)
-				w.Header().Set("Location", redUrl)
+				w.Header().Set(Location, redUrl)
 				w.Header().Del("Authorization")
 				http.Redirect(w, r, redUrl, http.StatusTemporaryRedirect)
 				return
@@ -442,7 +541,7 @@ func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		if h.mag.Minio.GetBlobBucketConfig().Redirect {
 			utils.Info(l, span, "redirecting to MinIO/S3 presigned URL")
-			psUrl, err := h.mag.Layer_GetPresignedUrlByHTTPRequest(r)
+			psUrl, err := h.mag.LayerGetPresignedUrlByHTTPRequest(r)
 			if err != nil {
 				det := helper.NewDetailFromReq(req)
 				e := helper.NewErrPayload("INTERNAL_ERROR", "failed to fetch layer presigned url", det)
@@ -455,7 +554,7 @@ func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	layer, found, err := h.mag.Layer_GetByHTTPRequest(r)
+	layer, found, err := h.mag.LayerGetByHTTPRequest(r)
 	if err != nil {
 		// 1. FALSE
 		msg := fmt.Sprintf("failed to fetch layer: %v", err)
