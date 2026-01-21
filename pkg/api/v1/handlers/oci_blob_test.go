@@ -8,7 +8,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/google/uuid"
 	gCtx "github.com/gorilla/context"
+	"github.com/sirupsen/logrus"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
@@ -58,7 +60,7 @@ func TestBlobHandlerDirectPost(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	w, r := utils.CreateNewHTTPTest(http.MethodPost, map[string]string{
+	w, r := utils.CreateNewHTTPTest(ctx, http.MethodPost, map[string]string{
 		"repo":      testRepo,
 		"image":     testImage,
 		"reference": l1.Digest,
@@ -77,7 +79,7 @@ func TestBlobHandlerDirectPost(t *testing.T) {
 	}
 	assert.Equal(t, 0, w.Body.Len())
 	// POST With data
-	wDat, rDat := utils.CreateNewHTTPTest(http.MethodPost, map[string]string{
+	wDat, rDat := utils.CreateNewHTTPTest(ctx, http.MethodPost, map[string]string{
 		"repo":      testRepo,
 		"image":     testImage,
 		"reference": l1.Digest,
@@ -447,4 +449,102 @@ func TestUploadUploadBlobSequenceSplit(t *testing.T) {
 	assert.Equal(t, http.StatusCreated, wPut.Code)
 	gotPutLoc := wPut.Header().Get("Location")
 	assert.Equal(t, fmt.Sprintf("/v2/qnib/alpine/blobs/uploads/%s", uuid), gotPutLoc)
+}
+
+// BlobUploadGetHandler
+func TestBlobUploadGetHandler(t *testing.T) {
+	ctx := context.Background()
+	_, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
+		"func": "TestBlobUploadGetHandler.Setup",
+	})
+	defer span.End()
+	debug := 0
+	bs := utils.NewBootstrap()
+	bs.SetEmptyAll()
+	bs.SetYAMLPrefix("../../../../misc/yaml")
+	bs.AddBootstrap("users")
+	bs.AddBootstrap("platforms:arm64")
+	bs.AddBootstrap("config:ft_arm64")
+	bs.AddBootstrap("upstream:ft_arm64")
+	bs.AddBootstrap("manifest:ft_arm64")
+	bs.AddBootstrap("layer:0:ft_arm64")
+	bs.AddBootstrap("layer:1:ft_arm64")
+	bs.AddBootstrap("manifestdata:ft_arm64")
+	bs.AddBootstrap("platforms:amd64")
+	bs.AddBootstrap("config:ft_amd64")
+	bs.AddBootstrap("upstream:ft_amd64")
+	bs.AddBootstrap("manifest:ft_amd64")
+	bs.AddBootstrap("layer:0:ft_amd64")
+	bs.AddBootstrap("layer:1:ft_amd64")
+	bs.AddBootstrap("manifestdata:ft_amd64")
+	bs.AddBootstrap("collection:ft_generic")
+	if debug > 0 {
+		bs.PostTestSleep = debug
+	}
+	br, err := SetupTest(ctx, bs)
+	if err != nil {
+		TeardownTest(bs, br)
+		t.Fatal(err)
+	}
+	for _, l := range br.ToLines() {
+		if debug > 0 {
+			t.Log(l)
+		}
+	}
+	span.End()
+	defer TeardownTest(bs, br)
+	testRepo := "qnib"
+	br.Add("repo", testRepo)
+	br.Add("user", "admin")
+	testProfile := "generic"
+	br.Add("profile", testProfile)
+	testImage := "alpine"
+	br.Add("image", testImage)
+	br.Add("uuid", uuid.New().String())
+	/// Request
+	token, err := br.Get("user:test#bearer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if debug > 0 {
+		logrus.SetLevel(logrus.DebugLevel)
+	}
+	_ = token
+	t.Run("404NotFound", func(t *testing.T) {
+		ctx = context.Background()
+		_, ctx, span = utils.InitLogging(ctx, tracer, map[string]any{
+			"func": "TestBlobUploadGetHandler.404NotFound",
+		})
+		defer span.End()
+		// POST to get UUID
+		if w, r, e := getHttpTestLayer0UploadPostHandler(&br); e != nil {
+			t.Fatal(e)
+		} else {
+			h.BlobUploadGetHandler(w, r)
+			assert.Equal(t, http.StatusNotFound, w.Code)
+		}
+		span.End()
+	})
+	t.Run("200ok", func(t *testing.T) {
+		ctx = context.Background()
+		_, ctx, span = utils.InitLogging(ctx, tracer, map[string]any{
+			"func": "TestBlobUploadGetHandler.200ok",
+		})
+		defer span.End()
+		uid, err := br.Get("uuid")
+		if err != nil {
+			t.Fatal(err)
+		}
+		q := fmt.Sprintf(`CREATE (bu:BlobUpload {location:"/{repo}/{image}/blobs/uploads/", upload_user:"admin", digest:"dig123",uuid:"%s", created_at:datetime(), updated_at:datetime()})`, uid)
+		if _, err := h.mag.Database.Execute(q); err != nil {
+			t.Fatal(err)
+		}
+		// POST to get UUID
+		if w, r, e := getHttpTestLayer0UploadPostHandler(&br); e != nil {
+			t.Fatal(e)
+		} else {
+			h.BlobUploadGetHandler(w, r)
+			assert.Equal(t, http.StatusNoContent, w.Code)
+		}
+	})
 }

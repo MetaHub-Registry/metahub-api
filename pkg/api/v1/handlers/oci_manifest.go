@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -24,13 +25,14 @@ const (
 	ociManifestListMediaType    = "application/vnd.oci.image.index.v1+json"
 	dockerManifestMediaType     = "application/vnd.docker.distribution.manifest.v2+json"
 	dockerManifestListMediaType = "application/vnd.docker.distribution.manifest.list.v2+json"
+	successStoredManifestWDig   = "successfully stored manifest with digest '%s'"
 )
 
-func (h Handlers) ManifestHeadHandler_Digest(ctx context.Context, w http.ResponseWriter, r *http.Request, up upstream.UpstreamTriple) {
+func (h Handlers) ManifestHeadHandlerDigest(ctx context.Context, w http.ResponseWriter, r *http.Request, up upstream.UpstreamTriple) {
 	req := types.NewRequest(ctx, r)
 	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
 		"package": pkgNameOciMani,
-		"func":    "api.ManifestHeadHandler_Digest",
+		"func":    "api.ManifestHeadHandlerDigest",
 		"method":  r.Method,
 		"repo":    req.Repo,
 		"digest":  req.Digest,
@@ -38,7 +40,7 @@ func (h Handlers) ManifestHeadHandler_Digest(ctx context.Context, w http.Respons
 		"host":    req.Host,
 	})
 	defer span.End()
-	l.Infof("%-5s ManifestHeadHandler_Digest(%s@sha256:%s) Profile:%s", r.Method, req.Repo, utils.ShortenDigest(req.Digest), req.Profile)
+	l.Infof("%-5s ManifestHeadHandlerDigest(%s@sha256:%s) Profile:%s", r.Method, req.Repo, utils.ShortenDigest(req.Digest), req.Profile)
 	mediaType, maniFound, e := h.mag.Database.ManifestExists(ctx, up)
 	if e != nil {
 		utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "head", e, "INTERNAL_ERROR", "failed to check if manifest exists")
@@ -52,7 +54,7 @@ func (h Handlers) ManifestHeadHandler_Digest(ctx context.Context, w http.Respons
 	utils.Debug(l, span, "Manifest found: %t - MediaType '%s'", maniFound, mediaType)
 	switch mediaType {
 	case ociManifestListMediaType, dockerManifestListMediaType:
-		ml, found, e := h.mag.ManifestList_GetByHTTPRequest(ctx, r)
+		ml, found, e := h.mag.ManifestListGetByHTTPRequest(ctx, r)
 		if e != nil {
 			utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "head", e, "INTERNAL_ERROR", "failed to fetch ManifestList")
 			return
@@ -160,7 +162,7 @@ func (h Handlers) ManifestHeadHandlerTag(ctx context.Context, w http.ResponseWri
 	}
 	switch tpMediaType {
 	case ociManifestListMediaType:
-		ml, found, err := h.mag.ManifestList_GetByHTTPRequest(ctx, r)
+		ml, found, err := h.mag.ManifestListGetByHTTPRequest(ctx, r)
 		if err != nil {
 			utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "head", e, "INTERNAL_ERROR", "failed to fetch ManifestList")
 			return
@@ -405,7 +407,7 @@ func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 	req := types.NewRequest(ctx, r)
 	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
 		"package": "oci_manifest.go",
-		"func":    "ManifestPutHandler",
+		"func":    fmt.Sprintf("ManifestPutHandler %s", r.URL.Path),
 		"method":  r.Method,
 		"repo":    req.Repo,
 		"tag":     req.Tag,
@@ -414,7 +416,10 @@ func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 		"host":    req.Host,
 	})
 	defer span.End()
-
+	reference := chi.URLParam(r, "reference")
+	// TODO: if reference is set, we will link the uploaded manifest to the reference (tag)?
+	//.      Will we? `reference` also seems to be used for digest/tags? does this make sense?
+	span.SetAttributes(attribute.Key("reference").String(reference))
 	l.Infof("%-5s ManifestPutHandler(%s, %s) Profile:%s", r.Method, req.Repo, req.Tag, req.Profile)
 	buf, e := io.ReadAll(r.Body)
 	if e != nil {
@@ -450,7 +455,7 @@ func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 			utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "push", err, "INTERNAL_ERROR", "failed to store manifest")
 			return
 		}
-		utils.Debug(l, span, "successfully stored maniefst with digest '%s'", m.Digest)
+		utils.Debug(l, span, successStoredManifestWDig, m.Digest)
 		// TODO: 2023-04-14 Unwind profile for uploaded manifest
 		err = h.mag.Database.ProfileUnwindRules(ctx, prf.ID, m.ID)
 		if err != nil {
@@ -478,10 +483,7 @@ func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 			utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "push", e, "INTERNAL_ERROR", "while executing ComputeManifestlists")
 			return
 		}
-		utils.Debug(l, span, "successfully stored maniefst with digest '%s'", m.Digest)
-		m.WriteWWWHeader(w)
-		w.Header().Set("Location", fmt.Sprintf("%s://%s/v2/%s/manifests/%s", req.Protocol, req.Host, req.Repo, req.Tag))
-		w.WriteHeader(http.StatusCreated)
+		h.ManifestPutHandlerWrapper(ctx, w, req, m)
 	case ociManifestMediaType:
 		// Put manifest in object store
 		m, err := h.mag.StoreManifestUpload(ctx, req, buf)
@@ -489,13 +491,39 @@ func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 			utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "push", err, "MANIFEST_INVALID", "failed to store manifest: %v", err)
 			return
 		}
-		utils.Debug(l, span, "successfully stored maniefst with digest '%s'", m.Digest)
-		m.WriteWWWHeader(w)
-		w.Header().Set("Location", fmt.Sprintf("%s://%s/v2/%s/manifests/%s", req.Protocol, req.Host, req.Repo, req.Tag))
-		w.WriteHeader(http.StatusCreated)
+		h.ManifestPutHandlerWrapper(ctx, w, req, m)
+	// case ociManifestListMediaType:
+	// 	// Put manifest list in object store
+	// 	ml, err := h.mag.ManifestListGetByRequest(ctx, req, buf)
+	// 	if err != nil {
+	// 		utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "push", err, "MANIFEST_INVALID", "failed to store manifest list: %v", err)
+	// 		return
+	// 	}
 	default:
 		e = fmt.Errorf("unsupported content type: %s (supported: %s)", req.ContentType, strings.Join([]string{dockerManifestMediaType, ociManifestMediaType}, ","))
 		utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "push", e, "MANIFEST_INVALID", "")
 		return
 	}
+}
+
+func (h Handlers) ManifestPutHandlerWrapper(ctx context.Context, w http.ResponseWriter, req types.Request, m types.ManifestData) {
+	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
+		"package": pkgNameOciMani,
+		"func":    "api.ManifestPutHandlerWrapper",
+		"repo":    req.Repo,
+		"tag":     req.Tag,
+		"digest":  utils.ShortenDigest(req.Digest),
+	})
+	defer span.End()
+	utils.Debug(l, span, successStoredManifestWDig, m.Digest)
+	err := m.WriteWWWHeader(w)
+	if err != nil {
+		err = utils.ErrorHandler(l, span, err, "failed to write WWW header")
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("INTERNAL_ERROR", err.Error(), det)
+		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
+		return
+	}
+	w.Header().Set("Location", fmt.Sprintf("%s://%s/v2/%s/manifests/%s", req.Protocol, req.Host, req.Repo, req.Tag))
+	w.WriteHeader(http.StatusCreated)
 }

@@ -16,7 +16,9 @@ import (
 )
 
 const (
-	apiTimeout = 5 * time.Second
+	apiTimeout                = 5 * time.Second
+	ImgBlobUploadUuidPath     = "/{image}/blobs/uploads/{uuid}"
+	RepoImgBlobUploadUuidPath = "/{repo}/{image}/blobs/uploads/{uuid}"
 )
 
 func Initialize(mag magazine.Magazine) *chi.Mux {
@@ -119,10 +121,12 @@ func Initialize(mag magazine.Magazine) *chi.Mux {
 		// Upload Blobs
 		r.Post("/{repo}/{image}/blobs/uploads", h.BlobUploadPostHandler)
 		r.Post("/{image}/blobs/uploads", h.BlobUploadPostHandler)
-		r.Patch("/{image}/blobs/uploads/{uuid}", h.BlobUploadPatchHandler)
-		r.Patch("/{repo}/{image}/blobs/uploads/{uuid}", h.BlobUploadPatchHandler)
-		r.Put("/{image}/blobs/uploads/{uuid}", h.BlobUploadPutHandler)
-		r.Put("/{repo}/{image}/blobs/uploads/{uuid}", h.BlobUploadPutHandler)
+		r.Patch(ImgBlobUploadUuidPath, h.BlobUploadPatchHandler)
+		r.Patch(RepoImgBlobUploadUuidPath, h.BlobUploadPatchHandler)
+		r.Put(ImgBlobUploadUuidPath, h.BlobUploadPutHandler)
+		r.Put(RepoImgBlobUploadUuidPath, h.BlobUploadPutHandler)
+		r.Get(ImgBlobUploadUuidPath, h.BlobUploadGetHandler)
+		r.Get(RepoImgBlobUploadUuidPath, h.BlobUploadGetHandler)
 		// Delete Blobs
 		r.Delete("/{repo}/{image}/blobs/{reference}", h.BlobDelHandler)
 		r.Delete("/{image}/blobs/{reference}", h.BlobDelHandler)

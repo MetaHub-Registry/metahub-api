@@ -1,0 +1,16 @@
+meta {
+  name: pullTagTest0
+  type: http
+  seq: 3
+}
+
+head {
+  url: {{registry}}/v2/{{repo}}/manifests/{{tag}}
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

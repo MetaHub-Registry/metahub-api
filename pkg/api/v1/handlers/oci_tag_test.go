@@ -49,7 +49,7 @@ func TestListTags(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Tests
-	wList0, rList0 := utils.CreateNewHTTPTest(http.MethodGet, map[string]string{
+	wList0, rList0 := utils.CreateNewHTTPTest(ctx, http.MethodGet, map[string]string{
 		"repo":  testRepo,
 		"image": testImage,
 	}, map[string]string{

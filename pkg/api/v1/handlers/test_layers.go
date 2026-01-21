@@ -91,7 +91,7 @@ func getHttpTestLayer0UploadPatchHandler(br *utils.BootstrapResult) (w *httptest
 }
 
 // Blob Delete
-func getHttpTestLayer0UploadDeleteHandler(br *utils.BootstrapResult) (w *httptest.ResponseRecorder, r *http.Request, err error) {
+func getHttpTestLayer0UploadGetHandler(br *utils.BootstrapResult) (w *httptest.ResponseRecorder, r *http.Request, err error) {
 	var testRepo, testProfile, testImage, testRef string
 	if testRepo, err = br.Get("repo"); err != nil {
 		return w, r, err
@@ -111,7 +111,7 @@ func getHttpTestLayer0UploadDeleteHandler(br *utils.BootstrapResult) (w *httptes
 		return w, r, err
 	} //
 	w = httptest.NewRecorder()
-	r = httptest.NewRequest(http.MethodDelete, "/{repo}/{image}/blobs/uploads/{reference}", nil)
+	r = httptest.NewRequest(http.MethodGet, "/{repo}/{image}/blobs/uploads/{reference}", nil)
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("repo", testRepo)
 	rctx.URLParams.Add("image", testImage)

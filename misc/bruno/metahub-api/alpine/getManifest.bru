@@ -7,7 +7,11 @@ meta {
 get {
   url: {{registry}}/v2/{{repo}}/manifests/{{tag}}
   body: none
-  auth: inherit
+  auth: none
+}
+
+vars:pre-request {
+  registry: http://localhost:5000
 }
 
 settings {

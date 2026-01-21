@@ -102,7 +102,7 @@ func TestManifestPutOnlyWithLayerDelete(t *testing.T) {
 	// 	t.Log("Headers:", w.Header())
 	// }
 	// ManifestDelHandler
-	if w, r, e := getHttpTestManifestDeleteByDigest(&br); e != nil {
+	if w, r, e := getHttpTestManifestDeleteByDigest(ctx, &br); e != nil {
 		t.Fatal(e)
 	} else {
 		h.ManifestDelHandler(w, r)
@@ -114,7 +114,7 @@ func TestManifestPutOnlyWithLayerDelete(t *testing.T) {
 		h.ManifestHeadHandler(w, r)
 		assert.Equal(t, http.StatusNotFound, w.Code)
 	}
-	if w, r, e := getHttpTestManifestDeleteByDigest(&br); e != nil {
+	if w, r, e := getHttpTestManifestDeleteByDigest(ctx, &br); e != nil {
 		t.Fatal(e)
 	} else {
 		h.ManifestDelHandler(w, r)
@@ -208,7 +208,7 @@ func TestUploadManifestFTarmShortWithRemove(t *testing.T) {
 	}
 	/// Manifest
 	mani := types.FT_arm_ManifestData()
-	wManiPut, rManiPut := utils.CreateNewHTTPTest(http.MethodPut, map[string]string{
+	wManiPut, rManiPut := utils.CreateNewHTTPTest(ctx, http.MethodPut, map[string]string{
 		"repo":      testRepo,
 		"image":     testImage,
 		"reference": testTag,
@@ -227,7 +227,7 @@ func TestUploadManifestFTarmShortWithRemove(t *testing.T) {
 	digest := wManiPut.Header().Get("Docker-Content-Digest")
 	assert.Equal(t, mani.Digest, digest)
 	// Check for Manifest
-	_, rManiGet := utils.CreateNewHTTPTest(http.MethodGet, map[string]string{
+	_, rManiGet := utils.CreateNewHTTPTest(ctx, http.MethodGet, map[string]string{
 		"repo":      testRepo,
 		"image":     testImage,
 		"reference": mani.Digest,
@@ -248,7 +248,7 @@ func TestUploadManifestFTarmShortWithRemove(t *testing.T) {
 	assert.Equal(t, mani.Digest, gotMani.Digest)
 
 	// Remove
-	_, rManiDel := utils.CreateNewHTTPTest(http.MethodDelete, map[string]string{
+	_, rManiDel := utils.CreateNewHTTPTest(ctx, http.MethodDelete, map[string]string{
 		"repo":      testRepo,
 		"image":     testImage,
 		"reference": digest,
@@ -272,6 +272,7 @@ func TestUploadManifestFTarmShortWithRemove(t *testing.T) {
 }
 
 func TestUploadManifestFTarm(t *testing.T) {
+	ctx := context.Background()
 	testRepo := "qnib"
 	testImage := "featuretest"
 	testProfile := "generic"
@@ -301,7 +302,7 @@ func TestUploadManifestFTarm(t *testing.T) {
 	l0bytes := types.FT_arm_Layer0Byte()
 	l0ref := types.FT_arm_Layer0Reference()
 	// POST with Data
-	wL0, rL0 := utils.CreateNewHTTPTest(http.MethodPost, map[string]string{
+	wL0, rL0 := utils.CreateNewHTTPTest(ctx, http.MethodPost, map[string]string{
 		"repo":  testRepo,
 		"image": testImage,
 	}, map[string]string{
@@ -320,7 +321,7 @@ func TestUploadManifestFTarm(t *testing.T) {
 	uuid := wL0.Header().Get("Docker-Upload-UUID")
 	assert.Equal(t, fmt.Sprintf("/v2/qnib/featuretest/blobs/uploads/%s", uuid), gotLoc)
 	// Next we do a PATCH request
-	wL0Patch, rL0Patch := utils.CreateNewHTTPTest(http.MethodPost, map[string]string{
+	wL0Patch, rL0Patch := utils.CreateNewHTTPTest(ctx, http.MethodPost, map[string]string{
 		"repo":  testRepo,
 		"image": testImage,
 		"uuid":  uuid,
@@ -340,7 +341,7 @@ func TestUploadManifestFTarm(t *testing.T) {
 	}
 	// Final PUT request
 	//startPut := time.Now()
-	wL0Put, rL0Put := utils.CreateNewHTTPTest(http.MethodPut, map[string]string{
+	wL0Put, rL0Put := utils.CreateNewHTTPTest(ctx, http.MethodPut, map[string]string{
 		"repo":  testRepo,
 		"image": testImage,
 		"uuid":  uuid,
@@ -365,7 +366,7 @@ func TestUploadManifestFTarm(t *testing.T) {
 	l1ref := types.FT_arm_Layer1Reference()
 	_ = l1ref
 	// POST with Data
-	wL1, rL1 := utils.CreateNewHTTPTest(http.MethodPost, map[string]string{
+	wL1, rL1 := utils.CreateNewHTTPTest(ctx, http.MethodPost, map[string]string{
 		"repo":  testRepo,
 		"image": testImage,
 	}, map[string]string{
@@ -384,7 +385,7 @@ func TestUploadManifestFTarm(t *testing.T) {
 	uuidL1 := wL1.Header().Get("Docker-Upload-UUID")
 	assert.Equal(t, fmt.Sprintf("/v2/%s/%s/blobs/uploads/%s", testRepo, testImage, uuidL1), gotLocL1)
 	// Next we do a PATCH request
-	wL1Patch, rL1Patch := utils.CreateNewHTTPTest(http.MethodPatch, map[string]string{
+	wL1Patch, rL1Patch := utils.CreateNewHTTPTest(ctx, http.MethodPatch, map[string]string{
 		"repo":  testRepo,
 		"image": testImage,
 		"uuid":  uuidL1,
@@ -403,7 +404,7 @@ func TestUploadManifestFTarm(t *testing.T) {
 		t.Fatalf("Expected %d, got %d", http.StatusAccepted, wL1Patch.Code)
 	}
 	// Final PUT request
-	wL1Put, rL1Put := utils.CreateNewHTTPTest(http.MethodPut, map[string]string{
+	wL1Put, rL1Put := utils.CreateNewHTTPTest(ctx, http.MethodPut, map[string]string{
 		"repo":  testRepo,
 		"image": testImage,
 		"uuid":  uuidL1,
@@ -476,7 +477,7 @@ func TestManifestOCITest(t *testing.T) {
 	cfgDig := digest.FromBytes(cfg.Data)
 	logrus.Errorf("cfgDig: %s", cfgDig)
 	/// Direct Post with config
-	wCfgPost, rCfgPost := utils.CreateNewHTTPTest(http.MethodPost, map[string]string{
+	wCfgPost, rCfgPost := utils.CreateNewHTTPTest(ctx, http.MethodPost, map[string]string{
 		"repo":  testRepo,
 		"image": testImage,
 	}, map[string]string{
@@ -515,7 +516,7 @@ func TestManifestOCITest(t *testing.T) {
 			]
 		}`),
 	}
-	wManiPut, rManiPut := utils.CreateNewHTTPTest(http.MethodPut, map[string]string{
+	wManiPut, rManiPut := utils.CreateNewHTTPTest(ctx, http.MethodPut, map[string]string{
 		"repo":      testRepo,
 		"image":     testImage,
 		"reference": testTag,
@@ -534,7 +535,7 @@ func TestManifestOCITest(t *testing.T) {
 	maniDigest := wManiPut.Header().Get("Docker-Content-Digest")
 	assert.Equal(t, "sha256:bec9eaec0dddcf1558fd11ef8d1e68d5cf7e526e8d6bdb282f16984febc852bb", maniDigest)
 	// Remove
-	wManiDel, rManiDel := utils.CreateNewHTTPTest(http.MethodDelete, map[string]string{
+	wManiDel, rManiDel := utils.CreateNewHTTPTest(ctx, http.MethodDelete, map[string]string{
 		"repo":      testRepo,
 		"image":     testImage,
 		"reference": maniDigest,
@@ -560,7 +561,7 @@ func TestManifestOCITest(t *testing.T) {
 	// }
 	// ct := cols[0].ColTag
 	// // remove collectiontag
-	// wCTDel, rCTDel := utils.CreateNewHTTPTest(http.MethodDelete, map[string]string{
+	// wCTDel, rCTDel := utils.CreateNewHTTPTest(ctx, http.MethodDelete, map[string]string{
 	// 	"repo":      testRepo,
 	// 	"image":     testImage,
 	// 	"reference": testTag,
@@ -595,12 +596,16 @@ func TestManifestOCITest(t *testing.T) {
 
 func TestManifestOCITestNoLayers(t *testing.T) {
 	bs := utils.NewBootstrap()
+	debug := 0
 	bs.SetEmptyAll()
 	bs.SetYAMLPrefix("../../../../misc/yaml")
 	bs.AddBootstrap("users")
 	bs.AddBootstrap("platforms:generic")
 	bs.AddBootstrap("rules:rules/generic/linux.yaml")
 	bs.AddBootstrap("profile:profiles/generic.yaml")
+	if debug > 0 {
+		bs.PostTestSleep = debug
+	}
 	err := h.mag.Minio.EmptyAll()
 	if err != nil {
 		t.Fatal(err)
@@ -632,7 +637,7 @@ func TestManifestOCITestNoLayers(t *testing.T) {
 		}`),
 	}
 	/// Direct Post with config
-	wCfgPost, rCfgPost := utils.CreateNewHTTPTest(http.MethodPost, map[string]string{
+	wCfgPost, rCfgPost := utils.CreateNewHTTPTest(ctx, http.MethodPost, map[string]string{
 		"repo":  testRepo,
 		"image": testImage,
 	}, map[string]string{
@@ -666,7 +671,7 @@ func TestManifestOCITestNoLayers(t *testing.T) {
 	}
 	expManiDigest := digest.FromBytes(mani.Data)
 
-	wManiPut, rManiPut := utils.CreateNewHTTPTest(http.MethodPut, map[string]string{
+	wManiPut, rManiPut := utils.CreateNewHTTPTest(ctx, http.MethodPut, map[string]string{
 		"repo":      testRepo,
 		"image":     testImage,
 		"reference": testTag,
