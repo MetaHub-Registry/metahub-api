@@ -62,7 +62,7 @@ func (h Handlers) CollectionGetOne(w http.ResponseWriter, r *http.Request) {
 			"tag_name":  pl.TagName,
 		})
 		l.Info("CollectionGetOne()")
-		col, err = h.mag.Database.CollectionListing_Get_ByName(ctx, pl.RepoName, pl.TagName)
+		col, err = h.mag.Database.CollectionListingGetByName(ctx, pl.RepoName, pl.TagName)
 		if err != nil {
 			h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
 			return
@@ -73,7 +73,7 @@ func (h Handlers) CollectionGetOne(w http.ResponseWriter, r *http.Request) {
 			"tag_id":        pl.TagID,
 		})
 		l.Info("CollectionGetOne()")
-		col, err = h.mag.Database.CollectionListing_Get_ByID(ctx, pl.ColID, pl.TagID)
+		col, err = h.mag.Database.CollectionListingGetByID(ctx, pl.ColID, pl.TagID)
 		if err != nil {
 			h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
 			return
@@ -97,7 +97,7 @@ func (h Handlers) CollectionGetOne(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	/*
-		manis, err := h.mag.Database.ManifestData_GetByCollectionTag(ctx, pl.ColID, pl.TagID)
+		manis, err := h.mag.Database.ManifestDataGetByCollectionTag(ctx, pl.ColID, pl.TagID)
 		if err != nil {
 			h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
 			return

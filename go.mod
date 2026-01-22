@@ -11,6 +11,7 @@ require (
 	github.com/go-chi/jwtauth/v5 v5.1.0
 	github.com/go-chi/render v1.0.2
 	github.com/google/go-github v17.0.0+incompatible
+	github.com/google/uuid v1.6.0
 	github.com/gorilla/context v1.1.1
 	github.com/lestrrat-go/jwx/v2 v2.0.6
 	github.com/mitchellh/go-homedir v1.1.0
@@ -67,7 +68,6 @@ require (
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/h2non/filetype v1.1.3 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/inconshreveable/mousetrap v1.0.1 // indirect

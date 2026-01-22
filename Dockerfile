@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.4
 FROM golang:1.24-alpine3.21 AS go
-RUN apk add --no-cache git gcc musl-dev openssh-client
+RUN apk add --no-cache gcc git musl-dev openssh-client
 RUN mkdir -p -m 0700 ~/.ssh && ssh-keyscan gitlab.com >> ~/.ssh/known_hosts
 WORKDIR /go/metahub-api
 COPY . ./
@@ -23,7 +23,7 @@ RUN apk add --no-cache wget \
 
 
 FROM golang:1.24-alpine3.21  AS dev
-RUN apk add --no-cache git gcc musl-dev bash vim curl wget openssh-client
+RUN apk add --no-cache bash curl gcc git musl-dev openssh-client vim wget
 RUN mkdir -p -m 0700 ~/.ssh && ssh-keyscan gitlab.com >> ~/.ssh/known_hosts
 WORKDIR /go/metahub-api
 # COPY . ./
@@ -58,7 +58,7 @@ ENV METAHUB_API_PORT=80 \
     MANIFESTS_BUCKET=manifests
 
 COPY --from=gonja /usr/local/bin/gonja-cli /usr/local/bin/gonja-cli
-RUN apk add bash
+RUN apk add --no-cache bash
 COPY --from=go /go/metahub-api/metahub-api /usr/bin/metahub-api
 COPY ./misc/config/metahub-api.yaml.tpl /opt/metahub-api/
 COPY ${USERDB_FILE} /var/lib/metahub/metahub.db

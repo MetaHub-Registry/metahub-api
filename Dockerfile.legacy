@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.4
 FROM golang:1.24-alpine3.21 AS go
-RUN apk add --no-cache git gcc musl-dev build-base
+RUN apk add --no-cache build-base gcc git musl-dev
 
 WORKDIR /go/metahub-api
 COPY . ./
@@ -22,7 +22,7 @@ ENV METAHUB_API_PORT=80 \
 
 COPY --from=gonja /usr/local/bin/gonja-cli /usr/local/bin/gonja-cli
 RUN mkdir -p /etc/metahub/ \ 
- && apk add py3-pip jq bash \
+ && apk add --no-cache bash jq py3-pip \
  && pip3 install --break-system-packages wildq==1.0.6
 COPY --from=go /go/metahub-api/metahub-api /usr/bin/metahub-api
 COPY ./misc/config/metahub-api.yaml ./misc/config/metahub-api.yaml.tpl /opt/metahub-api/

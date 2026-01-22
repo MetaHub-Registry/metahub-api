@@ -29,7 +29,7 @@ var (
 
 func TestBlobHandlerDirectPost(t *testing.T) {
 	debug := 0
-	_, l0byte := types.FT_arm_BlobUpload_Layer0()
+	_, l0byte := types.FTarmBlobUploadLayer0()
 	bs := utils.NewBootstrap()
 	bs.SetEmptyAll()
 	bs.AddBootstrap("users")
@@ -341,7 +341,7 @@ func TestUploadUploadLayer0Sequence(t *testing.T) {
 		assert.Regexp(t, fmt.Sprintf(`/v2/%s/blobs/uploads/%s$`, cmImage, uuid), gotLoc)
 	}
 	// Remove
-	// l0ref := types.FT_arm_Layer0Reference()
+	// l0ref := types.FTarmLayer0Reference()
 	// br.Add("reference", string(l0ref.Digest))
 	// if w, r, e := getHttpTestLayer0UploadDeleteHandler(&br); e != nil {
 	// 	t.Fatal(e)
@@ -380,10 +380,10 @@ func TestUploadUploadBlobSequenceSplit(t *testing.T) {
 	}
 	// POST with Data
 	w := httptest.NewRecorder()
-	l0bytes := types.FT_arm_Layer0Byte()
+	l0bytes := types.FTarmLayer0Byte()
 	l0bytePart1 := l0bytes[:len(l0bytes)/2]
 	l0bytePart2 := l0bytes[len(l0bytes)/2:]
-	l0ref := types.FT_arm_Layer0Reference()
+	l0ref := types.FTarmLayer0Reference()
 	_ = l0ref
 	r := httptest.NewRequest(http.MethodPost, "/{image}/blobs/uploads/", bytes.NewReader(l0bytes))
 	rctx := chi.NewRouteContext()

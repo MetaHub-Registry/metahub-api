@@ -12,8 +12,8 @@ FROM golang:1.18 AS mt-v2
 ARG MT_VER=2.0.3
 WORKDIR /go/src/github.com/estesp/manifest-tool
 RUN wget -qO - https://github.com/estesp/manifest-tool/archive/refs/tags/v${MT_VER}.tar.gz|tar xfz - --strip-components=1 
-RUN cd v2 \
- && go mod tidy \
+WORKDIR /go/src/github.com/estesp/manifest-tool/v2
+RUN go mod tidy \
  && cd cmd/manifest-tool \
  && go build -o /usr/bin/manifest-tool
 
@@ -32,7 +32,7 @@ RUN go build -o /usr/bin/regsync
 
 FROM docker:20.10.14-dind
 ENV MH_URL=dev:80
-RUN apk add --no-cache jq vim curl bash skopeo screen
+RUN apk add --no-cache bash curl jq screen skopeo vim
 COPY daemon.json /etc/docker/daemon.json
 COPY bash_history /root/.bash_history
 COPY bashrc /root/.bashrc
