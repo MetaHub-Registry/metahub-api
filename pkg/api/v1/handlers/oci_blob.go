@@ -20,12 +20,14 @@ import (
 )
 
 const (
-	pkgNameOCIBlob     = "handlers/oci_blob.go"
-	Range              = "Range"
-	Location           = "Location"
-	ContentLength      = "Content-Length"
-	ChunkUploadErr     = "failed to create chunk upload"
-	BlobUploadFetchErr = "failed to fetch blob upload"
+	pkgNameOCIBlob          = "handlers/oci_blob.go"
+	Range                   = "Range"
+	Location                = "Location"
+	ContentLength           = "Content-Length"
+	ChunkUploadErr          = "failed to create chunk upload"
+	BlobUploadFetchErr      = "failed to fetch blob upload"
+	failedToStoreBlobUpload = "failed to store blob upload"
+	FailedAuthPushPrfFMT    = "failed to authorize push for profile '%s'"
 )
 
 func (h Handlers) BlobUploadPutHandler(w http.ResponseWriter, r *http.Request) {
@@ -48,7 +50,7 @@ func (h Handlers) BlobUploadPutHandler(w http.ResponseWriter, r *http.Request) {
 	logrus.Infof("%-5s BlobUploadPutHandler(%s, %s)", r.Method, req.Repo, req.UUID)
 	_, e := h.mag.Database.ProfileAuthorizedPushHandler(ctx, req)
 	if e != nil {
-		err := errors.Wrapf(e, "failed to authorize push for profile '%s'", req.Profile)
+		err := errors.Wrapf(e, FailedAuthPushPrfFMT, req.Profile)
 		span.RecordError(err)
 		det := helper.NewDetailFromReq(req)
 		e := helper.NewErrPayload("DENIED", e.Error(), det)
@@ -90,11 +92,10 @@ func (h Handlers) BlobUploadPutHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		err = h.mag.StoreBlobUpload(ctx, &bu, buf)
 		if err != nil {
-			msg := "failed to store blob upload"
-			err = errors.Wrap(err, msg)
+			err = errors.Wrap(err, failedToStoreBlobUpload)
 			logrus.Error(err)
 			det := helper.NewDetailFromReq(req)
-			e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+			e := helper.NewErrPayload("INTERNAL_ERROR", failedToStoreBlobUpload, det)
 			helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 			return
 		}
@@ -220,7 +221,7 @@ func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request)
 	logrus.Infof("%-5s BlobUploadPatchHandler(%s, %s) Len:%d", r.Method, req.Repo, req.UUID, req.Length)
 	_, e := h.mag.Database.ProfileAuthorizedPushHandler(ctx, req)
 	if e != nil {
-		err := errors.Wrapf(e, "failed to authorize push for profile '%s'", req.Profile)
+		err := errors.Wrapf(e, FailedAuthPushPrfFMT, req.Profile)
 		span.RecordError(err)
 		det := helper.NewDetailFromReq(req)
 		e := helper.NewErrPayload("DENIED", e.Error(), det)
@@ -311,21 +312,19 @@ func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request)
 	_ = chunk
 	err = h.mag.StoreBlobUpload(ctx, &bu, buf)
 	if err != nil {
-		msg := "failed to store blob upload"
-		err = errors.Wrap(err, msg)
+		err = errors.Wrap(err, failedToStoreBlobUpload)
 		logrus.Error(err)
 		det := helper.NewDetailFromReq(req)
-		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+		e := helper.NewErrPayload("INTERNAL_ERROR", failedToStoreBlobUpload, det)
 		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 		return
 	}
 	err = h.mag.Database.BlobUploadUpdateByUUID(ctx, &bu)
 	if err != nil {
-		msg := "failed to update blob upload"
-		err = errors.Wrap(err, msg)
+		err = errors.Wrap(err, failedToStoreBlobUpload)
 		logrus.Error(err)
 		det := helper.NewDetailFromReq(req)
-		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+		e := helper.NewErrPayload("INTERNAL_ERROR", failedToStoreBlobUpload, det)
 		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 		return
 	}
@@ -364,7 +363,7 @@ func (h Handlers) BlobUploadPostHandler(w http.ResponseWriter, r *http.Request) 
 	msg := fmt.Sprintf("%-5s BlobUploadPostHandler(%s, Type:%s, Len:%d", r.Method, mt, req.Repo, req.Length)
 	_, e := h.mag.Database.ProfileAuthorizedPushHandler(ctx, req)
 	if e != nil {
-		utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "push", e, "DENIED", "failed to authorize push for profile '%s'", req.Profile)
+		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", e, "DENIED", FailedAuthPushPrfFMT, req.Profile)
 		return
 	}
 	if req.Tag != "" {
@@ -384,7 +383,7 @@ func (h Handlers) BlobUploadPostHandler(w http.ResponseWriter, r *http.Request) 
 	}
 	err := h.mag.Database.BlobUploadCreateByOCI(ctx, &bu)
 	if err != nil {
-		utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "push", e, "INTERNAL_ERROR", "failed to create blob upload")
+		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", e, "INTERNAL_ERROR", "failed to create blob upload")
 		return
 	}
 	bu.Digest = req.Digest
@@ -412,7 +411,7 @@ func (h Handlers) BlobUploadPostHandler(w http.ResponseWriter, r *http.Request) 
 		}
 		err = h.mag.StoreBlobUpload(ctx, &bu, buf)
 		if err != nil {
-			utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "push", e, "INTERNAL_ERROR", "failed to store blob upload")
+			utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", e, "INTERNAL_ERROR", "failed to store blob upload")
 			return
 		}
 		err = h.mag.ComposeFromChunks(ctx, &bu, []types.BlobChunk{chunk})
@@ -598,17 +597,17 @@ func (h Handlers) BlobDelHandler(w http.ResponseWriter, r *http.Request) {
 	defer span.End()
 	_, e := h.mag.Database.ProfileAuthorizedPushHandler(ctx, req)
 	if e != nil {
-		utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "push", e, "DENIED", "failed to authorize profile '%s'", req.Profile)
+		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", e, "DENIED", "failed to authorize profile '%s'", req.Profile)
 		return
 	}
 	found, err := h.mag.BlobDelete(ctx, req)
 	if err != nil {
-		utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "push", e, "INTERNAL_ERROR", "failed to delete blob")
+		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", e, "INTERNAL_ERROR", "failed to delete blob")
 		return
 	}
 	if !found {
 		e := fmt.Errorf(types.FailBlobNotFound)
-		utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "push", e, "MANIFEST_UNKNOWN", "")
+		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", e, "MANIFEST_UNKNOWN", "")
 		return
 	}
 	span.SetStatus(http.StatusAccepted, "")

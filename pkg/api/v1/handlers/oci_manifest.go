@@ -26,6 +26,7 @@ const (
 	dockerManifestMediaType     = "application/vnd.docker.distribution.manifest.v2+json"
 	dockerManifestListMediaType = "application/vnd.docker.distribution.manifest.list.v2+json"
 	successStoredManifestWDig   = "successfully stored manifest with digest '%s'"
+	failedAuthPushPrfFMT        = "failed to authorize push for profile '%s'"
 )
 
 func (h Handlers) ManifestHeadHandlerDigest(ctx context.Context, w http.ResponseWriter, r *http.Request, up upstream.UpstreamTriple) {
@@ -43,12 +44,12 @@ func (h Handlers) ManifestHeadHandlerDigest(ctx context.Context, w http.Response
 	l.Infof("%-5s ManifestHeadHandlerDigest(%s@sha256:%s) Profile:%s", r.Method, req.Repo, utils.ShortenDigest(req.Digest), req.Profile)
 	mediaType, maniFound, e := h.mag.Database.ManifestExists(ctx, up)
 	if e != nil {
-		utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "head", e, "INTERNAL_ERROR", "failed to check if manifest exists")
+		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "head", e, "INTERNAL_ERROR", "failed to check if manifest exists")
 		return
 	}
 	if !maniFound {
 		err := fmt.Errorf("failed to fetch ManifestList for collection: %s@%s", req.Repo, req.Digest)
-		utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "head", err, "MANIFEST_UNKNOWN", "")
+		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "head", err, "MANIFEST_UNKNOWN", "")
 		return
 	}
 	utils.Debug(l, span, "Manifest found: %t - MediaType '%s'", maniFound, mediaType)
@@ -56,7 +57,7 @@ func (h Handlers) ManifestHeadHandlerDigest(ctx context.Context, w http.Response
 	case ociManifestListMediaType, dockerManifestListMediaType:
 		ml, found, e := h.mag.ManifestListGetByHTTPRequest(ctx, r)
 		if e != nil {
-			utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "head", e, "INTERNAL_ERROR", "failed to fetch ManifestList")
+			utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "head", e, "INTERNAL_ERROR", "failed to fetch ManifestList")
 			return
 		}
 		if found {
@@ -66,7 +67,7 @@ func (h Handlers) ManifestHeadHandlerDigest(ctx context.Context, w http.Response
 	case ociManifestMediaType, dockerManifestMediaType:
 		m, found, err := h.mag.ManifestGetByHTTPRequest(ctx, r)
 		if err != nil {
-			utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "head", e, "INTERNAL_ERROR", "failed to fetch Manifest")
+			utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "head", e, "INTERNAL_ERROR", "failed to fetch Manifest")
 			return
 		}
 		if found {
@@ -75,11 +76,11 @@ func (h Handlers) ManifestHeadHandlerDigest(ctx context.Context, w http.Response
 		}
 	default:
 		e := fmt.Errorf("unkown mediaType for manifest: '%s'", mediaType)
-		utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "head", e, "INTERNAL_ERROR", "unkown mediaType '%s'", mediaType)
+		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "head", e, "INTERNAL_ERROR", "unkown mediaType '%s'", mediaType)
 		return
 	}
 	err := fmt.Errorf("failed to fetch ManifestList for collection: %s@%s", req.Repo, req.Digest)
-	utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "head", err, "MANIFEST_UNKNOWN", "")
+	utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "head", err, "MANIFEST_UNKNOWN", "")
 }
 
 func (h Handlers) ManifestHeadHandlerTag(ctx context.Context, w http.ResponseWriter, r *http.Request, up upstream.UpstreamTriple) {
@@ -105,7 +106,7 @@ func (h Handlers) ManifestHeadHandlerTag(ctx context.Context, w http.ResponseWri
 	utils.Debug(l, span, "Check if manifest exists for profile '%s'", up.Profile)
 	_, maniFound, e := h.mag.Database.ManifestExists(ctx, up)
 	if e != nil {
-		utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "head", e, "INTERNAL_ERROR", "failed to check if manifest exists")
+		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "head", e, "INTERNAL_ERROR", "failed to check if manifest exists")
 		return
 	}
 	var upstreamFound bool
@@ -114,20 +115,20 @@ func (h Handlers) ManifestHeadHandlerTag(ctx context.Context, w http.ResponseWri
 		var e error
 		md, upstreamFound, e = h.mag.HeadManifestNotFound(ctx, req)
 		if e != nil {
-			utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "head", e, "INTERNAL_ERROR", "failed to HeadManifestNotFound")
+			utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "head", e, "INTERNAL_ERROR", "failed to HeadManifestNotFound")
 			return
 		}
 		if !upstreamFound {
 			switch md {
 			case dockerManifestListMediaType:
 				err := fmt.Errorf("image indexes are not supported (yet): %s", md)
-				utils.ErrorHandler_WithWWW(w, l, span, req.Repo,
+				utils.ErrorHandlerWithWWW(w, l, span, req.Repo,
 					"head", err, "MANIFEST_UNKNOWN", "")
 				// We are returning as we did not store an upstream manifest and it won't be found in the graph
 				return
 			}
 			e = errors.New("manifest not found")
-			utils.ErrorHandler_WithWWW(w, l, span, req.Repo,
+			utils.ErrorHandlerWithWWW(w, l, span, req.Repo,
 				"head", e, "MANIFEST_UNKNOWN", "failed to fetch manifest upstream '%s/%s'", req.Repo, req.Tag)
 			// We do not stop here, as the manifest will now be in the graph and subsequent queries will find it
 		}
@@ -137,7 +138,7 @@ func (h Handlers) ManifestHeadHandlerTag(ctx context.Context, w http.ResponseWri
 	utils.Debug(l, span, "Check if manifest exists for profile '%s'", up.Profile)
 	tpMediaType, tpManiFound, e := h.mag.Database.ManifestExistsForTagProfile(ctx, up)
 	if e != nil {
-		utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "head", e, "INTERNAL_ERROR", "failed to check if manifest exists")
+		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "head", e, "INTERNAL_ERROR", "failed to check if manifest exists")
 		return
 	}
 	utils.Debug(l, span, "Manifest found for profile '%s':  %t - MediaType '%s'", up.Profile, tpManiFound, tpMediaType)
@@ -147,11 +148,11 @@ func (h Handlers) ManifestHeadHandlerTag(ctx context.Context, w http.ResponseWri
 		// TODO: ok, we found a manifest for generic, not we need to specialise it for the profile
 		tpMediaType, tpUpstreamFound, e = h.mag.HeadManistNotFoundForProfile(ctx, req)
 		if e != nil {
-			utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "head", e, "INTERNAL_ERROR", "failed to HeadManifestNotFound")
+			utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "head", e, "INTERNAL_ERROR", "failed to HeadManifestNotFound")
 			return
 		}
 		//err := fmt.Errorf("failed to fetch ManifestList for collection: %s/%s", req.Repo, req.Tag)
-		//utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "head", err, "MANIFEST_UNKNOWN", "")
+		//utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "head", err, "MANIFEST_UNKNOWN", "")
 		//return
 	}
 	if tpUpstreamFound {
@@ -164,7 +165,7 @@ func (h Handlers) ManifestHeadHandlerTag(ctx context.Context, w http.ResponseWri
 	case ociManifestListMediaType:
 		ml, found, err := h.mag.ManifestListGetByHTTPRequest(ctx, r)
 		if err != nil {
-			utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "head", e, "INTERNAL_ERROR", "failed to fetch ManifestList")
+			utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "head", e, "INTERNAL_ERROR", "failed to fetch ManifestList")
 			return
 		}
 		if found {
@@ -174,7 +175,7 @@ func (h Handlers) ManifestHeadHandlerTag(ctx context.Context, w http.ResponseWri
 	case ociManifestMediaType:
 		m, found, e := h.mag.ManifestGetByHTTPRequest(ctx, r)
 		if e != nil {
-			utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "head", e, "INTERNAL_ERROR", "failed to fetch Manifest")
+			utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "head", e, "INTERNAL_ERROR", "failed to fetch Manifest")
 			return
 		}
 		if found {
@@ -183,7 +184,7 @@ func (h Handlers) ManifestHeadHandlerTag(ctx context.Context, w http.ResponseWri
 		}
 	default:
 		//application/vnd.oci.image.manifest.v1+json
-		utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "head", fmt.Errorf("unkown mediaType for manifest: '%s'", tpMediaType), "INTERNAL_ERROR", "")
+		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "head", fmt.Errorf("unkown mediaType for manifest: '%s'", tpMediaType), "INTERNAL_ERROR", "")
 		return
 	}
 }
@@ -423,7 +424,7 @@ func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 	l.Infof("%-5s ManifestPutHandler(%s, %s) Profile:%s", r.Method, req.Repo, req.Tag, req.Profile)
 	buf, e := io.ReadAll(r.Body)
 	if e != nil {
-		utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "push", e, "INTERNAL_ERROR", "failed to read body")
+		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", e, "INTERNAL_ERROR", "failed to read body")
 		return
 	}
 	l = l.WithFields(logrus.Fields{
@@ -434,17 +435,17 @@ func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 	)
 	_, e = h.mag.Database.ProfileAuthorizedPushHandler(ctx, req)
 	if e != nil {
-		utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "push", e, "DENIED", "failed to authorize push for profile '%s'", req.Profile)
+		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", e, "DENIED", failedAuthPushPrfFMT, req.Profile)
 		return
 	}
-	prf, found, err := h.mag.Database.Profile_Get_ByLabel(ctx, req.Profile)
+	prf, found, err := h.mag.Database.ProfileGetByLabel(ctx, req.Profile)
 	if err != nil {
-		utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "push", err, "INTERNAL_ERROR", "failed to fetch profile '%s'", req.Profile)
+		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", err, "INTERNAL_ERROR", "failed to fetch profile '%s'", req.Profile)
 		return
 	}
 	if !found {
 		e = fmt.Errorf("profile '%s' not found", req.Profile)
-		utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "push", e, "INTERNAL_ERROR", "")
+		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", e, "INTERNAL_ERROR", "")
 		return
 	}
 	switch req.ContentType {
@@ -452,35 +453,35 @@ func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 		// Put manifest in object store
 		m, err := h.mag.StoreManifestUpload(ctx, req, buf)
 		if err != nil {
-			utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "push", err, "INTERNAL_ERROR", "failed to store manifest")
+			utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", err, "INTERNAL_ERROR", "failed to store manifest")
 			return
 		}
 		utils.Debug(l, span, successStoredManifestWDig, m.Digest)
 		// TODO: 2023-04-14 Unwind profile for uploaded manifest
 		err = h.mag.Database.ProfileUnwindRules(ctx, prf.ID, m.ID)
 		if err != nil {
-			utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "push", err, "INTERNAL_ERROR", "failed to unwind profile '%s' for manifest '%s'", req.Profile, m.Label)
+			utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", err, "INTERNAL_ERROR", "failed to unwind profile '%s' for manifest '%s'", req.Profile, m.Label)
 			return
 		}
 		// Compute manifest
 		mani, found, err := h.mag.Database.ManifestGetByLabel(ctx, m.Label)
 		if err != nil {
-			utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "push", err, "DENIED", "while executing ManifestGetByLabel")
+			utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", err, "DENIED", "while executing ManifestGetByLabel")
 			return
 		}
 		if !found {
 			err = utils.NewError(l, span, "manifest not found")
-			utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "push", err, "INTERNAL_ERROR", "")
+			utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", err, "INTERNAL_ERROR", "")
 			return
 		}
 		err = h.mag.ComputeManifest(ctx, mani)
 		if err != nil {
-			utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "push", e, "INTERNAL_ERROR", "while executing ComputeManifest")
+			utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", e, "INTERNAL_ERROR", "while executing ComputeManifest")
 			return
 		}
 		err = h.mag.ComputeManifestlists(ctx)
 		if err != nil {
-			utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "push", e, "INTERNAL_ERROR", "while executing ComputeManifestlists")
+			utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", e, "INTERNAL_ERROR", "while executing ComputeManifestlists")
 			return
 		}
 		h.ManifestPutHandlerWrapper(ctx, w, req, m)
@@ -488,7 +489,7 @@ func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 		// Put manifest in object store
 		m, err := h.mag.StoreManifestUpload(ctx, req, buf)
 		if err != nil {
-			utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "push", err, "MANIFEST_INVALID", "failed to store manifest: %v", err)
+			utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", err, "MANIFEST_INVALID", "failed to store manifest: %v", err)
 			return
 		}
 		h.ManifestPutHandlerWrapper(ctx, w, req, m)
@@ -496,12 +497,12 @@ func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 	// 	// Put manifest list in object store
 	// 	ml, err := h.mag.ManifestListGetByRequest(ctx, req, buf)
 	// 	if err != nil {
-	// 		utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "push", err, "MANIFEST_INVALID", "failed to store manifest list: %v", err)
+	// 		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", err, "MANIFEST_INVALID", "failed to store manifest list: %v", err)
 	// 		return
 	// 	}
 	default:
 		e = fmt.Errorf("unsupported content type: %s (supported: %s)", req.ContentType, strings.Join([]string{dockerManifestMediaType, ociManifestMediaType}, ","))
-		utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "push", e, "MANIFEST_INVALID", "")
+		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", e, "MANIFEST_INVALID", "")
 		return
 	}
 }

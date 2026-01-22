@@ -207,7 +207,7 @@ func TestUploadManifestFTarmShortWithRemove(t *testing.T) {
 		t.Fatal(err)
 	}
 	/// Manifest
-	mani := types.FT_arm_ManifestData()
+	mani := types.FTarmManifestData()
 	wManiPut, rManiPut := utils.CreateNewHTTPTest(ctx, http.MethodPut, map[string]string{
 		"repo":      testRepo,
 		"image":     testImage,
@@ -299,8 +299,8 @@ func TestUploadManifestFTarm(t *testing.T) {
 		t.Fatal(err)
 	}
 	///// LAYER0
-	l0bytes := types.FT_arm_Layer0Byte()
-	l0ref := types.FT_arm_Layer0Reference()
+	l0bytes := types.FTarmLayer0Byte()
+	l0ref := types.FTarmLayer0Reference()
 	// POST with Data
 	wL0, rL0 := utils.CreateNewHTTPTest(ctx, http.MethodPost, map[string]string{
 		"repo":  testRepo,
@@ -362,8 +362,8 @@ func TestUploadManifestFTarm(t *testing.T) {
 	assert.NotNil(t, uuid)
 	assert.Equal(t, fmt.Sprintf("/v2/qnib/featuretest/blobs/uploads/%s", uuid), gotPutLoc)
 	///// LAYER1
-	l1bytes := types.FT_arm_Layer1Byte()
-	l1ref := types.FT_arm_Layer1Reference()
+	l1bytes := types.FTarmLayer1Byte()
+	l1ref := types.FTarmLayer1Reference()
 	_ = l1ref
 	// POST with Data
 	wL1, rL1 := utils.CreateNewHTTPTest(ctx, http.MethodPost, map[string]string{
@@ -587,7 +587,7 @@ func TestManifestOCITest(t *testing.T) {
 	// }
 	// assert.Equal(t, 0, len(cols))
 	// /// Count CollectionTag after compute manifestlist is done
-	// cnt, err := h.mag.Database.CollectionTag_CountRelationships(ct.ID)
+	// cnt, err := h.mag.Database.CollectionTagCountRelationships(ct.ID)
 	// if err != nil {
 	// 	t.Fatal(err)
 	// }

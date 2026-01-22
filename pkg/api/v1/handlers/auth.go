@@ -170,7 +170,7 @@ func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) 
 	password = parts[1]
 	m, err := utils.ReSubMatchMap(userReg, parts[0])
 	if err != nil {
-		utils.ErrorHandler_WithWWW(w, l, span, req.Repo, "pull", err, "INTERNAL_ERROR", "failed to match regex")
+		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "pull", err, "INTERNAL_ERROR", "failed to match regex")
 		return
 	}
 	if _, ok := m["user"]; !ok {

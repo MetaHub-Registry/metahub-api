@@ -36,8 +36,8 @@ func getHttpTestLayer0UploadPutHandler(br *utils.BootstrapResult) (w *httptest.R
 	if err != nil {
 		return w, r, err
 	}
-	l0ref := types.FT_arm_Layer0Reference()
-	l0bytes := types.FT_arm_Layer0Byte()
+	l0ref := types.FTarmLayer0Reference()
+	l0bytes := types.FTarmLayer0Byte()
 	w = httptest.NewRecorder()
 	putUrl := fmt.Sprintf("/{repo}/{image}/blobs/uploads/{uuid}?digest=%s", l0ref.Digest)
 	r = httptest.NewRequest(http.MethodPut, putUrl, bytes.NewReader(l0bytes))
@@ -72,7 +72,7 @@ func getHttpTestLayer0UploadPatchHandler(br *utils.BootstrapResult) (w *httptest
 	if err != nil {
 		return w, r, err
 	}
-	l0bytes := types.FT_arm_Layer0Byte()
+	l0bytes := types.FTarmLayer0Byte()
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest(http.MethodPatch, "/{repo}/{image}/blobs/uploads/{uuid}", bytes.NewReader(l0bytes))
 	rctx := chi.NewRouteContext()
@@ -145,7 +145,7 @@ func getHttpTestLayer0UploadPostHandler(br *utils.BootstrapResult) (w *httptest.
 		return w, r, err
 	} //
 	w = httptest.NewRecorder()
-	l0bytes := types.FT_arm_Layer0Byte()
+	l0bytes := types.FTarmLayer0Byte()
 	r = httptest.NewRequest(http.MethodPost, "/{repo}/{image}/blobs/uploads/", bytes.NewReader(l0bytes))
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("repo", testRepo)
@@ -176,8 +176,8 @@ func getHttpTestLayer0UploadPostHandlerMount(br *utils.BootstrapResult) (w *http
 		return w, r, err
 	} //
 	w = httptest.NewRecorder()
-	l0ref := types.FT_arm_Layer0Reference()
-	l0bytes := types.FT_arm_Layer0Byte()
+	l0ref := types.FTarmLayer0Reference()
+	l0bytes := types.FTarmLayer0Byte()
 	postUrl := fmt.Sprintf("/{image}/blobs/uploads/?mount=%s", l0ref.Digest)
 	r = httptest.NewRequest(http.MethodPost, postUrl, bytes.NewReader(l0bytes))
 	rctx := chi.NewRouteContext()

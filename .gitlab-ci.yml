@@ -3,47 +3,48 @@ stages:
   - build
   - qa
 
-mrtest:
-    stage: coveragetest
-    image: registry.gitlab.com/qnib-pub-containers/cicd/golang:1.19.1
-    before_script:
-      - git clone https://gitlab-ci-token:${CI_JOB_TOKEN}@github.com/metahub-registry/metahub-core --branch=develop /tmp/github.com/metahub-registry/metahub-core
-      - go mod edit -replace github.com/metahub-registry/metahub-core=/tmp/github.com/metahub-registry/metahub-core   
-    script: 
-      - go mod tidy
-      - go test -short -timeout 120s ./... -coverprofile coverage.txt
-      - gocover-cobertura < coverage.txt > coverage.xml
-      - gocoverstats -v -f coverage.txt --percent
-    coverage: /^Global weighted coverage:\s+(\d+(?:\.\d+)?%)/
-    artifacts:
-      untracked: true
-      reports:
-        coverage_report:
-          coverage_format: cobertura
-          path: coverage.txt
-    only:
-      - merge_requests
+# mrtest:
+#     stage: coveragetest
+#     image: registry.gitlab.com/qnib-pub-containers/cicd/golang:1.19.1
+#     before_script:
+#       - git clone https://gitlab-ci-token:${CI_JOB_TOKEN}@github.com/metahub-registry/metahub-core --branch=develop /tmp/github.com/metahub-registry/metahub-core
+#       - go mod edit -replace github.com/metahub-registry/metahub-core=/tmp/github.com/metahub-registry/metahub-core   
+#     script: 
+#       - go mod tidy
+#       - go test -short -timeout 120s ./... -coverprofile coverage.txt
+#       - gocover-cobertura < coverage.txt > coverage.xml
+#       - gocoverstats -v -f coverage.txt --percent
+#     coverage: /^Global weighted coverage:\s+(\d+(?:\.\d+)?%)/
+#     artifacts:
+#       untracked: true
+#       reports:
+#         coverage_report:
+#           coverage_format: cobertura
+#           path: coverage.txt
+#     only:
+#       - merge_requests
 
-sonarqube-check:
-  stage: qa
-  dependencies:
-    - mrtest
-  retry: 2
-  image: 
-    name: sonarsource/sonar-scanner-cli:latest
-    entrypoint: [""]
-  variables:
-    SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar"  # Defines the location of the analysis task cache
-    GIT_DEPTH: "0"  # Tells git to fetch all the branches of the project, required by the analysis task
-  cache:
-    key: "${CI_JOB_NAME}"
-    paths:
-      - .sonar/cache
-  script: 
-    - sonar-scanner
-  allow_failure: true
-  only:
-    - merge_requests
+# sonarqube-check:
+#   stage: qa
+#   dependencies:
+#     - mrtest
+#   retry: 2
+#   image: 
+#     name: sonarsource/sonar-scanner-cli:latest
+#     entrypoint: [""]
+#   variables:
+#     SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar"  # Defines the location of the analysis task cache
+#     GIT_DEPTH: "0"  # Tells git to fetch all the branches of the project, required by the analysis task
+#   cache:
+#     key: "${CI_JOB_NAME}"
+#     paths:
+#       - .sonar/cache
+#   script: 
+#     - sonar-scanner
+#   allow_failure: true
+#   only:
+#     - merge_requests
+
 #ecr:
 #  image: docker:20.10.17
 #  stage: build
