@@ -24,9 +24,9 @@ tasks:
     cmds:
       - task: up:data
       - task: up:monitoring
+      - docker network create mh-data || true
+      - docker volume create ce-registry || true
       - docker-compose -f docker-compose.yaml up -d --wait
-      #docker network create mh-data
-      #docker volume create ce-registry
   down:
     cmds:
       - docker-compose stop
@@ -55,6 +55,17 @@ tasks:
       PROF: '{{index .MATCH 0}}' 
     cmds:
       - docker compose exec -ti dind sh -c "echo qnib | docker login dev:80 -u qnib#{{.PROF }} --password-stdin"
+  pushAlpine:*:
+    vars:
+      ARCH: '{{index .MATCH 0}}' 
+    cmds:
+      - docker compose exec -ti dind sh -c "docker pull --platform=linux/{{.ARCH}} alpine:latest"
+      - docker compose exec -ti dind sh -c "docker tag alpine:latest dev:80/qnib/alpine:latest"
+      - docker compose exec -ti dind sh -c "docker push dev:80/qnib/alpine:latest"
+  multiAlpine:
+    cmds:
+      - docker compose exec -ti dind sh -c "docker buildx create --use --name multiarchbuilder"
+      - docker compose exec -ti dind sh -c "docker buildx build --platform linux/amd64,linux/arm64 --push -t dev:80/qnib/alpine:multiarchlatest --build-arg BASE_IMAGE=alpine:latest ./misc/dockerfiles/alpine/"
   testDind:
     cmds:
       - docker compose exec -ti dind sh -c "docker pull dev:80/qnib/featuretest:latest"

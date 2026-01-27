@@ -258,7 +258,7 @@ func (h Handlers) handleManifest(ctx context.Context, w http.ResponseWriter, req
 		case http.MethodGet:
 			m.WriteWWW(w)
 		case http.MethodHead:
-			m.WriteWWWHeader(w)
+			m.WriteWWWHead(w)
 		default:
 			msg := fmt.Sprintf("unsupported method '%s' for manifest", strings.ToUpper(req.Method))
 			l.Error(msg)
@@ -476,12 +476,12 @@ func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		err = h.mag.ComputeManifest(ctx, mani)
 		if err != nil {
-			utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", e, "INTERNAL_ERROR", "while executing ComputeManifest")
+			utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", err, "INTERNAL_ERROR", "while executing ComputeManifest")
 			return
 		}
 		err = h.mag.ComputeManifestlists(ctx)
 		if err != nil {
-			utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", e, "INTERNAL_ERROR", "while executing ComputeManifestlists")
+			utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", err, "INTERNAL_ERROR", "while executing ComputeManifestlists")
 			return
 		}
 		h.ManifestPutHandlerWrapper(ctx, w, req, m)
@@ -493,13 +493,26 @@ func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.ManifestPutHandlerWrapper(ctx, w, req, m)
-	// case ociManifestListMediaType:
-	// 	// Put manifest list in object store
-	// 	ml, err := h.mag.ManifestListGetByRequest(ctx, req, buf)
-	// 	if err != nil {
-	// 		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", err, "MANIFEST_INVALID", "failed to store manifest list: %v", err)
-	// 		return
-	// 	}
+	case ociManifestListMediaType:
+		// Put manifest list in object store
+		ml, err := types.NewManifestListFromData(buf)
+		if err != nil {
+			utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", err, "MANIFEST_INVALID", "failed to parse manifest list: %v", err)
+			return
+		}
+		utils.Debug(l, span, "storing manifest list with %d manifests", len(ml.Manifests))
+		utils.Debug(l, span, "%s", utils.JsonPrettyPrint(buf))
+		mlID, err := h.mag.StoreManifestListUpload(ctx, req, ml)
+		if err != nil {
+			utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", err, "MANIFEST_INVALID", "failed to store manifest list: %v", err)
+			return
+		} else {
+			utils.Debug(l, span, "successfully stored manifest list with id '%s'", mlID)
+		}
+		utils.Debug(l, span, " successStoredManifestWDig:%s", utils.ShortenDigest(ml.Digest))
+		w.Header().Set("Docker-Content-Digest", ml.Digest)
+		w.WriteHeader(http.StatusCreated)
+		return
 	default:
 		e = fmt.Errorf("unsupported content type: %s (supported: %s)", req.ContentType, strings.Join([]string{dockerManifestMediaType, ociManifestMediaType}, ","))
 		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", e, "MANIFEST_INVALID", "")
