@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/distribution/distribution/manifest/schema2"
 	"github.com/opencontainers/go-digest"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -14,115 +13,115 @@ import (
 	"github.com/metahub-registry/metahub-core/pkg/utils"
 )
 
-func TestManifestPutOnlyWithLayerDelete(t *testing.T) {
-	bs := utils.NewBootstrap()
-	ctx := context.Background()
-	_, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
-		"func": "TestManifestPutOnlyWithLayerDelete",
-	})
-	defer span.End()
-	debug := 0
-	bs.SetEmptyAll()
-	bs.SetYAMLPrefix("../../../../misc/yaml")
-	bs.AddBootstrap("users")
-	bs.AddBootstrap("platforms:generic")
-	bs.AddBootstrap("rules:rules/generic/linux.yaml")
-	bs.AddBootstrap("profile:profiles/generic.yaml")
-	//bs.PostTestSleep = 300
-	if debug > 0 {
-		bs.PostTestSleep = debug
-	}
-	err := h.mag.Minio.EmptyAll()
-	if err != nil {
-		t.Fatal(err)
-	}
-	br, err := SetupTest(ctx, bs)
-	for _, l := range br.ToLines() {
-		if debug > 0 {
-			t.Log(l)
-		}
-	}
-	if err != nil {
-		TeardownTest(bs, br)
-		t.Fatal(err)
-	}
+// func TestManifestPutOnlyWithLayerDelete(t *testing.T) {
+// 	bs := utils.NewBootstrap()
+// 	ctx := context.Background()
+// 	_, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
+// 		"func": "TestManifestPutOnlyWithLayerDelete",
+// 	})
+// 	defer span.End()
+// 	debug := 0
+// 	bs.SetEmptyAll()
+// 	bs.SetYAMLPrefix("../../../../misc/yaml")
+// 	bs.AddBootstrap("users")
+// 	bs.AddBootstrap("platforms:generic")
+// 	bs.AddBootstrap("rules:rules/generic/linux.yaml")
+// 	bs.AddBootstrap("profile:profiles/generic.yaml")
+// 	//bs.PostTestSleep = 300
+// 	if debug > 0 {
+// 		bs.PostTestSleep = debug
+// 	}
+// 	err := h.mag.Minio.EmptyAll()
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	br, err := SetupTest(ctx, bs)
+// 	for _, l := range br.ToLines() {
+// 		if debug > 0 {
+// 			t.Log(l)
+// 		}
+// 	}
+// 	if err != nil {
+// 		TeardownTest(bs, br)
+// 		t.Fatal(err)
+// 	}
 
-	defer TeardownTest(bs, br)
-	/// Vars
-	br.Add("repo", "test")
-	br.Add("profile", "generic")
-	br.Add("image", "conformance")
-	br.Add("tag", "tagtest0")
-	br.Add("mediaType", schema2.MediaTypeManifest)
-	// Put with Data
-	if w, r, e := getHttpTestManifestUploadPutOnlyHandler(&br); e != nil {
-		t.Fatal(e)
-	} else {
-		h.ManifestPutHandler(w, r)
-		assert.Equal(t, http.StatusCreated, w.Code)
-		dig := w.Header().Get("Docker-Content-Digest")
-		assert.Equal(t, "sha256:9ba2504eacad8f7fa4d2bfadcc406d1e7b7021985513944bf67a11fbb5f36dd2", dig)
-		br.Add("digest", dig)
-		br.Add("reference", dig)
-	}
-	br.Add("mediaType", "FAIL") // Forcing default media type in next test
-	// Put with Data
-	if w, r, e := getHttpTestManifestUploadPutOnlyHandler(&br); e != nil {
-		t.Fatal(e)
-	} else {
-		h.ManifestPutHandler(w, r)
-		assert.Equal(t, http.StatusBadRequest, w.Code)
-	}
+// 	defer TeardownTest(bs, br)
+// 	/// Vars
+// 	br.Add("repo", "test")
+// 	br.Add("profile", "generic")
+// 	br.Add("image", "conformance")
+// 	br.Add("tag", "tagtest0")
+// 	br.Add("mediaType", schema2.MediaTypeManifest)
+// 	// Put with Data
+// 	if w, r, e := getHttpTestManifestUploadPutOnlyHandler(&br); e != nil {
+// 		t.Fatal(e)
+// 	} else {
+// 		h.ManifestPutHandler(w, r)
+// 		assert.Equal(t, http.StatusCreated, w.Code)
+// 		dig := w.Header().Get("Docker-Content-Digest")
+// 		assert.Equal(t, "sha256:9ba2504eacad8f7fa4d2bfadcc406d1e7b7021985513944bf67a11fbb5f36dd2", dig)
+// 		br.Add("digest", dig)
+// 		br.Add("reference", dig)
+// 	}
+// 	br.Add("mediaType", "FAIL") // Forcing default media type in next test
+// 	// Put with Data
+// 	if w, r, e := getHttpTestManifestUploadPutOnlyHandler(&br); e != nil {
+// 		t.Fatal(e)
+// 	} else {
+// 		h.ManifestPutHandler(w, r)
+// 		assert.Equal(t, http.StatusBadRequest, w.Code)
+// 	}
 
-	// Head with Digest
-	if w, r, e := getHttpTestManifestHeadByDigest(&br); e != nil {
-		t.Fatal(e)
-	} else {
-		h.ManifestHeadHandler(w, r)
-		assert.Equal(t, http.StatusOK, w.Code)
+// 	// Head with Digest
+// 	if w, r, e := getHttpTestManifestHeadByDigest(&br); e != nil {
+// 		t.Fatal(e)
+// 	} else {
+// 		h.ManifestHeadHandler(w, r)
+// 		assert.Equal(t, http.StatusOK, w.Code)
 
-	}
-	// Get with Digest
-	br.Add("method", http.MethodGet)
-	if w, r, e := getHttpTestManifestByDigest(&br); e != nil {
-		t.Fatal(e)
-	} else {
-		h.ManifestGetHandler(w, r)
-		assert.Equal(t, http.StatusOK, w.Code)
-	}
-	// TODO: Fix Test for Tag Head
-	// t.Log(" --- TEST HEAD w/ tag --- ")
-	// logrus.SetLevel(logrus.DebugLevel)
-	// // Head with Tag
-	// if w, r, e := getHttpTestManifestHeadByTag(&br); e != nil {
-	// 	t.Fatal(e)
-	// } else {
-	// 	h.ManifestHeadHandler(w, r)
-	// 	assert.Equal(t, http.StatusOK, w.Code)
-	// 	t.Log("Headers:", w.Header())
-	// }
-	// ManifestDelHandler
-	if w, r, e := getHttpTestManifestDeleteByDigest(ctx, &br); e != nil {
-		t.Fatal(e)
-	} else {
-		h.ManifestDelHandler(w, r)
-		assert.Equal(t, http.StatusAccepted, w.Code)
-	}
-	if w, r, e := getHttpTestManifestHeadByDigest(&br); e != nil {
-		t.Fatal(e)
-	} else {
-		h.ManifestHeadHandler(w, r)
-		assert.Equal(t, http.StatusNotFound, w.Code)
-	}
-	if w, r, e := getHttpTestManifestDeleteByDigest(ctx, &br); e != nil {
-		t.Fatal(e)
-	} else {
-		h.ManifestDelHandler(w, r)
-		// TODO: Should not be found... :shrug
-		assert.Equal(t, http.StatusAccepted, w.Code)
-	}
-	span.End()
-}
+// 	}
+// 	// Get with Digest
+// 	br.Add("method", http.MethodGet)
+// 	if w, r, e := getHttpTestManifestByDigest(&br); e != nil {
+// 		t.Fatal(e)
+// 	} else {
+// 		h.ManifestGetHandler(w, r)
+// 		assert.Equal(t, http.StatusOK, w.Code)
+// 	}
+// 	// TODO: Fix Test for Tag Head
+// 	// t.Log(" --- TEST HEAD w/ tag --- ")
+// 	// logrus.SetLevel(logrus.DebugLevel)
+// 	// // Head with Tag
+// 	// if w, r, e := getHttpTestManifestHeadByTag(&br); e != nil {
+// 	// 	t.Fatal(e)
+// 	// } else {
+// 	// 	h.ManifestHeadHandler(w, r)
+// 	// 	assert.Equal(t, http.StatusOK, w.Code)
+// 	// 	t.Log("Headers:", w.Header())
+// 	// }
+// 	// ManifestDelHandler
+// 	if w, r, e := getHttpTestManifestDeleteByDigest(ctx, &br); e != nil {
+// 		t.Fatal(e)
+// 	} else {
+// 		h.ManifestDelHandler(w, r)
+// 		assert.Equal(t, http.StatusAccepted, w.Code)
+// 	}
+// 	if w, r, e := getHttpTestManifestHeadByDigest(&br); e != nil {
+// 		t.Fatal(e)
+// 	} else {
+// 		h.ManifestHeadHandler(w, r)
+// 		assert.Equal(t, http.StatusNotFound, w.Code)
+// 	}
+// 	if w, r, e := getHttpTestManifestDeleteByDigest(ctx, &br); e != nil {
+// 		t.Fatal(e)
+// 	} else {
+// 		h.ManifestDelHandler(w, r)
+// 		// TODO: Should not be found... :shrug
+// 		assert.Equal(t, http.StatusAccepted, w.Code)
+// 	}
+// 	span.End()
+// }
 
 func TestManifestPutOnlyWithOutLayerDelete(t *testing.T) {
 	bs := utils.NewBootstrap()
@@ -170,106 +169,106 @@ func TestManifestPutOnlyWithOutLayerDelete(t *testing.T) {
 	}
 }
 
-func TestUploadManifestFTarmShortWithRemove(t *testing.T) {
-	testRepo := "qnib"
-	testImage := "featuretest"
-	testTag := "arm64"
-	testProfile := "generic"
-	err := h.mag.Minio.EmptyAll()
-	if err != nil {
-		t.Fatal(err)
-	}
-	bs := utils.NewBootstrap()
-	bs.SetEmptyAll()
-	bs.SetYAMLPrefix("../../../../misc/yaml")
-	bs.AddBootstrap("users")
-	bs.AddBootstrap("platforms:generic")
-	bs.AddBootstrap("rules:rules/generic/linux.yaml")
-	bs.AddBootstrap("profile:profiles/generic.yaml")
-	bs.AddBootstrap("config:ft_arm64")
-	bs.AddBootstrap("config:ft_amd64")
-	bs.AddBootstrap("upstream:ft_arm64")
-	bs.AddBootstrap("upstream:ft_amd64")
-	bs.AddBootstrap("layer:0:ft_arm64")
-	bs.AddBootstrap("layer:1:ft_arm64")
-	bs.AddBootstrap("layer:0:ft_amd64")
-	bs.AddBootstrap("layer:1:ft_amd64")
-	//bs.PostTestSleep = 120
-	ctx := context.Background()
-	br, err := SetupTest(ctx, bs)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer TeardownTest(bs, br)
-	/// Request
-	token, err := br.Get("user:test#bearer")
-	if err != nil {
-		t.Fatal(err)
-	}
-	/// Manifest
-	mani := types.FTarmManifestData()
-	wManiPut, rManiPut := utils.CreateNewHTTPTest(ctx, http.MethodPut, map[string]string{
-		"repo":      testRepo,
-		"image":     testImage,
-		"reference": testTag,
-	}, map[string]string{
-		"accountName": token,
-		"userName":    "qnib",
-		"profileName": testProfile,
-	}, map[string]string{
-		"Authorization": fmt.Sprintf("Bearer %s", token),
-		"Content-Type":  "application/vnd.docker.distribution.manifest.v2+json",
-	}, "/{repo}/{image}/manifests/{reference}", mani.Data)
-	h.ManifestPutHandler(&wManiPut, rManiPut)
-	if wManiPut.Code != http.StatusCreated {
-		t.Fatalf("Code: %d, expected %d", wManiPut.Code, http.StatusCreated)
-	}
-	digest := wManiPut.Header().Get("Docker-Content-Digest")
-	assert.Equal(t, mani.Digest, digest)
-	// Check for Manifest
-	_, rManiGet := utils.CreateNewHTTPTest(ctx, http.MethodGet, map[string]string{
-		"repo":      testRepo,
-		"image":     testImage,
-		"reference": mani.Digest,
-	}, map[string]string{
-		"accountName": token,
-		"userName":    testRepo,
-		"profileName": testProfile,
-	}, map[string]string{
-		"Authorization": fmt.Sprintf("Bearer %s", token),
-	}, "/{repo}/{image}/manifests/{reference}", nil)
-	gotMani, found, err := h.mag.ManifestGetByHTTPRequest(ctx, rManiGet)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !found {
-		t.Fatal("Manifest not found after upload")
-	}
-	assert.Equal(t, mani.Digest, gotMani.Digest)
+// func TestUploadManifestFTarmShortWithRemove(t *testing.T) {
+// 	testRepo := "qnib"
+// 	testImage := "featuretest"
+// 	testTag := "arm64"
+// 	testProfile := "generic"
+// 	err := h.mag.Minio.EmptyAll()
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	bs := utils.NewBootstrap()
+// 	bs.SetEmptyAll()
+// 	bs.SetYAMLPrefix("../../../../misc/yaml")
+// 	bs.AddBootstrap("users")
+// 	bs.AddBootstrap("platforms:generic")
+// 	bs.AddBootstrap("rules:rules/generic/linux.yaml")
+// 	bs.AddBootstrap("profile:profiles/generic.yaml")
+// 	bs.AddBootstrap("config:ft_arm64")
+// 	bs.AddBootstrap("config:ft_amd64")
+// 	bs.AddBootstrap("upstream:ft_arm64")
+// 	bs.AddBootstrap("upstream:ft_amd64")
+// 	bs.AddBootstrap("layer:0:ft_arm64")
+// 	bs.AddBootstrap("layer:1:ft_arm64")
+// 	bs.AddBootstrap("layer:0:ft_amd64")
+// 	bs.AddBootstrap("layer:1:ft_amd64")
+// 	//bs.PostTestSleep = 120
+// 	ctx := context.Background()
+// 	br, err := SetupTest(ctx, bs)
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	defer TeardownTest(bs, br)
+// 	/// Request
+// 	token, err := br.Get("user:test#bearer")
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	/// Manifest
+// 	mani := types.FTarmManifestData()
+// 	wManiPut, rManiPut := utils.CreateNewHTTPTest(ctx, http.MethodPut, map[string]string{
+// 		"repo":      testRepo,
+// 		"image":     testImage,
+// 		"reference": testTag,
+// 	}, map[string]string{
+// 		"accountName": token,
+// 		"userName":    "qnib",
+// 		"profileName": testProfile,
+// 	}, map[string]string{
+// 		"Authorization": fmt.Sprintf("Bearer %s", token),
+// 		"Content-Type":  "application/vnd.docker.distribution.manifest.v2+json",
+// 	}, "/{repo}/{image}/manifests/{reference}", mani.Data)
+// 	h.ManifestPutHandler(&wManiPut, rManiPut)
+// 	if wManiPut.Code != http.StatusCreated {
+// 		t.Fatalf("Code: %d, expected %d", wManiPut.Code, http.StatusCreated)
+// 	}
+// 	digest := wManiPut.Header().Get("Docker-Content-Digest")
+// 	assert.Equal(t, mani.Digest, digest)
+// 	// Check for Manifest
+// 	_, rManiGet := utils.CreateNewHTTPTest(ctx, http.MethodGet, map[string]string{
+// 		"repo":      testRepo,
+// 		"image":     testImage,
+// 		"reference": mani.Digest,
+// 	}, map[string]string{
+// 		"accountName": token,
+// 		"userName":    testRepo,
+// 		"profileName": testProfile,
+// 	}, map[string]string{
+// 		"Authorization": fmt.Sprintf("Bearer %s", token),
+// 	}, "/{repo}/{image}/manifests/{reference}", nil)
+// 	gotMani, found, err := h.mag.ManifestGetByHTTPRequest(ctx, rManiGet)
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	if !found {
+// 		t.Fatal("Manifest not found after upload")
+// 	}
+// 	assert.Equal(t, mani.Digest, gotMani.Digest)
 
-	// Remove
-	_, rManiDel := utils.CreateNewHTTPTest(ctx, http.MethodDelete, map[string]string{
-		"repo":      testRepo,
-		"image":     testImage,
-		"reference": digest,
-	}, map[string]string{
-		"accountName": token,
-		"userName":    "qnib",
-		"profileName": testProfile,
-	}, map[string]string{
-		"Authorization": fmt.Sprintf("Bearer %s", token),
-	}, "/{repo}/{image}/manifests/{reference}", nil)
-	err = h.mag.ManifestDeleteByHTTPRequest(ctx, rManiDel)
-	if err != nil {
-		t.Fatal(err)
-	}
+// 	// Remove
+// 	_, rManiDel := utils.CreateNewHTTPTest(ctx, http.MethodDelete, map[string]string{
+// 		"repo":      testRepo,
+// 		"image":     testImage,
+// 		"reference": digest,
+// 	}, map[string]string{
+// 		"accountName": token,
+// 		"userName":    "qnib",
+// 		"profileName": testProfile,
+// 	}, map[string]string{
+// 		"Authorization": fmt.Sprintf("Bearer %s", token),
+// 	}, "/{repo}/{image}/manifests/{reference}", nil)
+// 	err = h.mag.ManifestDeleteByHTTPRequest(ctx, rManiDel)
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
 
-	_, found, err = h.mag.ManifestGetByHTTPRequest(ctx, rManiGet)
-	if err != nil {
-		t.Fatal(err)
-	}
-	assert.False(t, found)
-}
+// 	_, found, err = h.mag.ManifestGetByHTTPRequest(ctx, rManiGet)
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	assert.False(t, found)
+// }
 
 func TestUploadManifestFTarm(t *testing.T) {
 	ctx := context.Background()

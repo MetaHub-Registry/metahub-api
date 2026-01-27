@@ -5,22 +5,22 @@ meta {
 }
 
 post {
-  url: {{registry}}/v2/{{repo}}/blobs/uploads/?digest={{alpineLayerDigest}}
+  url: {{registry}}/v2/{{repo}}/blobs/uploads/?digest={{alpineArm64LayerDigest}}
   body: file
   auth: inherit
 }
 
 params:query {
-  digest: {{alpineLayerDigest}}
+  digest: {{alpineArm64LayerDigest}}
 }
 
 headers {
   Content-Type: application/octet-stream
-  Content-Length: {{alpineLayerSize}}
+  Content-Length: {{alpineArm64LayerSize}}
 }
 
 body:file {
-  file: @file(/Users/christian.kniep/temp/metahub/oci/alpine/alpine.tar) @contentType(application/x-tar)
+  file: @file(alpine/singlePostArm64/data/alpine-arm64.tar) @contentType(application/x-tar)
 }
 
 script:post-response {
@@ -32,7 +32,7 @@ script:post-response {
 
 settings {
   encodeUrl: true
-  timeout: 5000
+  timeout: 10000
   followRedirects: true
   maxRedirects: 5
 }

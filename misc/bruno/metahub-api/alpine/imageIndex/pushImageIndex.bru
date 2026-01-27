@@ -1,0 +1,54 @@
+meta {
+  name: pushImageIndex
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{registry}}/v2/{{repo}}/manifests/{{tag}}
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/vnd.oci.image.index.v1+json
+}
+
+body:json {
+  {
+    "schemaVersion": 2,
+    "mediaType": "application/vnd.oci.image.index.v1+json",
+    "manifests": [
+      {
+        "mediaType": "application/vnd.oci.image.manifest.v1+json",
+        "size": {{alpineAmd64ManifestLength}},
+        "digest": "{{alpineAmd64ManifestDigest}}",
+        "platform": {
+          "architecture": "amd64",
+          "os": "linux"
+        }
+      },{
+        "mediaType": "application/vnd.oci.image.manifest.v1+json",
+        "size": {{alpineArm64ManifestLength}},
+        "digest": "{{alpineArm64ManifestDigest}}",
+        "platform": {
+          "architecture": "arm64",
+          "os": "linux"
+        }
+      }
+    ],
+    "annotations": {
+      "com.example.key1": "value1",
+      "com.example.key2": "value2"
+    }
+  }
+}
+
+body:file {
+  file: @file(alpine/singlePost/image_index.json) @contentType(application/vnd.oci.image.index.v1+json)
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

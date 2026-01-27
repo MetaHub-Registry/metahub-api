@@ -106,6 +106,7 @@ require (
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
 	github.com/regclient/regclient v0.4.5 // indirect
 	github.com/rs/xid v1.4.0 // indirect
+	github.com/scylladb/go-set v1.0.2 // indirect
 	github.com/shirou/gopsutil/v3 v3.23.12 // indirect
 	github.com/shoenig/go-m1cpu v0.1.6 // indirect
 	github.com/spf13/afero v1.8.2 // indirect

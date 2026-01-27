@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/http/httputil"
 
 	"github.com/opencontainers/go-digest"
 	"github.com/pkg/errors"
@@ -228,6 +229,18 @@ func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request)
 		helper.WriteOCIErrror(w, http.StatusBadRequest, e)
 		return
 	}
+	dumpedReq, _ := httputil.DumpRequest(r, false)
+	utils.Debug(l, span, "Request Dump:\n%s", string(dumpedReq))
+	buf, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Fatal("request", err)
+	}
+	dig := digest.FromBytes(buf)
+	utils.Debug(l, span, "Digest from body: %s / len:%d (req:%d)", utils.ShortenDigest(dig.String()), len(buf), req.Length)
+	if req.Length != len(buf) {
+		utils.Warn(l, span, "Content-Length mismatch: Header:%d / Body:%d", req.Length, len(buf))
+		req.Length = len(buf)
+	}
 	bu, found, err := h.mag.Database.BlobUploadGetOCIByUUID(ctx, req.UUID)
 	if err != nil || !found {
 		msg := BlobUploadFetchErr
@@ -241,13 +254,7 @@ func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request)
 	}
 	utils.Debug(l, span, "req.Length:%d", req.Length)
 	bu.RangeStop = bu.RangeStart + int64(req.Length) - 1
-	buf, err := io.ReadAll(r.Body)
-	if err != nil {
-		log.Fatal("request", err)
-	}
-	dig := digest.FromBytes(buf)
 	bu.Digest = dig.String()
-
 	// Was the chunk already uploaded? (digest match another BlobChunk?)
 	chunks, err := h.mag.Database.UploadChunkGetByBU(ctx, bu)
 	if err != nil {
@@ -265,7 +272,6 @@ func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request)
 		}
 		return
 	}
-	_ = chunks
 	// Fetch all chunks already uploaded
 	chunks, err = h.mag.Database.UploadChunkGetByUUID(ctx, bu.ID)
 	if err != nil {
@@ -277,6 +283,7 @@ func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request)
 		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 		return
 	}
+	var expectedStart int64
 	switch {
 	case len(chunks) == 0 && req.RangeStartByte != -1:
 		// We expect the first chunk to start at offset 0
@@ -289,7 +296,7 @@ func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request)
 	case len(chunks) > 0:
 		// We expect the next chunk to start at the end of the last chunk +1
 		lastChunk := chunks[len(chunks)-1]
-		expectedStart := lastChunk.StartByte + lastChunk.Bytes + 1
+		expectedStart = lastChunk.StartByte + lastChunk.Bytes + 1
 		utils.Debug(l, span, "Expected Start: %d", expectedStart)
 		if req.RangeStartByte != expectedStart {
 			msg := fmt.Sprintf("Range should start at %d", expectedStart)
@@ -336,10 +343,19 @@ func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request)
 		attribute.String(ContentLength, fmt.Sprintf("%d", len(bu.Data))),
 	))
 	span.SetStatus(http.StatusAccepted, "Accepted")
+	cntLen := fmt.Sprintf("%d", len(bu.Data))
+	utils.Debug(l, span, "RangeStart:%d / RangeStop:%d", bu.RangeStart, bu.RangeStop)
+	var cntRange string
+	if expectedStart > 0 {
+		cntRange = fmt.Sprintf("0-%d", bu.RangeStop+expectedStart)
+	} else {
+		cntRange = fmt.Sprintf("%d-%d", bu.RangeStart, bu.RangeStop)
+	}
+	utils.Debug(l, span, "Responding with Location:%s / Content-Length:%s / Range:%s", bu.Location, cntLen, cntRange)
 	bu.WriteResponse(w, map[string]string{
 		Location:      bu.Location,
-		ContentLength: fmt.Sprintf("%d", len(bu.Data)),
-		Range:         req.Range,
+		ContentLength: cntLen,
+		Range:         cntRange,
 	}, http.StatusAccepted)
 }
 
@@ -387,9 +403,10 @@ func (h Handlers) BlobUploadPostHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	bu.Digest = req.Digest
-	tracing.SpanDebug(span, "request.length:%d", req.Length)
+	utils.Debug(l, span, "request.length:%d", req.Length)
 	if req.Length > 0 {
 		// Successful completion of the request MUST return a 201 Created and MUST include the following header:
+		utils.Debug(l, span, "Read body")
 		buf, err := io.ReadAll(r.Body)
 		if err != nil {
 			err = errors.Wrap(err, "while io.ReadAll(Body)")
@@ -398,6 +415,7 @@ func (h Handlers) BlobUploadPostHandler(w http.ResponseWriter, r *http.Request) 
 		}
 		dig := digest.FromBytes(buf)
 		bu.Digest = dig.String()
+		utils.Debug(l, span, "Digest from body: %s", utils.ShortenDigest(dig.String()))
 		/// Create New Chunk
 		chunk, err := h.mag.Database.UploadChunkCreate(ctx, &bu, 0, int64(req.Length))
 		if err != nil {
