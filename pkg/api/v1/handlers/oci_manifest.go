@@ -500,17 +500,21 @@ func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 			utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", err, "MANIFEST_INVALID", "failed to parse manifest list: %v", err)
 			return
 		}
+		utils.Debug(l, span, "ManifestList has %d annotations", len(ml.Annotations))
 		utils.Debug(l, span, "storing manifest list with %d manifests", len(ml.Manifests))
 		utils.Debug(l, span, "%s", utils.JsonPrettyPrint(buf))
-		mlID, err := h.mag.StoreManifestListUpload(ctx, req, ml)
+		err = h.mag.StoreManifestListUpload(ctx, req, &ml)
 		if err != nil {
 			utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", err, "MANIFEST_INVALID", "failed to store manifest list: %v", err)
 			return
 		} else {
-			utils.Debug(l, span, "successfully stored manifest list with id '%s'", mlID)
+			utils.Debug(l, span, "successfully stored manifest list with id '%d'", ml.ID)
 		}
-		utils.Debug(l, span, " successStoredManifestWDig:%s", utils.ShortenDigest(ml.Digest))
+		utils.Debug(l, span, " successStoredManifestWDig:%s", ml.Digest)
 		w.Header().Set("Docker-Content-Digest", ml.Digest)
+		if ml.Subject != nil {
+			w.Header().Set("OCI-Subject", string(ml.Subject.Digest))
+		}
 		w.WriteHeader(http.StatusCreated)
 		return
 	default:

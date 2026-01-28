@@ -1,0 +1,21 @@
+meta {
+  name: getReffers
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{registry}}/v2/{{repo}}/referrers/{{digest}}
+  body: none
+  auth: inherit
+}
+
+vars:pre-request {
+  digest: sha256:f17767b0527a1ef3c535b4b709b9d55edc5cbc3dab3fca6b7c5dab69b990ded0
+  repo: oci/confirmance
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
