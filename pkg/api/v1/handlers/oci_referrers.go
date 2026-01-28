@@ -31,13 +31,16 @@ func (h Handlers) ReferrersGetHandler(w http.ResponseWriter, r *http.Request) {
 		msg += fmt.Sprintf("%s)", req.Tag)
 	}
 	utils.Debug(l, span, "%s", msg)
-	_ = ctx
-	_ = l
-
-	// Not Found
-	msg = "could not find blob"
-	det := helper.NewDetailFromReq(req)
-	e := helper.NewErrPayload("NAME_UNKNOWN", msg, det)
-	span.SetStatus(http.StatusNotFound, e.Message)
-	helper.WriteOCIErrror(w, http.StatusNotFound, e)
+	refs, err := h.mag.Database.ReferrersGetBySubjectDigest(ctx, req.Digest)
+	if err != nil {
+		msg = fmt.Sprintf("failed to fetch referrers: %v", err)
+		utils.ErrorHandler(l, span, err, "failed to fetch referrers")
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
+		return
+	}
+	refs.WriteWWW(w)
+	w.WriteHeader(http.StatusOK)
+	return
 }

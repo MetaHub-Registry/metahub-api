@@ -5,32 +5,13 @@ meta {
 }
 
 head {
-  url: {{registry}}/v2/{{repo}}/manifests/{{alpineAmd64ManifestDigest}}
-  body: json
+  url: {{registry}}/v2/{{repo}}/manifests/{{alpineArm64ManifestDigest}}
+  body: none
   auth: inherit
 }
 
 headers {
   Content-Type: application/vnd.oci.image.manifest.v1+json
-}
-
-body:json {
-  {
-    "schemaVersion": 2,
-    "mediaType": "application/vnd.oci.image.manifest.v1+json",
-    "config": {
-      "mediaType": "application/vnd.oci.image.config.v1+json",
-      "digest": "{{simpleArm64ConfigDigest}}",
-      "size": {{simpleArm64ConfigSize}}
-    },
-    "layers": [
-      {
-        "mediaType": "application/vnd.oci.image.layer.v1.tar",
-        "digest": "{{alpineArm64LayerDigest}}",
-        "size": {{alpineArm64LayerSize}}
-      }
-    ]
-  }
 }
 
 script:post-response {

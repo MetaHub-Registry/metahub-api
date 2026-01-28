@@ -136,19 +136,20 @@ func TestManifestPutOnlyWithOutLayerDelete(t *testing.T) {
 	if debug > 0 {
 		bs.PostTestSleep = debug
 	}
+
 	err := h.mag.Minio.EmptyAll()
 	if err != nil {
 		t.Fatal(err)
 	}
 	br, err := SetupTest(ctx, bs)
+	if err != nil {
+		TeardownTest(bs, br)
+		t.Fatal(err)
+	}
 	for _, l := range br.ToLines() {
 		if debug > 0 {
 			t.Log(l)
 		}
-	}
-	if err != nil {
-		TeardownTest(bs, br)
-		t.Fatal(err)
 	}
 
 	defer TeardownTest(bs, br)
