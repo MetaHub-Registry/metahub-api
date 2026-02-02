@@ -3,12 +3,15 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
+	"github.com/metahub-registry/metahub-core/pkg/types"
 	"github.com/metahub-registry/metahub-core/pkg/utils"
 )
 
@@ -48,8 +51,15 @@ func TestReferrersGetHandlerNotFound(t *testing.T) {
 	r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
 	r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	h.ReferrersGetHandler(w, r)
-	assert.Equal(t, http.StatusNotFound, w.Code)
-
+	assert.Equal(t, http.StatusOK, w.Code)
+	if buf, err := io.ReadAll(w.Body); err != nil {
+		log.Fatal("request", err)
+	} else if ref, err := types.RefferrersResponseFromBytes(buf); err != nil {
+		t.Log(string(buf))
+		t.Fatal(err)
+	} else {
+		assert.Equal(t, 0, len(ref.Manifests))
+	}
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest(http.MethodHead, "/{repo}/{image}/referrers/{reference}", nil)
 	rctx = chi.NewRouteContext()
@@ -59,7 +69,15 @@ func TestReferrersGetHandlerNotFound(t *testing.T) {
 	r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
 	r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	h.ReferrersGetHandler(w, r)
-	assert.Equal(t, http.StatusNotFound, w.Code)
+	assert.Equal(t, http.StatusOK, w.Code)
+	if buf, err := io.ReadAll(w.Body); err != nil {
+		log.Fatal("request", err)
+	} else if ref, err := types.RefferrersResponseFromBytes(buf); err != nil {
+		t.Log(string(buf))
+		t.Fatal(err)
+	} else {
+		assert.Equal(t, 0, len(ref.Manifests))
+	}
 
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest(http.MethodHead, "/{repo}/{repo2}/{image}/referrers/{reference}", nil)
@@ -71,7 +89,15 @@ func TestReferrersGetHandlerNotFound(t *testing.T) {
 	r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
 	r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	h.ReferrersGetHandler(w, r)
-	assert.Equal(t, http.StatusNotFound, w.Code)
+	assert.Equal(t, http.StatusOK, w.Code)
+	if buf, err := io.ReadAll(w.Body); err != nil {
+		log.Fatal("request", err)
+	} else if ref, err := types.RefferrersResponseFromBytes(buf); err != nil {
+		t.Log(string(buf))
+		t.Fatal(err)
+	} else {
+		assert.Equal(t, 0, len(ref.Manifests))
+	}
 
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest(http.MethodHead, "/{repo}/{repo2}/{repo3}/{image}/referrers/{reference}", nil)
@@ -84,7 +110,16 @@ func TestReferrersGetHandlerNotFound(t *testing.T) {
 	r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
 	r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	h.ReferrersGetHandler(w, r)
-	assert.Equal(t, http.StatusNotFound, w.Code)
+	assert.Equal(t, http.StatusOK, w.Code)
+	if buf, err := io.ReadAll(w.Body); err != nil {
+		log.Fatal("request", err)
+	} else if ref, err := types.RefferrersResponseFromBytes(buf); err != nil {
+		t.Log(string(buf))
+		t.Fatal(err)
+	} else {
+		assert.Equal(t, 0, len(ref.Manifests))
+	}
+
 }
 
 // func TestReferrersGetHandlerHead(t *testing.T) {

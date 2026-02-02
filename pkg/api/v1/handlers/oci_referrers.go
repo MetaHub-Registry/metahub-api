@@ -42,5 +42,4 @@ func (h Handlers) ReferrersGetHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	refs.WriteWWW(w)
 	w.WriteHeader(http.StatusOK)
-	return
 }

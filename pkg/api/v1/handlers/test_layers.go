@@ -91,38 +91,38 @@ func getHttpTestLayer0UploadPatchHandler(br *utils.BootstrapResult) (w *httptest
 }
 
 // Blob Delete
-func getHttpTestLayer0UploadGetHandler(br *utils.BootstrapResult) (w *httptest.ResponseRecorder, r *http.Request, err error) {
-	var testRepo, testProfile, testImage, testRef string
-	if testRepo, err = br.Get("repo"); err != nil {
-		return w, r, err
-	}
-	if testProfile, err = br.Get("profile"); err != nil {
-		return w, r, err
-	}
-	if testImage, err = br.Get("image"); err != nil {
-		return w, r, err
-	}
-	if testRef, err = br.Get("reference"); err != nil {
-		return w, r, err
-	}
-	/// Request
-	token, err := br.Get("user:test#bearer")
-	if err != nil {
-		return w, r, err
-	} //
-	w = httptest.NewRecorder()
-	r = httptest.NewRequest(http.MethodGet, "/{repo}/{image}/blobs/uploads/{reference}", nil)
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("repo", testRepo)
-	rctx.URLParams.Add("image", testImage)
-	rctx.URLParams.Add("reference", testRef)
-	r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
-	gCtx.Set(r, "accountName", token)
-	gCtx.Set(r, "userName", testRepo)
-	gCtx.Set(r, "profileName", testProfile)
-	r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-	return w, r, nil
-}
+// func getHttpTestLayer0UploadGetHandler(br *utils.BootstrapResult) (w *httptest.ResponseRecorder, r *http.Request, err error) {
+// 	var testRepo, testProfile, testImage, testRef string
+// 	if testRepo, err = br.Get("repo"); err != nil {
+// 		return w, r, err
+// 	}
+// 	if testProfile, err = br.Get("profile"); err != nil {
+// 		return w, r, err
+// 	}
+// 	if testImage, err = br.Get("image"); err != nil {
+// 		return w, r, err
+// 	}
+// 	if testRef, err = br.Get("reference"); err != nil {
+// 		return w, r, err
+// 	}
+// 	/// Request
+// 	token, err := br.Get("user:test#bearer")
+// 	if err != nil {
+// 		return w, r, err
+// 	} //
+// 	w = httptest.NewRecorder()
+// 	r = httptest.NewRequest(http.MethodGet, "/{repo}/{image}/blobs/uploads/{reference}", nil)
+// 	rctx := chi.NewRouteContext()
+// 	rctx.URLParams.Add("repo", testRepo)
+// 	rctx.URLParams.Add("image", testImage)
+// 	rctx.URLParams.Add("reference", testRef)
+// 	r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
+// 	gCtx.Set(r, "accountName", token)
+// 	gCtx.Set(r, "userName", testRepo)
+// 	gCtx.Set(r, "profileName", testProfile)
+// 	r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+// 	return w, r, nil
+// }
 
 // Pull.Setup Populate registry with test blob
 func getHttpTestLayer0UploadPostHandler(br *utils.BootstrapResult) (w *httptest.ResponseRecorder, r *http.Request, err error) {
