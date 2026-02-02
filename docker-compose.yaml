@@ -32,7 +32,7 @@ services:
       - api-internal
       - mh-data
     working_dir: /Users/christian.kniep/go/src/github.com/metahub-registry/metahub-api
-    command: ["sleep", "inf"]
+    #command: ["sleep", "inf"]
   dind:
     build: misc/docker/dind/
     privileged: true

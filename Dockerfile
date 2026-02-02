@@ -23,7 +23,10 @@ RUN apk add --no-cache wget \
 
 
 FROM golang:1.24-alpine3.21  AS dev
-RUN apk add --no-cache bash curl gcc git musl-dev openssh-client vim wget
+RUN apk add --no-cache bash curl gcc git musl-dev openssh-client vim wget supervisor
+COPY ./misc/docker/dev/supervisor.conf /etc/supervisord.conf
+COPY ./misc/docker/dev/start.sh /usr/local/bin/start.sh
+RUN chmod +x /usr/local/bin/start.sh
 RUN mkdir -p -m 0700 ~/.ssh && ssh-keyscan gitlab.com >> ~/.ssh/known_hosts
 WORKDIR /go/metahub-api
 # COPY . ./
@@ -39,6 +42,7 @@ WORKDIR /go/metahub-api
 ENV CGO_ENABLED=1 GOOS=linux
 ENV CFG_PATH=./misc/config/compose-config.yaml
 COPY ./misc/docker/dev/bash_history /root/.bash_history
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf","-n"]
 
 FROM alpine:3.21 AS prod
 ARG USERDB_FILE=./metahub.db
