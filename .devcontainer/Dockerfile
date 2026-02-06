@@ -1,6 +1,6 @@
 FROM sonarsource/sonar-scanner-cli:12.0.0.3214_8.0.1 AS sonar
 
-FROM mcr.microsoft.com/devcontainers/go:1-1.24-bullseye
+FROM mcr.microsoft.com/devcontainers/go:1.25-bookworm
 ARG TARGETPLATFORM
 COPY --from=sonar /opt/sonar-scanner/lib/sonar-scanner-cli-8.0.1.6346.jar /usr/local/lib/
 COPY --from=sonar /opt/sonar-scanner/bin/sonar-scanner /usr/local/bin/
@@ -8,12 +8,13 @@ COPY --from=sonar /opt/sonar-scanner/bin/sonar-scanner /usr/local/bin/
 RUN apt update \
  && apt install -y \
     awscli \
-    openjdk-11-jre \
+    openjdk-17-jre \
     vim \
     python3-pip \
+    ca-certificates curl gnupg  \
  # CleanUp
  && apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/*
-RUN pip install --upgrade bump2version
+RUN pip install --upgrade bump2version --break-system-packages
 RUN go install github.com/t-yuki/gocover-cobertura@latest \
  && go install gitlab.com/fgmarand/gocoverstats@latest
 RUN echo "source ~/.alias" >> /root/.bashrc
@@ -45,7 +46,7 @@ RUN <<eot
       chmod +x /usr/local/bin/mc
    fi
 eot
-RUN apt install -y neo4j-client
+#RUN apt install -y neo4j-client
 #RUN pipx install sqlit-tui
 COPY homelab-rootCA.pem /usr/local/share/ca-certificates/homelab-rootCA.crt
 RUN update-ca-certificates
