@@ -49,7 +49,12 @@ else
 fi
 go mod edit -replace github.com/metahub-registry/metahub-core=/go/metahub-api/exp/metalib  
 
-NEW_IMAGE=metahub-api-test:${GO_PIPELINE_LABEL}
+NEW_IMAGE=registry.github.com/metahub-registry/metahub-api:${GO_PIPELINE_LABEL}
 docker build -f Dockerfile.legacy -t ${NEW_IMAGE} .
 docker save -o ${TOPDIR}/metahub-api.tar ${NEW_IMAGE}
+docker login registry.gitlab.com
+echo "${GITLAB_REGISTRY_TOKEN}" | docker login registry.gitlab.com \
+  -u qnib \
+  --password-stdin
+docker push ${NEW_IMAGE}
 docker rmi ${NEW_IMAGE}
