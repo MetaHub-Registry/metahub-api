@@ -49,7 +49,13 @@ else
 fi
 go mod edit -replace github.com/metahub-registry/metahub-core=/go/metahub-api/exp/metalib  
 
-NEW_IMAGE=registry.github.com/metahub-registry/metahub-api:$(date +%F)-${GO_PIPELINE_LABEL}
+if [[ ! -z ${GO_PIPELINE_GROUP_NAME} ]];then
+   TAG="${GO_PIPELINE_GROUP_NAME}.$(date +%F)-${GO_PIPELINE_LABEL}"
+else 
+   TAG="$(date +%F)-${GO_PIPELINE_LABEL}"
+fi
+
+NEW_IMAGE=registry.github.com/metahub-registry/metahub-api:${TAG}
 docker build -f Dockerfile.legacy -t ${NEW_IMAGE} .
 docker save -o ${TOPDIR}/metahub-api.tar ${NEW_IMAGE}
 echo "${GITLAB_REGISTRY_TOKEN}" | docker login registry.gitlab.com \
