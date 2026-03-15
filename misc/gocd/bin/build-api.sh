@@ -12,7 +12,7 @@ fi
 source ${FUNC_SRC}
 dumpEnv
 
-
+echo "TOKEN length: ${GITLAB_REGISTRY_TOKEN}"|wc -c 
 #if [[ -f /run/secrets/gocd-token ]];then
 #    export GOCD_TOKEN=$(cat /run/secrets/gocd-token)
 #else 
@@ -53,7 +53,7 @@ NEW_IMAGE=registry.github.com/metahub-registry/metahub-api:${GO_PIPELINE_LABEL}
 docker build -f Dockerfile.legacy -t ${NEW_IMAGE} .
 docker save -o ${TOPDIR}/metahub-api.tar ${NEW_IMAGE}
 docker login registry.gitlab.com
-echo "${GITLAB_REGISTRY_TOKEN}"|wc -c 
+
 echo "${GITLAB_REGISTRY_TOKEN}" | docker login registry.gitlab.com \
   -u qnib \
   --password-stdin
