@@ -12,10 +12,6 @@ fi
 source ${FUNC_SRC}
 dumpEnv
 
-echo "#### ENV"
-env |sort -u
-echo "#####"
-
 echo "TOKEN length: $(echo ${GITLAB_REGISTRY_TOKEN}|wc -c)"
 #if [[ -f /run/secrets/gocd-token ]];then
 #    export GOCD_TOKEN=$(cat /run/secrets/gocd-token)
@@ -68,7 +64,7 @@ else
       --password-stdin
 fi
 
-NEW_IMAGE=${}/qnib-golang/metahub-api:${TAG}
+NEW_IMAGE=${REGISTRY}/qnib-golang/metahub-api:${TAG}
 docker build -f Dockerfile.legacy -t ${NEW_IMAGE} .
 docker save -o ${TOPDIR}/metahub-api.tar ${NEW_IMAGE}
 docker push ${NEW_IMAGE}
