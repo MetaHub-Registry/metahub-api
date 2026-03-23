@@ -55,7 +55,7 @@ else
    TAG="$(date +%F)-${GO_PIPELINE_LABEL}"
 fi
 
-if [[ !-z ${ZOT_REGISTRY_URL} ]];then
+if [[ ! -z "${ZOT_REGISTRY_URL}" ]];then
    REGISTRY=${ZOT_REGISTRY_URL}
 else 
    REGISTRY=registry.gitlab.com
