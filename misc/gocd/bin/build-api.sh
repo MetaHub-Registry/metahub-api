@@ -63,8 +63,6 @@ else
       --password-stdin
 fi
 
-sleep 300
-
 NEW_IMAGE=${REGISTRY}/qnib-golang/metahub-api:${TAG}
 docker build -f Dockerfile.legacy -t ${NEW_IMAGE} .
 docker save -o ${TOPDIR}/metahub-api.tar ${NEW_IMAGE}
