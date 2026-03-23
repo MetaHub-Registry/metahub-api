@@ -54,7 +54,6 @@ if [[ ! -z ${GO_PIPELINE_GROUP_NAME} ]];then
 else 
    TAG="$(date +%F)-${GO_PIPELINE_LABEL}"
 fi
-ZOT_REGISTRY_URL=zot.example.com
 if [[ ! -z "${ZOT_REGISTRY_URL}" ]];then
    REGISTRY=${ZOT_REGISTRY_URL}
 else 
@@ -63,6 +62,8 @@ else
       -u qnib \
       --password-stdin
 fi
+
+sleep 300
 
 NEW_IMAGE=${REGISTRY}/qnib-golang/metahub-api:${TAG}
 docker build -f Dockerfile.legacy -t ${NEW_IMAGE} .
