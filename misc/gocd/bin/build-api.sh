@@ -55,11 +55,17 @@ else
    TAG="$(date +%F)-${GO_PIPELINE_LABEL}"
 fi
 
-NEW_IMAGE=registry.github.com/metahub-registry/metahub-api:${TAG}
+if [[ !-z ${ZOT_REGISTRY_URL} ]];then
+   REGISTRY=${ZOT_REGISTRY_URL}
+else 
+   REGISTRY=registry.gitlab.com
+   echo "${GITLAB_REGISTRY_TOKEN}" | docker login registry.gitlab.com \
+      -u qnib \
+      --password-stdin
+fi
+
+NEW_IMAGE=${}/qnib-golang/metahub-api:${TAG}
 docker build -f Dockerfile.legacy -t ${NEW_IMAGE} .
 docker save -o ${TOPDIR}/metahub-api.tar ${NEW_IMAGE}
-echo "${GITLAB_REGISTRY_TOKEN}" | docker login registry.gitlab.com \
-  -u qnib \
-  --password-stdin
 docker push ${NEW_IMAGE}
 docker rmi ${NEW_IMAGE}
