@@ -12,6 +12,10 @@ fi
 source ${FUNC_SRC}
 dumpEnv
 
+echo "#### ENV"
+env |sort -u
+echo "#####"
+
 echo "TOKEN length: $(echo ${GITLAB_REGISTRY_TOKEN}|wc -c)"
 #if [[ -f /run/secrets/gocd-token ]];then
 #    export GOCD_TOKEN=$(cat /run/secrets/gocd-token)
