@@ -49,4 +49,19 @@ func TestOIDCConfigFromViper_AllSet(t *testing.T) {
 	assert.Equal(t, "my-client", cfg.ClientID)
 	assert.Equal(t, "my-secret", cfg.ClientSecret)
 	assert.Equal(t, "https://app.example.com/callback", cfg.RedirectURI)
+	assert.Empty(t, cfg.AuthentikAPIURL, "authentik_api_url should be empty when not set")
+}
+
+func TestOIDCConfigFromViper_WithAuthentikAPIURL(t *testing.T) {
+	viper.Reset()
+	defer viper.Reset()
+	viper.Set("oidc.issuer", "https://auth.example.com")
+	viper.Set("oidc.clientid", "my-client")
+	viper.Set("oidc.secret", "my-secret")
+	viper.Set("oidc.redirect_uri", "https://app.example.com/callback")
+	viper.Set("oidc.authentik_api_url", "https://auth.example.com/api/v3")
+
+	cfg, err := OIDCConfigFromViper()
+	require.NoError(t, err)
+	assert.Equal(t, "https://auth.example.com/api/v3", cfg.AuthentikAPIURL)
 }

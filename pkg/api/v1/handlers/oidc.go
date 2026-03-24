@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	gooidc "github.com/coreos/go-oidc/v3/oidc"
-	"github.com/metahub-registry/metahub-core/pkg/backends/magazine"
+	"github.com/metahub-registry/metahub-api/pkg/config"
 	"golang.org/x/oauth2"
 )
 
@@ -23,6 +23,9 @@ type OIDCClaims struct {
 // oidcClaimsKey is the typed context key used to store OIDCClaims.
 type oidcClaimsKey struct{}
 
+// oidcRawTokenKey is the typed context key used to store the raw Bearer token.
+type oidcRawTokenKey struct{}
+
 // OIDCClaimsFromContext retrieves OIDCClaims from the request context.
 func OIDCClaimsFromContext(ctx context.Context) (*OIDCClaims, bool) {
 	v, ok := ctx.Value(oidcClaimsKey{}).(*OIDCClaims)
@@ -35,17 +38,29 @@ func contextWithClaims(ctx context.Context, claims *OIDCClaims) context.Context 
 	return context.WithValue(ctx, oidcClaimsKey{}, claims)
 }
 
+// contextWithRawToken returns a new context with the raw Bearer token stored.
+func contextWithRawToken(ctx context.Context, token string) context.Context {
+	return context.WithValue(ctx, oidcRawTokenKey{}, token)
+}
+
+// RawTokenFromContext retrieves the raw Bearer token from the request context.
+func RawTokenFromContext(ctx context.Context) (string, bool) {
+	v, ok := ctx.Value(oidcRawTokenKey{}).(string)
+	return v, ok && v != ""
+}
+
 // OIDCProvider wraps the go-oidc provider, oauth2 config and ID-token verifier.
 type OIDCProvider struct {
-	Provider *gooidc.Provider
-	Config   oauth2.Config
-	Verifier *gooidc.IDTokenVerifier
+	Provider        *gooidc.Provider
+	Config          oauth2.Config
+	Verifier        *gooidc.IDTokenVerifier
+	AuthentikAPIURL string // Base URL for Authentik core API (e.g., "https://authentik.example.com/api/v3")
 }
 
 // NewOIDCProvider performs OIDC discovery against cfg.Issuer and returns a
 // ready-to-use OIDCProvider. Returns an error if the issuer is unreachable or
 // required config fields are missing.
-func NewOIDCProvider(ctx context.Context, cfg magazine.OIDCCfg) (*OIDCProvider, error) {
+func NewOIDCProvider(ctx context.Context, cfg config.OIDCConfig) (*OIDCProvider, error) {
 	if cfg.Issuer == "" {
 		return nil, fmt.Errorf("oidc.issuer is required")
 	}
@@ -70,13 +85,14 @@ func NewOIDCProvider(ctx context.Context, cfg magazine.OIDCCfg) (*OIDCProvider, 
 		ClientSecret: cfg.ClientSecret,
 		RedirectURL:  cfg.RedirectURI,
 		Endpoint:     provider.Endpoint(),
-		Scopes:       []string{gooidc.ScopeOpenID, "profile", "email"},
+		Scopes:       []string{gooidc.ScopeOpenID, "profile", "email", "goauthentik.io/api"},
 	}
 
 	return &OIDCProvider{
-		Provider: provider,
-		Config:   oauthCfg,
-		Verifier: verifier,
+		Provider:        provider,
+		Config:          oauthCfg,
+		Verifier:        verifier,
+		AuthentikAPIURL: cfg.AuthentikAPIURL,
 	}, nil
 }
 

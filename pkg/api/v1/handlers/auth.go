@@ -1,19 +1,18 @@
 package handlers
 
 import (
-	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
+	"time"
 
-	gCtx "github.com/gorilla/context"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/metahub-registry/metahub-core/pkg/helper"
-	"github.com/metahub-registry/metahub-core/pkg/types"
 	"github.com/metahub-registry/metahub-core/pkg/utils"
 )
 
@@ -26,67 +25,147 @@ const (
 	uknAccTok          = "unknown access token"
 	invalidTokenHeader = "invalid authorization header: %q"
 	missingAuthHeader  = "missing authorization header"
+	contentTypeJSON    = "application/json"
+	headerContentType  = "Content-Type"
 )
 
 var (
 	invalidRequest oauthError = "invalid_request"
 	invalidToken   oauthError = "invalid_token"
-	userReg                   = regexp.MustCompile(`(?P<user>[\w\-\.\_]+)(\/(?P<profile>[\/\w\-\.\_#]+))?`)
+	userReg                   = regexp.MustCompile(`(?P<user>[\w\-\.\_\@]+)(\/(?P<profile>[\/\w\-\.\_#]+))?`)
 	debugUser                 = map[string]int{"oci": 4}
 	FailGetToken              = fmt.Errorf("failed to get token")
 )
 
-func getAccessTokenFromBearerToken(r *http.Request) (at *types.AccessToken, user string, err error) {
-	at = &types.AccessToken{}
-	authorizationHeader := r.Header.Get("authorization")
-	if authorizationHeader == "" {
-		return
+// parseBasicAuth extracts username and password from a Basic Authorization header.
+func parseBasicAuth(r *http.Request) (username, password string, ok bool) {
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		return "", "", false
 	}
-	bearerToken := strings.Split(authorizationHeader, " ")
-	if len(bearerToken) != 2 {
-		err = fmt.Errorf(invalidTokenHeader, authorizationHeader)
-		return
+	parts := strings.SplitN(authHeader, " ", 2)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "basic") {
+		return "", "", false
 	}
-	accessTokenString := bearerToken[1]
-	decoded, _ := base64.StdEncoding.DecodeString(accessTokenString)
-	parts := strings.Split(string(decoded), ":")
-	if len(parts) != 2 {
-		err = fmt.Errorf("invalid access token: %q", accessTokenString)
-		return
+	decoded, err := base64.StdEncoding.DecodeString(parts[1])
+	if err != nil {
+		return "", "", false
 	}
-	user = parts[0]
-	at.Token = accessTokenString
-	return
+	creds := strings.SplitN(string(decoded), ":", 2)
+	if len(creds) != 2 {
+		return "", "", false
+	}
+	return creds[0], creds[1], true
 }
 
+// parseUsernameProfile parses "user/profile" from a Docker username string.
+// Returns username, profile. Profile defaults to "generic" if not present.
+func parseUsernameProfile(rawUsername string) (username, profile string) {
+	m := userReg.FindStringSubmatch(rawUsername)
+	if m == nil {
+		return rawUsername, defaultProfile
+	}
+	names := userReg.SubexpNames()
+	result := make(map[string]string)
+	for i, name := range names {
+		if i != 0 && name != "" {
+			result[name] = m[i]
+		}
+	}
+	username = result["user"]
+	profile = result["profile"]
+	if profile == "" {
+		profile = defaultProfile
+	}
+	return username, profile
+}
+
+// exchangeCredentialsWithAuthentik POSTs username/password to Authentik's
+// ROPC/client_credentials token endpoint and returns the JWT access token.
+func (h Handlers) exchangeCredentialsWithAuthentik(username, password string) (string, error) {
+	if h.oidc == nil {
+		return "", fmt.Errorf("OIDC provider not configured")
+	}
+	tokenURL := h.oidc.Config.Endpoint.TokenURL
+	if tokenURL == "" {
+		return "", fmt.Errorf("OIDC token endpoint not configured")
+	}
+
+	data := url.Values{
+		"grant_type": {"client_credentials"},
+		"client_id":  {h.oidc.Config.ClientID},
+		"username":   {username},
+		"password":   {password},
+		"scope":      {"openid profile email"},
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.PostForm(tokenURL, data)
+	if err != nil {
+		return "", fmt.Errorf("failed to contact Authentik token endpoint: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("Authentik token exchange failed (HTTP %d): %s", resp.StatusCode, string(body))
+	}
+
+	var tokenResp struct {
+		AccessToken string `json:"access_token"`
+		TokenType   string `json:"token_type"`
+		ExpiresIn   int    `json:"expires_in"`
+	}
+	if err := json.Unmarshal(body, &tokenResp); err != nil {
+		return "", fmt.Errorf("failed to decode Authentik token response: %w", err)
+	}
+	if tokenResp.AccessToken == "" {
+		return "", fmt.Errorf("Authentik returned empty access_token")
+	}
+	return tokenResp.AccessToken, nil
+}
+
+// AuthHandler handles GET /auth — the Docker registry token service.
+// Docker clients call this endpoint with Basic auth credentials after receiving
+// a 401 from /v2/. This handler proxies the credentials to Authentik's ROPC
+// token endpoint and returns the resulting JWT as the registry bearer token.
 func (h Handlers) AuthHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
 		"package": pkgNameAuth,
 		"func":    "AuthHandler",
 	})
-	_ = l
 	defer span.End()
 	_ = ctx
+
+	rawUsername, password, hasAuth := parseBasicAuth(r)
 	acct := r.URL.Query().Get("account")
-	at, user, err := getAccessTokenFromBearerToken(r)
-	if err != nil {
-		err = errors.Wrap(err, "error getting access token from bearer token")
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+
+	// Anonymous access: no credentials provided
+	if !hasAuth || (acct == "" && rawUsername == "") {
+		utils.Debug(l, span, "anonymous auth request, returning generic token")
+		w.Header().Set(headerContentType, contentTypeJSON)
+		json.NewEncoder(w).Encode(map[string]string{"token": "REDACTED-IN-HISTORY"})
 		return
 	}
-	utils.Debug(l, span, "user:'%s' acct:'%s'", user, acct)
 
-	if acct == "" && user == "" {
-		at.Token = "REDACTED-IN-HISTORY"
+	// Parse username/profile from the Docker username
+	username, _ := parseUsernameProfile(rawUsername)
+	utils.Debug(l, span, "auth request for user:'%s' acct:'%s'", username, acct)
+
+	// Exchange credentials with Authentik
+	jwt, err := h.exchangeCredentialsWithAuthentik(username, password)
+	if err != nil {
+		utils.Warn(l, span, "Authentik token exchange failed for user '%s': %v", username, err)
+		w.Header().Set(headerContentType, contentTypeJSON)
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"error": "invalid credentials"})
+		return
 	}
-	//l.Debugf("User: %s // Token: %s", at.GetUser(), at.Token)
-	// Prepare the body of the response
-	responseBodyBytes := new(bytes.Buffer)
-	w.Header().Add("Content-Type", "application/json; charset=utf-8")
-	json.NewEncoder(responseBodyBytes).Encode(at)
-	data := responseBodyBytes.Bytes()
-	w.Write(data)
+
+	w.Header().Set(headerContentType, contentTypeJSON)
+	json.NewEncoder(w).Encode(map[string]string{"token": jwt})
 }
 
 // realmForRequest returns the auth realm URL for the given request.
@@ -103,167 +182,9 @@ func realmForRequest(r *http.Request) string {
 	return "http://" + r.Host
 }
 
-// parseTokenParts validates the authorization header and returns the access token string and its decoded parts.
-func parseTokenParts(w http.ResponseWriter, r *http.Request, realm string, req types.Request) (accessTokenString string, parts []string, ok bool) {
-	authorizationHeader := r.Header.Get("authorization")
-	if authorizationHeader == "" {
-		det := helper.NewDetail("repository", req.Repo, req.Method)
-		unauthorized(w, realm, det, invalidRequest, missingAuthHeader)
-		return "", nil, false
-	}
-	bearerToken := strings.Split(authorizationHeader, " ")
-	if len(bearerToken) != 2 {
-		repo := req.Repo
-		if repo == "" {
-			repo = "repo"
-		}
-		det := helper.NewDetail("repository", repo, "pull")
-		w.WriteHeader(http.StatusUnauthorized)
-		unauthorized(w, realm, det, invalidRequest, invalidTokenHeader, authorizationHeader)
-		return "", nil, false
-	}
-	return bearerToken[1], nil, true
-}
-
-func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) (err error) {
-	ctx := r.Context()
-	req := types.NewRequest(ctx, r)
-	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
-		"package": pkgNameAuth,
-		"func":    "AuthMiddlewareHandler",
-		"host":    req.Host,
-		"repo":    req.Repo,
-		"tag":     req.Tag,
-		"method":  req.Method,
-		"digest":  req.Digest,
-		"profile": req.Profile,
-		"role":    req.UserRole,
-	})
-	defer span.End()
-	realm := realmForRequest(r)
-	authorizationHeader := r.Header.Get("authorization")
-	if authorizationHeader == "" {
-		det := helper.NewDetail("repository", req.Repo, req.Method)
-		unauthorized(w, realm, det, invalidRequest, missingAuthHeader)
-		return fmt.Errorf(missingAuthHeader)
-	}
-	bearerToken := strings.Split(authorizationHeader, " ")
-	if len(bearerToken) != 2 {
-		repo := req.Repo
-		if req.Repo == "" {
-			repo = "repo"
-		}
-		det := helper.NewDetail("repository", repo, "pull")
-		w.WriteHeader(http.StatusUnauthorized)
-		utils.Debug(l, span, realFrmt, realm)
-		unauthorized(w, realm, det, invalidRequest, invalidTokenHeader, authorizationHeader)
-		return fmt.Errorf("valid authorization header")
-	}
-	accessTokenString := bearerToken[1]
-	at, err := h.mag.UserManagement.User.GetAccessToken(accessTokenString)
-	if err != nil {
-		l.Infof("error getting access token: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return FailGetToken
-	}
-	if at == nil {
-		l.Error(uknAccTok)
-		det := helper.NewDetail("repository", req.Repo, req.Method)
-		w.WriteHeader(http.StatusUnauthorized)
-		logrus.Infof(realFrmt, realm)
-		unauthorized(w, realm, det, invalidToken, uknAccTok)
-		return FailGetToken
-	}
-	var username, profile, password string
-	// The access token is the base64 encoded username and password we need to check
-	decoded := at.GetUser()
-	parts := strings.Split(string(decoded), ":")
-	if len(parts) != 2 {
-		l.Error(uknAccTok)
-		det := helper.NewDetail("repository", req.Repo, req.Method)
-		w.WriteHeader(http.StatusUnauthorized)
-		utils.Debug(l, span, realFrmt, realm)
-		unauthorized(w, realm, det, invalidToken, uknAccTok)
-		return FailGetToken
-	}
-	password = parts[1]
-	m, err := utils.ReSubMatchMap(userReg, parts[0])
-	if err != nil {
-		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "pull", err, "INTERNAL_ERROR", "failed to match regex")
-		return
-	}
-	if _, ok := m["user"]; !ok {
-		msg := fmt.Sprintf("username needs to prefix with profile (defaults to %s): '<user>/<profile>'", defaultProfile)
-		logrus.Error(msg)
-		w.WriteHeader(http.StatusBadRequest)
-		return fmt.Errorf("%s", msg)
-	}
-	username = m["user"]
-	if _, ok := m["profile"]; !ok {
-		utils.Debug(l, span, "no profile given when matching '%s' against '%s', default to '%s'", userReg, parts[0], defaultProfile)
-		profile = defaultProfile
-	} else {
-		profile = m["profile"]
-		if profile == "" {
-			profile = defaultProfile
-		}
-		utils.Debug(l, span, "set profile to default '%s'", defaultProfile)
-	}
-	utils.Debug(l, span, "profile:'%s' / user:'%s", profile, username)
-	code, uRole, pl, err := h.mag.UserManagement.LoginUserScope(ctx, username, password, req)
-	if err != nil {
-		err = errors.Wrap(err, "error logging in user")
-		logrus.Error(err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return err
-	}
-	switch code {
-	case http.StatusOK:
-		// Return the account name to the context
-		gCtx.Set(r, "accountName", at.Token)
-		gCtx.Set(r, "userName", username)
-		gCtx.Set(r, "userRole", uRole)
-		gCtx.Set(r, "profileName", profile)
-		utils.Debug(l, span, "set profileName:'%s'", profile)
-		utils.Debug(l, span, "set userRole:'%s'", uRole)
-	default:
-		helper.WriteOCIErrror(w, http.StatusUnauthorized, pl)
-		return fmt.Errorf("error logging in")
-	}
-	return nil
-}
-
-func (h Handlers) AuthMiddlewareFunc(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
-		"package": pkgNameAuth,
-		"func":    "AuthMiddlewareFunc",
-	})
-	defer span.End()
-	_ = ctx
-	err := h.AuthMiddlewareHandler(w, r)
-	if err != nil {
-		return
-	}
-	uName := gCtx.Get(r, "userName")
-
-	uRole := gCtx.Get(r, "userRole")
-	debug, ok := debugUser[uName.(string)]
-	if ok {
-		gCtx.Set(r, "debug", debug)
-	} else {
-		gCtx.Set(r, "debug", 0)
-	}
-	utils.Debug(l, span, "set debug for user '%s' (role: %s) to level '%d'", uName, uRole, debug)
-
-}
-
-func (h Handlers) AuthMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		h.AuthMiddlewareFunc(w, r)
-		next.ServeHTTP(w, r)
-	})
-}
+// Legacy auth functions (AuthMiddleware, AuthMiddlewareHandler, AuthMiddlewareFunc,
+// parseTokenParts) have been removed. /v2/ routes now use OCIAuthMiddleware
+// which validates JWTs via JWKS and sets gorilla context for metalib compatibility.
 
 // unauthorized returns a request to the user for auth - e.g., "get a token from this endpoint"
 func unauthorized(w http.ResponseWriter, realm string, det helper.Detail, err oauthError, format string, v ...interface{}) {
@@ -275,7 +196,7 @@ func unauthorized(w http.ResponseWriter, realm string, det helper.Detail, err oa
 	description := fmt.Sprintf(format, v...)
 	authUrl := realm + "/auth"
 	authenticateHeader := fmt.Sprintf("Bearer realm=%q,error=%q,error_description=%q", authUrl, err, description)
-	w.Header().Add("Content-Type", "application/json")
+	w.Header().Add(headerContentType, contentTypeJSON)
 	l.Infof("authenticateHeader: %s", authenticateHeader)
 	w.Header().Add("WWW-Authenticate", authenticateHeader)
 	//w.Header().Del("Vary")

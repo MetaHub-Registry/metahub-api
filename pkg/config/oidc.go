@@ -7,13 +7,24 @@ import (
 	"github.com/metahub-registry/metahub-core/pkg/backends/magazine"
 )
 
+// OIDCConfig extends the base OIDCCfg with metahub-api-specific fields.
+type OIDCConfig struct {
+	magazine.OIDCCfg
+	// AuthentikAPIURL is the base URL for Authentik's core REST API (e.g., "https://authentik.example.com/api/v3").
+	// Required for registry token management (create/list/revoke app passwords).
+	AuthentikAPIURL string
+}
+
 // OIDCConfigFromViper reads OIDC configuration from Viper and validates required fields.
-func OIDCConfigFromViper() (magazine.OIDCCfg, error) {
-	cfg := magazine.OIDCCfg{
-		Issuer:       viper.GetString("oidc.issuer"),
-		ClientID:     viper.GetString("oidc.clientid"),
-		ClientSecret: viper.GetString("oidc.secret"),
-		RedirectURI:  viper.GetString("oidc.redirect_uri"),
+func OIDCConfigFromViper() (OIDCConfig, error) {
+	cfg := OIDCConfig{
+		OIDCCfg: magazine.OIDCCfg{
+			Issuer:       viper.GetString("oidc.issuer"),
+			ClientID:     viper.GetString("oidc.clientid"),
+			ClientSecret: viper.GetString("oidc.secret"),
+			RedirectURI:  viper.GetString("oidc.redirect_uri"),
+		},
+		AuthentikAPIURL: viper.GetString("oidc.authentik_api_url"),
 	}
 	if cfg.Issuer == "" {
 		return cfg, fmt.Errorf("oidc.issuer is required but not set")
