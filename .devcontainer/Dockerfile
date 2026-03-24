@@ -11,14 +11,16 @@ RUN apt update \
     openjdk-17-jre \
     vim \
     python3-pip \
-    ca-certificates curl gnupg  \
+    ca-certificates curl gnupg npm \
+ && npm install -g @fission-ai/openspec@latest \
+ && npm i -g opencode-ai \
+ && pip install --upgrade bump2version openviking --break-system-packages \
+ && go install github.com/t-yuki/gocover-cobertura@latest \
+ && go install gitlab.com/fgmarand/gocoverstats@latest \
  # CleanUp
  && apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/*
-RUN pip install --upgrade bump2version --break-system-packages
-RUN go install github.com/t-yuki/gocover-cobertura@latest \
- && go install gitlab.com/fgmarand/gocoverstats@latest
-RUN echo "source ~/.alias" >> /root/.bashrc
-RUN echo "source ~/.alias" >> /root/.zshrc
+RUN echo "source ~/.alias" >> /root/.bashrc \
+ && echo "source ~/.alias" >> /root/.zshrc
 COPY <<-"EOT" /root/.alias
  alias gs='git status'
  alias gb='git branch'
@@ -50,3 +52,4 @@ eot
 #RUN pipx install sqlit-tui
 COPY homelab-rootCA.pem /usr/local/share/ca-certificates/homelab-rootCA.crt
 RUN update-ca-certificates
+ENV OPENVIKING_CLI_CONFIG_FILE=/Users/christian.kniep/.config/openviking/ovcli.conf

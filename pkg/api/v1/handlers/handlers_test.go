@@ -135,7 +135,7 @@ func TestMain(m *testing.M) {
 		"registries":         regC.HttpURI,
 	}
 	logrus.Infof("Jaeger HTTP: http://%s", jeagerC.HttpURI)
-	h = NewHandlers("test", mag)
+	h = NewHandlers("test", mag, nil)
 	code := m.Run()
 	switch code {
 	case 0:

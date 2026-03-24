@@ -20,10 +20,12 @@ import (
 type oauthError string
 
 const (
-	defaultProfile = "generic"
-	pkgNameAuth    = "api/auth.go"
-	realFrmt       = "Realm: %s"
-	uknAccTok      = "unknown access token"
+	defaultProfile     = "generic"
+	pkgNameAuth        = "api/auth.go"
+	realFrmt           = "Realm: %s"
+	uknAccTok          = "unknown access token"
+	invalidTokenHeader = "invalid authorization header: %q"
+	missingAuthHeader  = "missing authorization header"
 )
 
 var (
@@ -42,7 +44,7 @@ func getAccessTokenFromBearerToken(r *http.Request) (at *types.AccessToken, user
 	}
 	bearerToken := strings.Split(authorizationHeader, " ")
 	if len(bearerToken) != 2 {
-		err = fmt.Errorf("invalid authorization header: %q", authorizationHeader)
+		err = fmt.Errorf(invalidTokenHeader, authorizationHeader)
 		return
 	}
 	accessTokenString := bearerToken[1]
@@ -87,6 +89,42 @@ func (h Handlers) AuthHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(data)
 }
 
+// realmForRequest returns the auth realm URL for the given request.
+func realmForRequest(r *http.Request) string {
+	switch r.Host {
+	case "metahub-registry.org":
+		return "https://metahub-registry.org"
+	case "metahub.qnib.org":
+		return "https://metahub.qnib.org"
+	}
+	if r.Proto == "HTTP/2.0" {
+		return "https://" + r.Host
+	}
+	return "http://" + r.Host
+}
+
+// parseTokenParts validates the authorization header and returns the access token string and its decoded parts.
+func parseTokenParts(w http.ResponseWriter, r *http.Request, realm string, req types.Request) (accessTokenString string, parts []string, ok bool) {
+	authorizationHeader := r.Header.Get("authorization")
+	if authorizationHeader == "" {
+		det := helper.NewDetail("repository", req.Repo, req.Method)
+		unauthorized(w, realm, det, invalidRequest, missingAuthHeader)
+		return "", nil, false
+	}
+	bearerToken := strings.Split(authorizationHeader, " ")
+	if len(bearerToken) != 2 {
+		repo := req.Repo
+		if repo == "" {
+			repo = "repo"
+		}
+		det := helper.NewDetail("repository", repo, "pull")
+		w.WriteHeader(http.StatusUnauthorized)
+		unauthorized(w, realm, det, invalidRequest, invalidTokenHeader, authorizationHeader)
+		return "", nil, false
+	}
+	return bearerToken[1], nil, true
+}
+
 func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) (err error) {
 	ctx := r.Context()
 	req := types.NewRequest(ctx, r)
@@ -102,31 +140,12 @@ func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) 
 		"role":    req.UserRole,
 	})
 	defer span.End()
-	var realm string
-	switch r.Host {
-	case "metahub-registry.org":
-		realm = "https://metahub-registry.org"
-	case "metahub.qnib.org":
-		realm = "https://metahub.qnib.org"
-	default:
-		switch r.Proto {
-		case "HTTP/1.0":
-			realm = "http://" + r.Host
-		case "HTTP/1.1":
-			realm = "http://" + r.Host
-		case "HTTP/2.0":
-			realm = "https://" + r.Host
-		}
-	}
-	//fmt.Printf("Request:$$$ %s\n", req.String())
-	//dumpedReq, _ := httputil.DumpRequest(r, false)
-	//fmt.Printf("Request:#### \n%s\n####", dumpedReq)
+	realm := realmForRequest(r)
 	authorizationHeader := r.Header.Get("authorization")
 	if authorizationHeader == "" {
-		//logrus.Warn("Unauthenticated request as no authorization header was provided")
 		det := helper.NewDetail("repository", req.Repo, req.Method)
-		unauthorized(w, realm, det, invalidRequest, "missing authorization header")
-		return fmt.Errorf("missing authorization header")
+		unauthorized(w, realm, det, invalidRequest, missingAuthHeader)
+		return fmt.Errorf(missingAuthHeader)
 	}
 	bearerToken := strings.Split(authorizationHeader, " ")
 	if len(bearerToken) != 2 {
@@ -137,7 +156,7 @@ func (h Handlers) AuthMiddlewareHandler(w http.ResponseWriter, r *http.Request) 
 		det := helper.NewDetail("repository", repo, "pull")
 		w.WriteHeader(http.StatusUnauthorized)
 		utils.Debug(l, span, realFrmt, realm)
-		unauthorized(w, realm, det, invalidRequest, "invalid authorization header: %q", authorizationHeader)
+		unauthorized(w, realm, det, invalidRequest, invalidTokenHeader, authorizationHeader)
 		return fmt.Errorf("valid authorization header")
 	}
 	accessTokenString := bearerToken[1]

@@ -7,7 +7,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
-	"github.com/go-chi/jwtauth/v5"
 	"github.com/go-chi/render"
 	"github.com/riandyrn/otelchi"
 	"github.com/sirupsen/logrus"
@@ -19,11 +18,15 @@ const (
 	apiTimeout                = 5 * time.Second
 	ImgBlobUploadUuidPath     = "/{image}/blobs/uploads/{uuid}"
 	RepoImgBlobUploadUuidPath = "/{repo}/{image}/blobs/uploads/{uuid}"
+	imgManifestRefPath        = "/{image}/manifests/{reference}"
+	repoImgManifestRefPath    = "/{repo}/{image}/manifests/{reference}"
+	imgBlobRefPath            = "/{image}/blobs/{reference}"
+	repoImgBlobRefPath        = "/{repo}/{image}/blobs/{reference}"
 )
 
-func Initialize(mag magazine.Magazine) *chi.Mux {
+func Initialize(mag magazine.Magazine, oidcProvider *handlers.OIDCProvider) *chi.Mux {
 	// Handlers
-	h := handlers.NewHandlers("dev", mag)
+	h := handlers.NewHandlers("dev", mag, oidcProvider)
 	// define router
 	router := chi.NewRouter()
 	log := logrus.StandardLogger().WithFields(
@@ -56,16 +59,14 @@ func Initialize(mag magazine.Magazine) *chi.Mux {
 		r.Use(middleware.Timeout(apiTimeout))
 		r.Post("/collections", h.CollectionGetAll)
 		r.Post("/collection", h.CollectionGetOne)
-		// Oauth2
-		r.Get("/login", h.GitHubLogin)
-
+		// OIDC login / callback (public)
+		r.Get("/login", h.OIDCLogin)
+		r.Get("/callback", h.OIDCCallback)
 	})
 	router.Route("/api/v1/protected", func(r chi.Router) {
 		r.Use(middleware.Timeout(apiTimeout))
-		r.Use(jwtauth.Verifier(handlers.TokenAuth))
-		r.Use(jwtauth.Authenticator)
-		// Seek, verify and validate JWT tokens
-		r.Get("/logout", h.GitHubLogout)
+		r.Use(h.OIDCAuthMiddleware())
+		r.Get("/logout", h.OIDCLogout)
 		r.Get("/session", h.UserGetSession)
 		r.Get("/user", h.UserGetOne)
 		r.Get("/users/{id}", h.UserGetOne)
@@ -74,8 +75,6 @@ func Initialize(mag magazine.Magazine) *chi.Mux {
 		r.Delete("/user/secret/{id}", h.UserDelSecret)
 	})
 	router.Get("/auth", h.AuthHandler)
-	//router.Get("/logout", h.GitHubLogout)
-	router.Get("/github_oauth_cb", h.GitHubCallback)
 	/////// Subroute with AuthMiddleware to trigger login
 	// (even if the token is the anonymous one)
 	router.Route("/v2", func(r chi.Router) {
@@ -86,29 +85,29 @@ func Initialize(mag magazine.Magazine) *chi.Mux {
 		r.Use(h.AuthMiddleware)
 		r.Get("/", h.HeartbeatHandler)
 		// TODO: Is there no way to match multiple lengh path?
-		r.Head("/{image}/manifests/{reference}", h.ManifestHeadHandler)
-		r.Get("/{image}/manifests/{reference}", h.ManifestGetHandler)
-		r.Head("/{repo}/{image}/manifests/{reference}", h.ManifestHeadHandler)
-		r.Get("/{repo}/{image}/manifests/{reference}", h.ManifestGetHandler)
+		r.Head(imgManifestRefPath, h.ManifestHeadHandler)
+		r.Get(imgManifestRefPath, h.ManifestGetHandler)
+		r.Head(repoImgManifestRefPath, h.ManifestHeadHandler)
+		r.Get(repoImgManifestRefPath, h.ManifestGetHandler)
 		r.Head("/{repo}/{repo2}/{image}/manifests/{reference}", h.ManifestHeadHandler)
 		r.Get("/{repo}/{repo2}/{image}/manifests/{reference}", h.ManifestGetHandler)
 		r.Head("/{repo}/{repo2}/{repo3}/{image}/manifests/{reference}", h.ManifestHeadHandler)
 		r.Get("/{repo}/{repo2}/{repo3}/{image}/manifests/{reference}", h.ManifestGetHandler)
 
 		//// Upload Manifest
-		r.Put("/{image}/manifests/{reference}", h.ManifestPutHandler)
-		r.Put("/{repo}/{image}/manifests/{reference}", h.ManifestPutHandler)
+		r.Put(imgManifestRefPath, h.ManifestPutHandler)
+		r.Put(repoImgManifestRefPath, h.ManifestPutHandler)
 		//// Delete
-		r.Delete("/{image}/manifests/{reference}", h.ManifestDelHandler)
-		r.Delete("/{repo}/{image}/manifests/{reference}", h.ManifestDelHandler)
+		r.Delete(imgManifestRefPath, h.ManifestDelHandler)
+		r.Delete(repoImgManifestRefPath, h.ManifestDelHandler)
 		// Blobs
-		r.Get("/{image}/blobs/{reference}", h.BlobHandler)
-		r.Get("/{repo}/{image}/blobs/{reference}", h.BlobHandler)
+		r.Get(imgBlobRefPath, h.BlobHandler)
+		r.Get(repoImgBlobRefPath, h.BlobHandler)
 		r.Get("/{repo}/{repo2}/{image}/blobs/{reference}", h.BlobHandler)
 		r.Get("/{repo}/{repo2}/{repo3}/{image}/blobs/{reference}", h.BlobHandler)
 		///// HEAD is the same w/o actually writing a body
-		r.Head("/{image}/blobs/{reference}", h.BlobHandler)
-		r.Head("/{repo}/{image}/blobs/{reference}", h.BlobHandler)
+		r.Head(imgBlobRefPath, h.BlobHandler)
+		r.Head(repoImgBlobRefPath, h.BlobHandler)
 		r.Head("/{repo}/{repo2}/{image}/blobs/{reference}", h.BlobHandler)
 		r.Head("/{repo}/{repo2}/{repo3}/{image}/blobs/{reference}", h.BlobHandler)
 
@@ -128,8 +127,8 @@ func Initialize(mag magazine.Magazine) *chi.Mux {
 		r.Get(ImgBlobUploadUuidPath, h.BlobUploadGetHandler)
 		r.Get(RepoImgBlobUploadUuidPath, h.BlobUploadGetHandler)
 		// Delete Blobs
-		r.Delete("/{repo}/{image}/blobs/{reference}", h.BlobDelHandler)
-		r.Delete("/{image}/blobs/{reference}", h.BlobDelHandler)
+		r.Delete(repoImgBlobRefPath, h.BlobDelHandler)
+		r.Delete(imgBlobRefPath, h.BlobDelHandler)
 		// Referrers
 		r.Get("/{image}/referrers/{reference}", h.ReferrersGetHandler)
 		r.Get("/{repo}/{image}/referrers/{reference}", h.ReferrersGetHandler)

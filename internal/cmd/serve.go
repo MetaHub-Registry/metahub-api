@@ -11,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"github.com/metahub-registry/metahub-api/pkg/api/v1/handlers"
 	"github.com/metahub-registry/metahub-api/pkg/api/v1/router"
 	"github.com/metahub-registry/metahub-api/pkg/config"
 	"github.com/metahub-registry/metahub-core/pkg/backends/magazine"
@@ -25,13 +26,6 @@ var serveCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(serveCmd)
-	// Here you will define your flags and configuration settings.
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// parseCmd.PersistentFlags().String("foo", "", "A help for foo")
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// parseCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 	serveCmd.Flags().Int("port", 80, "The API port")
 	serveCmd.Flags().String("user-db", "", "The user database file to use - will be overwritten")
 	serveCmd.Flags().String("registries", "", "Backend registries to add (comma-separated)")
@@ -45,7 +39,17 @@ func sCmd(cmd *cobra.Command, args []string) {
 		err = errors.Wrap(err, "Cannot create magazine")
 		log.Fatal(err)
 	}
-	r := router.Initialize(mag)
+
+	oidcCfg, err := config.OIDCConfigFromViper()
+	if err != nil {
+		log.Fatalf("OIDC configuration error: %v", err)
+	}
+	oidcProvider, err := handlers.NewOIDCProvider(cmd.Context(), oidcCfg)
+	if err != nil {
+		log.Fatalf("Failed to initialize OIDC provider: %v", err)
+	}
+
+	r := router.Initialize(mag, oidcProvider)
 	addr := fmt.Sprintf(":%d", port)
 	logrus.Infof("Start serving on %s", addr)
 	err = http.ListenAndServe(addr, r)

@@ -116,6 +116,52 @@ func (h Handlers) CollectionGetOne(w http.ResponseWriter, r *http.Request) {
 	_ = h.writeJSON(w, http.StatusOK, payload)
 }
 
+// accumulateCollectionNext builds the next-navigation map and breadcrumbs from a list of collections.
+func accumulateCollectionNext(cols []types.CollectionListing, repoSlug []string, baseRepo string) (next map[string]Next, reps *set.LinkedHashSetString, breadCrumbs []utils.BreadCrumb, slugEnd int) {
+	next = map[string]Next{}
+	reps = set.NewLinkedHashSetString()
+	breadCrumbs = []utils.BreadCrumb{}
+	for _, col := range cols {
+		colSlug := strings.Split(col.Repo, "/")
+		switch {
+		case len(repoSlug) == len(colSlug):
+			next[col.Tag] = Next{
+				Repo:      col.Repo,
+				Tag:       col.Tag,
+				ColID:     col.ID,
+				TagID:     col.ColTag.ID,
+				ColCount:  1,
+				ManiCount: col.ManifestCount,
+			}
+			slugEnd = 1
+		case len(repoSlug) < len(colSlug):
+			n := strings.TrimPrefix(col.Repo, baseRepo)
+			n = strings.TrimPrefix(n, "/")
+			n = strings.Split(n, "/")[0]
+			if n != "" {
+				if existing, ok := next[n]; !ok {
+					next[n] = Next{Repo: n, ColCount: 1, ManiCount: col.ManifestCount}
+				} else {
+					next[n] = Next{Repo: n, ColCount: existing.ColCount + 1, ManiCount: existing.ManiCount + col.ManifestCount}
+				}
+			}
+		}
+		for i, seg := range strings.Split(col.Repo, "/") {
+			if i+1 <= len(repoSlug) && seg == repoSlug[i] && !reps.InArray(seg) {
+				reps.Add(seg)
+				breadCrumbs = append(breadCrumbs, utils.BreadCrumb{
+					Crumb:  seg,
+					Active: 1,
+					Link:   fmt.Sprintf("/collections/%s", strings.Join(reps.AsSlice(), "/")),
+					Repo:   strings.Join(reps.AsSlice(), "/"),
+					IDX:    i,
+				})
+			}
+		}
+	}
+	return
+}
+
 func (h Handlers) CollectionGetAll(w http.ResponseWriter, r *http.Request) {
 	l := logrus.WithFields(logrus.Fields{
 		"package": "api/collections.go",
@@ -134,9 +180,7 @@ func (h Handlers) CollectionGetAll(w http.ResponseWriter, r *http.Request) {
 		h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
 		return
 	}
-	l = l.WithFields(logrus.Fields{
-		"repo": pl.Repo,
-	})
+	l = l.WithFields(logrus.Fields{"repo": pl.Repo})
 	l.Infof("CollectionGetAll: '%s'", pl.Repo)
 	repoSlug := strings.Split(pl.Repo, "/")
 	cols, err := h.mag.Database.CollectionListingGetByRepoLike(ctx, pl.Repo)
@@ -145,64 +189,8 @@ func (h Handlers) CollectionGetAll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	l.Warnf("CollectionGetAll: '%s' -> %d", pl.Repo, len(cols))
-	slugEnd := 0
-	next := map[string]Next{}
-	reps := set.NewLinkedHashSetString()
-	breadCrumbs := []utils.BreadCrumb{}
-	for _, col := range cols {
-		colSlug := strings.Split(col.Repo, "/")
-		switch {
-		case len(repoSlug) == len(colSlug):
-			// Add Tags to next with the complete n
-			next[col.Tag] = Next{
-				Repo:      col.Repo,
-				Tag:       col.Tag,
-				ColID:     col.ID,
-				TagID:     col.ColTag.ID,
-				ColCount:  1,
-				ManiCount: col.ManifestCount,
-			}
-			slugEnd = 1
-		case len(repoSlug) < len(colSlug):
-			n := strings.TrimPrefix(col.Repo, pl.Repo)
-			n = strings.TrimPrefix(n, "/")
-			n = strings.Split(n, "/")[0]
-			if n != "" {
-				if _, ok := next[n]; !ok {
-					next[n] = Next{
-						Repo:      n,
-						ColCount:  1,
-						ManiCount: col.ManifestCount,
-					}
-				} else {
-					next[n] = Next{
-						Repo:      n,
-						ColCount:  next[n].ColCount + 1,
-						ManiCount: next[n].ManiCount + col.ManifestCount,
-					}
-				}
-			}
-
-		}
-		for i, r := range strings.Split(col.Repo, "/") {
-			if i+1 <= len(repoSlug) && r == repoSlug[i] {
-				if !reps.InArray(r) {
-					reps.Add(r)
-					bc := utils.BreadCrumb{
-						Crumb:  r,
-						Active: 1,
-						Link:   fmt.Sprintf("/collections/%s", strings.Join(reps.AsSlice(), "/")),
-						Repo:   strings.Join(reps.AsSlice(), "/"),
-						Tag:    "",
-						IDX:    i,
-					}
-					breadCrumbs = append(breadCrumbs, bc)
-				}
-			}
-		}
-	}
+	next, reps, breadCrumbs, slugEnd := accumulateCollectionNext(cols, repoSlug, pl.Repo)
 	if len(breadCrumbs) > 0 {
-		// Set the last one inactive
 		breadCrumbs[len(breadCrumbs)-1].Active = 0
 	}
 	payload := envelope{
