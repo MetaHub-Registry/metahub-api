@@ -10,7 +10,6 @@ import (
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/jwtauth/v5"
 	"github.com/metahub-registry/metahub-core/pkg/backends/sqlite"
 	"github.com/metahub-registry/metahub-core/pkg/helper"
 	"github.com/metahub-registry/metahub-core/pkg/types"
@@ -19,33 +18,27 @@ import (
 )
 
 const (
-	pkgNameUser = "hanlders/user.go"
+	pkgNameUser      = "hanlders/user.go"
+	errFailedGetUser = "failed to get user"
 )
 
-func getUserClaim(ctx context.Context, r *http.Request) (uname, ghid string, err error) {
+// getUserClaim extracts the username and OIDC sub from the request context.
+// The context must have been populated by OIDCAuthMiddleware.
+func getUserClaim(ctx context.Context, r *http.Request) (uname, sub string, err error) {
 	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
 		"package": pkgNameUser,
 		"func":    "getUserClaim",
 	})
 	defer span.End()
 	_ = ctx
-	if _, claims, e := jwtauth.FromContext(r.Context()); e != nil {
-		return "", "", utils.ErrorHandler(l, span, e, "failed to get claims")
-	} else if usr, ok := claims["user"]; !ok {
-		err = utils.NewError(l, span, "failed to get user from claims")
-		return "", "", err
-
-	} else {
-		utils.Debug(l, span, "Got user '%v'", claims)
-		uname = usr.(string)
-		if val, ok := claims["id"]; ok {
-			ghid = val.(string)
-		} else {
-			err = utils.NewError(l, span, "failed to get ID from claims")
-			return "", "", err
-		}
-		utils.Debug(l, span, "Got username '%s' and ghid '%s' from claims", uname, ghid)
+	claims, ok := OIDCClaimsFromContext(r.Context())
+	if !ok || claims == nil {
+		err = utils.NewError(l, span, "no OIDC claims in context")
+		return
 	}
+	uname = claims.Username
+	sub = claims.Sub
+	utils.Debug(l, span, "Got username '%s' (sub: %s) from OIDC claims", uname, sub)
 	return
 }
 
@@ -58,7 +51,7 @@ func (h Handlers) UserGetOne(w http.ResponseWriter, r *http.Request) {
 	defer span.End()
 
 	if sqlUsr, isLoggedIn, err := h.userCheckLoginGetUser(ctx, w, r); err != nil {
-		utils.ErrorHandlerPlainWWW(w, l, span, err, "INTERNAL_ERROR", "failed to get user")
+		utils.ErrorHandlerPlainWWW(w, l, span, err, "INTERNAL_ERROR", errFailedGetUser)
 	} else if isLoggedIn {
 		wwwUsr := sqlUsr.ToResponse()
 		wwwByte := wwwUsr.ToBytes()
@@ -72,11 +65,11 @@ func (h Handlers) userCheckLoginGetUser(ctx context.Context, w http.ResponseWrit
 		"func":    "userCheckLogin",
 	})
 	defer span.End()
-	userName, ghID, err := getUserClaim(ctx, r)
+	userName, sub, err := getUserClaim(ctx, r)
 	if err != nil {
 		return
 	}
-	utils.Debug(l, span, "User '%s' (GHID: %s) attempts to get his user", userName, ghID)
+	utils.Debug(l, span, "User '%s' (sub: %s) attempts to get their user record", userName, sub)
 	sqlUsr, err := h.mag.UserManagement.GetByUsername(ctx, userName)
 	if err != nil {
 		return
@@ -113,10 +106,10 @@ func (h Handlers) UserGetSession(w http.ResponseWriter, r *http.Request) {
 	utils.Debug(l, span, "Get session")
 	defer span.End()
 	if sqlUser, isLoggedIn, err := h.userCheckLoginGetUser(ctx, w, r); err != nil {
-		utils.ErrorHandlerPlainWWW(w, l, span, err, "INTERNAL_ERROR", "failed to get user")
+		utils.ErrorHandlerPlainWWW(w, l, span, err, "INTERNAL_ERROR", errFailedGetUser)
 	} else if isLoggedIn {
 		wwwSession := www.Session{
-			ID:     sqlUser.GithubID,
+			ID:     sqlUser.OidcSub,
 			Login:  sqlUser.UserName,
 			Avatar: sqlUser.AvatarURL,
 		}
@@ -136,13 +129,12 @@ func (h Handlers) UserPutSecret(w http.ResponseWriter, r *http.Request) {
 	_ = ctx
 	sqlUsr, isLoggedIn, err := h.userCheckLoginGetUser(ctx, w, r)
 	if err != nil {
-		utils.ErrorHandlerPlainWWW(w, l, span, err, "INTERNAL_ERROR", "failed to get user")
+		utils.ErrorHandlerPlainWWW(w, l, span, err, "INTERNAL_ERROR", errFailedGetUser)
 	}
 	if !isLoggedIn {
 		// error was already written
 		return
 	}
-	// TODO: Add Secrets to userID
 	buf, err := io.ReadAll(r.Body)
 	if err != nil {
 		log.Fatal("request", err)
@@ -175,7 +167,7 @@ func (h Handlers) UserDelSecret(w http.ResponseWriter, r *http.Request) {
 	_ = ctx
 	sqlUsr, isLoggedIn, err := h.userCheckLoginGetUser(ctx, w, r)
 	if err != nil {
-		utils.ErrorHandlerPlainWWW(w, l, span, err, "INTERNAL_ERROR", "failed to get user")
+		utils.ErrorHandlerPlainWWW(w, l, span, err, "INTERNAL_ERROR", errFailedGetUser)
 	}
 	if !isLoggedIn {
 		// error was already written

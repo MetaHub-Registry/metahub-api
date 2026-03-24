@@ -1,19 +1,17 @@
 module github.com/metahub-registry/metahub-api
 
-go 1.24
+go 1.24.0
 
 require (
 	github.com/StudioSol/set v1.0.0
 	github.com/chi-middleware/logrus-logger v0.2.0
+	github.com/coreos/go-oidc/v3 v3.17.0
 	github.com/distribution/distribution v2.8.1+incompatible
 	github.com/go-chi/chi/v5 v5.0.8
 	github.com/go-chi/cors v1.2.1
-	github.com/go-chi/jwtauth/v5 v5.1.0
 	github.com/go-chi/render v1.0.2
-	github.com/google/go-github v17.0.0+incompatible
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/context v1.1.1
-	github.com/lestrrat-go/jwx/v2 v2.0.6
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/neo4j/neo4j-go-driver/v4 v4.4.4
 	github.com/opencontainers/go-digest v1.0.0
@@ -29,7 +27,8 @@ require (
 	go.opentelemetry.io/otel/exporters/jaeger v1.14.0
 	go.opentelemetry.io/otel/sdk v1.19.0
 	go.opentelemetry.io/otel/trace v1.19.0
-	golang.org/x/oauth2 v0.10.0
+	golang.org/x/oauth2 v0.28.0
+	gopkg.in/go-jose/go-jose.v2 v2.6.3
 	gotest.tools/v3 v3.5.0
 )
 
@@ -49,7 +48,6 @@ require (
 	github.com/containers/ocicrypt v1.1.6 // indirect
 	github.com/cpuguy83/dockercfg v0.3.1 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.1.0 // indirect
 	github.com/distribution/reference v0.5.0 // indirect
 	github.com/docker/distribution v2.8.1+incompatible // indirect
 	github.com/docker/docker v25.0.2+incompatible // indirect
@@ -60,25 +58,19 @@ require (
 	github.com/felixge/httpsnoop v1.0.3 // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect
 	github.com/gemnasium/logrus-graylog-hook/v3 v3.1.0 // indirect
+	github.com/go-jose/go-jose/v4 v4.1.3 // indirect
 	github.com/go-logr/logr v1.2.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
-	github.com/goccy/go-json v0.9.11 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/google/go-cmp v0.6.0 // indirect
-	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/h2non/filetype v1.1.3 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/inconshreveable/mousetrap v1.0.1 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.16.4 // indirect
 	github.com/klauspost/cpuid/v2 v2.1.0 // indirect
-	github.com/lestrrat-go/blackmagic v1.0.1 // indirect
-	github.com/lestrrat-go/httpcc v1.0.1 // indirect
-	github.com/lestrrat-go/httprc v1.0.4 // indirect
-	github.com/lestrrat-go/iter v1.0.2 // indirect
-	github.com/lestrrat-go/option v1.0.0 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
 	github.com/mattn/go-sqlite3 v1.14.22 // indirect
@@ -127,7 +119,6 @@ require (
 	golang.org/x/sys v0.16.0 // indirect
 	golang.org/x/text v0.13.0 // indirect
 	golang.org/x/tools v0.10.0 // indirect
-	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20230711160842-782d3b101e98 // indirect
 	google.golang.org/grpc v1.58.3 // indirect
 	google.golang.org/protobuf v1.31.0 // indirect
@@ -137,9 +128,3 @@ require (
 )
 
 replace github.com/metahub-registry/metahub-core => /Users/christian.kniep/go/src/github.com/metahub-registry/metahub-core
-
-replace github.com/metahub-registry/metahub-core/pkg/backends/minio => /workspaces/metalib/pkg/backends/minio
-
-replace github.com/metahub-registry/metahub-core/pkg/types => /workspaces/metalib/pkg/types
-
-replace github.com/metahub-registry/metahub-core/pkg/backends/sqlite => /workspaces/metalib/pkg/backends/sqlite

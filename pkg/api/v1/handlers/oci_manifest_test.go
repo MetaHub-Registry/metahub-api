@@ -693,4 +693,93 @@ func TestManifestOCITestNoLayers(t *testing.T) {
 }
 
 func TestManifestHeadHandlerDigest(t *testing.T) {
+	bs := utils.NewBootstrap()
+	debug := 0
+	bs.SetEmptyAll()
+	bs.SetYAMLPrefix("../../../../misc/yaml")
+	bs.AddBootstrap("users")
+	bs.AddBootstrap("platforms:generic")
+	bs.AddBootstrap("rules:rules/generic/linux.yaml")
+	bs.AddBootstrap("profile:profiles/generic.yaml")
+	if debug > 0 {
+		bs.PostTestSleep = debug
+	}
+	err := h.mag.Minio.EmptyAll()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	br, err := SetupTest(ctx, bs)
+	if err != nil {
+		TeardownTest(bs, br)
+		t.Fatal(err)
+	}
+	defer TeardownTest(bs, br)
+	token, err := br.Get("user:test#bearer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Upload a manifest first
+	testRepo := "oci"
+	testImage := "conformance"
+	testTag := "headtest"
+	mani := types.ManifestData{
+		Data: []byte(`{
+			"schemaVersion": 2,
+			"config": {
+				"mediaType": "application/vnd.oci.image.config.v1+json",
+				"digest": "sha256:22f68afca98941fc10a8c6c87f881065b075c1c2f4678b8f579d1b77bc060ef0",
+				"size": 129,
+				"data": "ewoJImF1dGhvciI6ICJUbmVLZFFYSFhJQ3NTWHdSIiwKCSJhcmNoaXRlY3R1cmUiOiAiYW1kNjQiLAoJIm9zIjogImxpbnV4IiwKCSJyb290ZnMiOiB7CgkJInR5cGUiOiAibGF5ZXJzIiwKCQkiZGlmZl9pZHMiOiBbXQoJfQp9"
+			},
+			"layers": []
+		}`),
+	}
+	expDigest := digest.FromBytes(mani.Data)
+	wPut, rPut := utils.CreateNewHTTPTest(ctx, http.MethodPut, map[string]string{
+		"repo":      testRepo,
+		"image":     testImage,
+		"reference": testTag,
+	}, map[string]string{
+		"accountName": token,
+		"userName":    "oci",
+		"profileName": "generic",
+	}, map[string]string{
+		"Authorization": fmt.Sprintf("Bearer %s", token),
+		"Content-Type":  "application/vnd.docker.distribution.manifest.v2+json",
+	}, "/{repo}/{image}/manifests/{reference}", mani.Data)
+	h.ManifestPutHandler(&wPut, rPut)
+	assert.Equal(t, http.StatusCreated, wPut.Code)
+	gotDigest := wPut.Header().Get("Docker-Content-Digest")
+	assert.Equal(t, expDigest.String(), gotDigest)
+
+	// HEAD by digest
+	br.Add("repo", testRepo)
+	br.Add("profile", "generic")
+	br.Add("image", testImage)
+	br.Add("digest", gotDigest)
+	br.Add("tag", testTag)
+	if wHead, rHead, e := getHttpTestManifestHeadByDigest(&br); e != nil {
+		t.Fatal(e)
+	} else {
+		h.ManifestHeadHandler(wHead, rHead)
+		assert.Equal(t, http.StatusOK, wHead.Code)
+	}
+
+	// HEAD by tag
+	if wHead, rHead, e := getHttpTestManifestHeadByTag(&br); e != nil {
+		t.Fatal(e)
+	} else {
+		h.ManifestHeadHandler(wHead, rHead)
+		assert.Equal(t, http.StatusOK, wHead.Code)
+	}
+
+	// HEAD with non-existent digest
+	br.Add("digest", "sha256:0000000000000000000000000000000000000000000000000000000000000000")
+	if wHead, rHead, e := getHttpTestManifestHeadByDigest(&br); e != nil {
+		t.Fatal(e)
+	} else {
+		h.ManifestHeadHandler(wHead, rHead)
+		assert.Equal(t, http.StatusNotFound, wHead.Code)
+	}
 }

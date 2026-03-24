@@ -9,11 +9,16 @@ RUN apk add --no-cache bash curl gcc git musl-dev vim wget
 WORKDIR /go/metahub-api
 COPY --from=metalib . ./ext/metalib
 COPY . ./
-RUN go mod edit -replace github.com/metahub-registry/metahub-core=/go/metahub-api/ext/metalib \
- && go mod edit -replace github.com/metahub-registry/metahub-core/pkg/backends/minio=/go/metahub-api/ext/metalib/pkg/backends/minio \
- && go mod edit -replace github.com/metahub-registry/metahub-core/pkg/types=/go/metahub-api/ext/metalib/pkg/types \
- && go mod edit -replace github.com/metahub-registry/metahub-core/pkg/backends/sqlite=/go/metahub-api/ext/metalib/pkg/backends/sqlite \
- && go mod edit -replace github.com/metahub-registry/metahub-core/pkg/backends/neo=/go/metahub-api/ext/metalib/pkg/backends/neo
+RUN go mod edit \
+     -replace github.com/metahub-registry/metahub-core=/go/metahub-api/ext/metalib \
+     -replace github.com/metahub-registry/metahub-core/pkg/backends/minio=\
+/go/metahub-api/ext/metalib/pkg/backends/minio \
+     -replace github.com/metahub-registry/metahub-core/pkg/types=\
+/go/metahub-api/ext/metalib/pkg/types \
+     -replace github.com/metahub-registry/metahub-core/pkg/backends/sqlite=\
+/go/metahub-api/ext/metalib/pkg/backends/sqlite \
+     -replace github.com/metahub-registry/metahub-core/pkg/backends/neo=\
+/go/metahub-api/ext/metalib/pkg/backends/neo
 RUN go mod tidy
 RUN --mount=type=cache,target=/go/pkg/mod go mod tidy
 ENV CGO_ENABLED=1 GOOS=linux

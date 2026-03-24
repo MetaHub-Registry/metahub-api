@@ -11,6 +11,7 @@ import (
 
 	gCtx "github.com/gorilla/context"
 	"github.com/stretchr/testify/assert"
+	"github.com/metahub-registry/metahub-core/pkg/types"
 	"github.com/metahub-registry/metahub-core/pkg/utils"
 )
 
@@ -195,6 +196,77 @@ func TestAuthAuthMiddlewareHandlerWithScope(t *testing.T) {
 	assert.Equal(t, 0, deb)
 
 }
+
+// ---------------------------------------------------------------------------
+// realmForRequest tests
+// ---------------------------------------------------------------------------
+
+func TestRealmForRequest(t *testing.T) {
+	tests := []struct {
+		name     string
+		host     string
+		proto    string
+		expected string
+	}{
+		{"metahub-registry.org host", "metahub-registry.org", "HTTP/1.1", "https://metahub-registry.org"},
+		{"metahub.qnib.org host", "metahub.qnib.org", "HTTP/1.1", "https://metahub.qnib.org"},
+		{"HTTP/2.0 unknown host", "custom.example.com", "HTTP/2.0", "https://custom.example.com"},
+		{"HTTP/1.1 unknown host", "custom.example.com", "HTTP/1.1", "http://custom.example.com"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodGet, "/", nil)
+			r.Host = tc.host
+			r.Proto = tc.proto
+			got := realmForRequest(r)
+			assert.Equal(t, tc.expected, got)
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// parseTokenParts tests
+// ---------------------------------------------------------------------------
+
+func TestParseTokenParts_MissingHeader(t *testing.T) {
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/v2", nil)
+	req := types.Request{Repo: "test/repo", Method: http.MethodGet}
+	_, _, ok := parseTokenParts(w, r, "http://example.com", req)
+	assert.False(t, ok)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestParseTokenParts_InvalidHeader(t *testing.T) {
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/v2", nil)
+	r.Header.Set("Authorization", "Bearer A B C")
+	req := types.Request{Repo: "test/repo", Method: http.MethodGet}
+	_, _, ok := parseTokenParts(w, r, "http://example.com", req)
+	assert.False(t, ok)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestParseTokenParts_InvalidHeader_EmptyRepo(t *testing.T) {
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/v2", nil)
+	r.Header.Set("Authorization", "Bearer A B C")
+	req := types.Request{Repo: "", Method: http.MethodGet}
+	_, _, ok := parseTokenParts(w, r, "http://example.com", req)
+	assert.False(t, ok)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestParseTokenParts_ValidHeader(t *testing.T) {
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/v2", nil)
+	r.Header.Set("Authorization", "Bearer mytoken123")
+	req := types.Request{Repo: "test/repo", Method: http.MethodGet}
+	accessToken, _, ok := parseTokenParts(w, r, "http://example.com", req)
+	assert.True(t, ok)
+	assert.Equal(t, "mytoken123", accessToken)
+}
+
 func TestAuthMiddleware(t *testing.T) {
 	expected := `{"token":"REDACTED-IN-HISTORY"}`
 	req := httptest.NewRequest(http.MethodGet, "/greet?name=john", nil)

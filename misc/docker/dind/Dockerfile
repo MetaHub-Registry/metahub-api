@@ -32,9 +32,9 @@ RUN go build -o /usr/bin/regsync
 
 FROM docker:20.10.14-dind
 ENV MH_URL=dev:80
-RUN apk add --no-cache bash curl jq screen skopeo vim
-RUN wget -qO- https://github.com/oras-project/oras/releases/download/v1.3.0/oras_1.3.0_linux_arm64.tar.gz | tar xfz - -C /usr/local/bin \
-  && chmod +x /usr/local/bin/oras
+RUN apk add --no-cache bash curl jq screen skopeo vim \
+ && wget -qO- https://github.com/oras-project/oras/releases/download/v1.3.0/oras_1.3.0_linux_arm64.tar.gz | tar xfz - -C /usr/local/bin \
+ && chmod +x /usr/local/bin/oras
 COPY daemon.json /etc/docker/daemon.json
 COPY bash_history /root/.bash_history
 COPY bashrc /root/.bashrc
