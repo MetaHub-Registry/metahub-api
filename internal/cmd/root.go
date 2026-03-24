@@ -57,10 +57,12 @@ func init() {
 	rootCmd.PersistentFlags().String("oidc-client-id", "", "OIDC client ID (env: OIDC_CLIENTID)")
 	rootCmd.PersistentFlags().String("oidc-client-secret", "", "OIDC client secret (env: OIDC_SECRET)")
 	rootCmd.PersistentFlags().String("oidc-redirect-uri", "", "OIDC redirect URI (env: OIDC_REDIRECT_URI)")
+	rootCmd.PersistentFlags().String("oidc-authentik-api-url", "", "Authentik API base URL for token management (env: OIDC_AUTHENTIK_API_URL)")
 	viper.BindEnv("oidc.issuer", "OIDC_ISSUER")
 	viper.BindEnv("oidc.clientid", "OIDC_CLIENTID")
 	viper.BindEnv("oidc.secret", "OIDC_SECRET")
 	viper.BindEnv("oidc.redirect_uri", "OIDC_REDIRECT_URI")
+	viper.BindEnv("oidc.authentik_api_url", "OIDC_AUTHENTIK_API_URL")
 
 }
 

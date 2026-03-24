@@ -27,6 +27,7 @@ func (h Handlers) OIDCAuthMiddleware() func(http.Handler) http.Handler {
 			}
 
 			ctx := contextWithClaims(r.Context(), claims)
+			ctx = contextWithRawToken(ctx, rawToken)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

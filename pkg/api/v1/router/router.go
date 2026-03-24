@@ -68,6 +68,10 @@ func Initialize(mag magazine.Magazine, oidcProvider *handlers.OIDCProvider) *chi
 		r.Use(h.OIDCAuthMiddleware())
 		r.Get("/logout", h.OIDCLogout)
 		r.Get("/session", h.UserGetSession)
+		// Registry token management (Authentik app passwords)
+		r.Post("/registry-token", h.RegistryTokenCreate)
+		r.Get("/registry-tokens", h.RegistryTokenList)
+		r.Delete("/registry-tokens/{identifier}", h.RegistryTokenRevoke)
 		r.Get("/user", h.UserGetOne)
 		r.Get("/users/{id}", h.UserGetOne)
 		r.Put("/users/{id}/secrets", h.UserPutSecret)
@@ -82,58 +86,62 @@ func Initialize(mag magazine.Magazine, oidcProvider *handlers.OIDCProvider) *chi
 			logrus.Info("Tracing enabled")
 			r.Use(otelchi.Middleware("metahub-api", otelchi.WithChiRoutes(r)))
 		}
-		r.Use(h.AuthMiddleware)
-		r.Get("/", h.HeartbeatHandler)
-		// TODO: Is there no way to match multiple lengh path?
-		r.Head(imgManifestRefPath, h.ManifestHeadHandler)
-		r.Get(imgManifestRefPath, h.ManifestGetHandler)
-		r.Head(repoImgManifestRefPath, h.ManifestHeadHandler)
-		r.Get(repoImgManifestRefPath, h.ManifestGetHandler)
-		r.Head("/{repo}/{repo2}/{image}/manifests/{reference}", h.ManifestHeadHandler)
-		r.Get("/{repo}/{repo2}/{image}/manifests/{reference}", h.ManifestGetHandler)
-		r.Head("/{repo}/{repo2}/{repo3}/{image}/manifests/{reference}", h.ManifestHeadHandler)
-		r.Get("/{repo}/{repo2}/{repo3}/{image}/manifests/{reference}", h.ManifestGetHandler)
+		// Heartbeat is unauthenticated per OCI Distribution Spec
+		r.Get("/", h.OCIHeartbeatHandler)
+		// All other /v2/ routes require JWKS-validated JWT
+		r.Group(func(r chi.Router) {
+			r.Use(h.OCIAuthMiddleware())
+			// TODO: Is there no way to match multiple lengh path?
+			r.Head(imgManifestRefPath, h.ManifestHeadHandler)
+			r.Get(imgManifestRefPath, h.ManifestGetHandler)
+			r.Head(repoImgManifestRefPath, h.ManifestHeadHandler)
+			r.Get(repoImgManifestRefPath, h.ManifestGetHandler)
+			r.Head("/{repo}/{repo2}/{image}/manifests/{reference}", h.ManifestHeadHandler)
+			r.Get("/{repo}/{repo2}/{image}/manifests/{reference}", h.ManifestGetHandler)
+			r.Head("/{repo}/{repo2}/{repo3}/{image}/manifests/{reference}", h.ManifestHeadHandler)
+			r.Get("/{repo}/{repo2}/{repo3}/{image}/manifests/{reference}", h.ManifestGetHandler)
 
-		//// Upload Manifest
-		r.Put(imgManifestRefPath, h.ManifestPutHandler)
-		r.Put(repoImgManifestRefPath, h.ManifestPutHandler)
-		//// Delete
-		r.Delete(imgManifestRefPath, h.ManifestDelHandler)
-		r.Delete(repoImgManifestRefPath, h.ManifestDelHandler)
-		// Blobs
-		r.Get(imgBlobRefPath, h.BlobHandler)
-		r.Get(repoImgBlobRefPath, h.BlobHandler)
-		r.Get("/{repo}/{repo2}/{image}/blobs/{reference}", h.BlobHandler)
-		r.Get("/{repo}/{repo2}/{repo3}/{image}/blobs/{reference}", h.BlobHandler)
-		///// HEAD is the same w/o actually writing a body
-		r.Head(imgBlobRefPath, h.BlobHandler)
-		r.Head(repoImgBlobRefPath, h.BlobHandler)
-		r.Head("/{repo}/{repo2}/{image}/blobs/{reference}", h.BlobHandler)
-		r.Head("/{repo}/{repo2}/{repo3}/{image}/blobs/{reference}", h.BlobHandler)
+			//// Upload Manifest
+			r.Put(imgManifestRefPath, h.ManifestPutHandler)
+			r.Put(repoImgManifestRefPath, h.ManifestPutHandler)
+			//// Delete
+			r.Delete(imgManifestRefPath, h.ManifestDelHandler)
+			r.Delete(repoImgManifestRefPath, h.ManifestDelHandler)
+			// Blobs
+			r.Get(imgBlobRefPath, h.BlobHandler)
+			r.Get(repoImgBlobRefPath, h.BlobHandler)
+			r.Get("/{repo}/{repo2}/{image}/blobs/{reference}", h.BlobHandler)
+			r.Get("/{repo}/{repo2}/{repo3}/{image}/blobs/{reference}", h.BlobHandler)
+			///// HEAD is the same w/o actually writing a body
+			r.Head(imgBlobRefPath, h.BlobHandler)
+			r.Head(repoImgBlobRefPath, h.BlobHandler)
+			r.Head("/{repo}/{repo2}/{image}/blobs/{reference}", h.BlobHandler)
+			r.Head("/{repo}/{repo2}/{repo3}/{image}/blobs/{reference}", h.BlobHandler)
 
-		// Tags
-		r.Get("/{image}/tags/list", h.TagGetHandler)
-		r.Get("/{repo}/{image}/tags/list", h.TagGetHandler)
-		r.Get("/{repo}/{repo2}/{image}/tags/list", h.TagGetHandler)
-		r.Get("/{repo}/{repo2}/{repo3}/{image}/tags/list", h.TagGetHandler)
-		r.Get("/_catalog", h.CatalogGetHandler)
-		// Upload Blobs
-		r.Post("/{repo}/{image}/blobs/uploads", h.BlobUploadPostHandler)
-		r.Post("/{image}/blobs/uploads", h.BlobUploadPostHandler)
-		r.Patch(ImgBlobUploadUuidPath, h.BlobUploadPatchHandler)
-		r.Patch(RepoImgBlobUploadUuidPath, h.BlobUploadPatchHandler)
-		r.Put(ImgBlobUploadUuidPath, h.BlobUploadPutHandler)
-		r.Put(RepoImgBlobUploadUuidPath, h.BlobUploadPutHandler)
-		r.Get(ImgBlobUploadUuidPath, h.BlobUploadGetHandler)
-		r.Get(RepoImgBlobUploadUuidPath, h.BlobUploadGetHandler)
-		// Delete Blobs
-		r.Delete(repoImgBlobRefPath, h.BlobDelHandler)
-		r.Delete(imgBlobRefPath, h.BlobDelHandler)
-		// Referrers
-		r.Get("/{image}/referrers/{reference}", h.ReferrersGetHandler)
-		r.Get("/{repo}/{image}/referrers/{reference}", h.ReferrersGetHandler)
-		r.Get("/{repo}/{repo2}/{image}/referrers/{reference}", h.ReferrersGetHandler)
-		r.Get("/{repo}/{repo2}/{repo3}/{image}/referrers/{reference}", h.ReferrersGetHandler)
+			// Tags
+			r.Get("/{image}/tags/list", h.TagGetHandler)
+			r.Get("/{repo}/{image}/tags/list", h.TagGetHandler)
+			r.Get("/{repo}/{repo2}/{image}/tags/list", h.TagGetHandler)
+			r.Get("/{repo}/{repo2}/{repo3}/{image}/tags/list", h.TagGetHandler)
+			r.Get("/_catalog", h.CatalogGetHandler)
+			// Upload Blobs
+			r.Post("/{repo}/{image}/blobs/uploads", h.BlobUploadPostHandler)
+			r.Post("/{image}/blobs/uploads", h.BlobUploadPostHandler)
+			r.Patch(ImgBlobUploadUuidPath, h.BlobUploadPatchHandler)
+			r.Patch(RepoImgBlobUploadUuidPath, h.BlobUploadPatchHandler)
+			r.Put(ImgBlobUploadUuidPath, h.BlobUploadPutHandler)
+			r.Put(RepoImgBlobUploadUuidPath, h.BlobUploadPutHandler)
+			r.Get(ImgBlobUploadUuidPath, h.BlobUploadGetHandler)
+			r.Get(RepoImgBlobUploadUuidPath, h.BlobUploadGetHandler)
+			// Delete Blobs
+			r.Delete(repoImgBlobRefPath, h.BlobDelHandler)
+			r.Delete(imgBlobRefPath, h.BlobDelHandler)
+			// Referrers
+			r.Get("/{image}/referrers/{reference}", h.ReferrersGetHandler)
+			r.Get("/{repo}/{image}/referrers/{reference}", h.ReferrersGetHandler)
+			r.Get("/{repo}/{repo2}/{image}/referrers/{reference}", h.ReferrersGetHandler)
+			r.Get("/{repo}/{repo2}/{repo3}/{image}/referrers/{reference}", h.ReferrersGetHandler)
+		})
 	})
 	router.Get("/", h.RedirectToWWW)
 	return router

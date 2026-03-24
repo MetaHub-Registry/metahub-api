@@ -16,6 +16,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/metahub-registry/metahub-api/pkg/config"
 	"github.com/metahub-registry/metahub-core/pkg/backends/magazine"
 	"github.com/metahub-registry/metahub-core/pkg/utils"
 	"golang.org/x/oauth2"
@@ -355,30 +356,30 @@ func TestOIDCLogin_RedirectURLContainsRequiredParams(t *testing.T) {
 
 func TestNewOIDCProvider_MissingIssuer(t *testing.T) {
 	ctx := context.Background()
-	_, err := NewOIDCProvider(ctx, magazine.OIDCCfg{
+	_, err := NewOIDCProvider(ctx, config.OIDCConfig{OIDCCfg: magazine.OIDCCfg{
 		ClientID:    "id",
 		RedirectURI: "http://localhost/cb",
-	})
+	}})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "oidc.issuer")
 }
 
 func TestNewOIDCProvider_MissingClientID(t *testing.T) {
 	ctx := context.Background()
-	_, err := NewOIDCProvider(ctx, magazine.OIDCCfg{
+	_, err := NewOIDCProvider(ctx, config.OIDCConfig{OIDCCfg: magazine.OIDCCfg{
 		Issuer:      "https://auth.example.com",
 		RedirectURI: "http://localhost/cb",
-	})
+	}})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "oidc.clientid")
 }
 
 func TestNewOIDCProvider_MissingRedirectURI(t *testing.T) {
 	ctx := context.Background()
-	_, err := NewOIDCProvider(ctx, magazine.OIDCCfg{
+	_, err := NewOIDCProvider(ctx, config.OIDCConfig{OIDCCfg: magazine.OIDCCfg{
 		Issuer:   "https://auth.example.com",
 		ClientID: "id",
-	})
+	}})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "oidc.redirect_uri")
 }
@@ -390,11 +391,11 @@ func TestNewOIDCProvider_DiscoveryFailure(t *testing.T) {
 		http.NotFound(w, r)
 	}))
 	defer srv.Close()
-	_, err := NewOIDCProvider(ctx, magazine.OIDCCfg{
+	_, err := NewOIDCProvider(ctx, config.OIDCConfig{OIDCCfg: magazine.OIDCCfg{
 		Issuer:      srv.URL,
 		ClientID:    "id",
 		RedirectURI: "http://localhost/cb",
-	})
+	}})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "OIDC discovery failed")
 }
@@ -545,12 +546,12 @@ func TestNewOIDCProvider_Success(t *testing.T) {
 	m := newMockOIDC(t)
 	// Use InsecureIssuerURLContext to allow http:// issuer in test
 	ctx := gooidc.InsecureIssuerURLContext(context.Background(), m.srv.URL)
-	p, err := NewOIDCProvider(ctx, magazine.OIDCCfg{
+	p, err := NewOIDCProvider(ctx, config.OIDCConfig{OIDCCfg: magazine.OIDCCfg{
 		Issuer:       m.srv.URL,
 		ClientID:     "test-client",
 		ClientSecret: "test-secret",
 		RedirectURI:  "http://localhost/callback",
-	})
+	}})
 	require.NoError(t, err)
 	require.NotNil(t, p)
 	assert.NotNil(t, p.Provider)
