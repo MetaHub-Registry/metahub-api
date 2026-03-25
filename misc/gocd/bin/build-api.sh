@@ -49,10 +49,11 @@ else
 fi
 go mod edit -replace github.com/metahub-registry/metahub-core=/go/metahub-api/exp/metalib  
 
-if [[ ! -z ${GO_PIPELINE_GROUP_NAME} ]];then
-   TAG="${GO_PIPELINE_GROUP_NAME}.$(date +%F)-${GO_PIPELINE_LABEL}"
-else 
-   TAG="$(date +%F)-${GO_PIPELINE_LABEL}"
+GIT_TAG=$(git describe --tags --exact-match 2>/dev/null || true)
+if [ -n "$GIT_TAG" ]; then
+   TAG="{{ GOCD_GROUP }}-${GIT_TAG}"
+else
+   TAG="{{ GOCD_GROUP }}.$(date +%F-%H)"
 fi
 if [[ ! -z "${ZOT_REGISTRY_URL}" ]];then
    REGISTRY=${ZOT_REGISTRY_URL}
