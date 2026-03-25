@@ -40,16 +40,37 @@ func sCmd(cmd *cobra.Command, args []string) {
 		log.Fatal(err)
 	}
 
-	oidcCfg, err := config.OIDCConfigFromViper()
+	// Load god-mode config first (it determines whether OIDC is required)
+	godmodeCfg, err := config.GodModeConfigFromViper()
 	if err != nil {
-		log.Fatalf("OIDC configuration error: %v", err)
-	}
-	oidcProvider, err := handlers.NewOIDCProvider(cmd.Context(), oidcCfg)
-	if err != nil {
-		log.Fatalf("Failed to initialize OIDC provider: %v", err)
+		log.Fatalf("God-mode configuration error: %v", err)
 	}
 
-	r := router.Initialize(mag, oidcProvider)
+	var godmodeAuth *handlers.GodModeAuth
+	if godmodeCfg.IsEnabled() {
+		logrus.Warnf("God-mode authentication enabled for %d user(s) — this bypasses OIDC validation", len(godmodeCfg.Users))
+		godmodeAuth = handlers.NewGodModeAuth(godmodeCfg)
+	}
+
+	// Conditionally initialize OIDC
+	var oidcProvider *handlers.OIDCProvider
+	oidcCfg, oidcErr := config.OIDCConfigFromViper()
+	if oidcErr == nil && oidcCfg.Issuer != "" {
+		// OIDC is configured — initialize the provider
+		oidcProvider, err = handlers.NewOIDCProvider(cmd.Context(), oidcCfg)
+		if err != nil {
+			log.Fatalf("Failed to initialize OIDC provider: %v", err)
+		}
+		logrus.Info("OIDC authentication initialized")
+	} else if godmodeCfg.IsEnabled() {
+		// OIDC is not configured, but god-mode is — run without OIDC
+		logrus.Warn("OIDC disabled — god-mode is the only authentication method")
+	} else {
+		// Neither OIDC nor god-mode — cannot serve
+		log.Fatalf("No authentication method configured: OIDC error: %v, god-mode: disabled", oidcErr)
+	}
+
+	r := router.Initialize(mag, oidcProvider, godmodeAuth)
 	addr := fmt.Sprintf(":%d", port)
 	logrus.Infof("Start serving on %s", addr)
 	err = http.ListenAndServe(addr, r)

@@ -7,7 +7,7 @@ minio:
   ssl: {{ MINIO_SSL |default("false") }}
   manifests:
     bucket: {{ MINIO_BUCKET_MANIFESTS |default("manifests") }}
-  BlobUploadPostHandler:
+  blobs:
     bucket: {{ MINIO_BUCKET_BLOBS |default("blobs") }}
 neo4j:
   dbname: {{ NEO4J_DB_NAME |default("neo4j") }}
@@ -25,3 +25,9 @@ logging:
   clientid: {{ OAUTH_CLIENTID }}
   secret: {{ OAUTH_SECRET }}
   state: {{ OAUTH_STATE |default("supersecretsalt") }}{% endif %}
+{% if GODMODE_USER %}godmode:
+  signing_key: "a-random-secret-key-at-least-32-characters"
+  users:
+    - username: {{ GODMODE_USER }}
+      password: {{ GODMODE_PASS |default(GODMODE_USER) }}
+      role: {{ GODMODE_ROLE |default("admin") }}{% endif %}

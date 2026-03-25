@@ -63,6 +63,8 @@ func init() {
 	viper.BindEnv("oidc.secret", "OIDC_SECRET")
 	viper.BindEnv("oidc.redirect_uri", "OIDC_REDIRECT_URI")
 	viper.BindEnv("oidc.authentik_api_url", "OIDC_AUTHENTIK_API_URL")
+	// God-mode flags with env var overrides
+	viper.BindEnv("godmode.signing_key", "GODMODE_SIGNING_KEY")
 
 }
 

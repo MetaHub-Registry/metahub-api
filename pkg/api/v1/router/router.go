@@ -24,9 +24,9 @@ const (
 	repoImgBlobRefPath        = "/{repo}/{image}/blobs/{reference}"
 )
 
-func Initialize(mag magazine.Magazine, oidcProvider *handlers.OIDCProvider) *chi.Mux {
+func Initialize(mag magazine.Magazine, oidcProvider *handlers.OIDCProvider, godmode *handlers.GodModeAuth) *chi.Mux {
 	// Handlers
-	h := handlers.NewHandlers("dev", mag, oidcProvider)
+	h := handlers.NewHandlers("dev", mag, oidcProvider, godmode)
 	// define router
 	router := chi.NewRouter()
 	log := logrus.StandardLogger().WithFields(
@@ -86,11 +86,12 @@ func Initialize(mag magazine.Magazine, oidcProvider *handlers.OIDCProvider) *chi
 			logrus.Info("Tracing enabled")
 			r.Use(otelchi.Middleware("metahub-api", otelchi.WithChiRoutes(r)))
 		}
-		// Heartbeat is unauthenticated per OCI Distribution Spec
-		r.Get("/", h.OCIHeartbeatHandler)
-		// All other /v2/ routes require JWKS-validated JWT
+		// All /v2/ routes (including heartbeat) go through auth middleware.
+		// Docker uses GET /v2/ to discover the auth scheme — it must return
+		// 401 with WWW-Authenticate when no valid token is present.
 		r.Group(func(r chi.Router) {
 			r.Use(h.OCIAuthMiddleware())
+			r.Get("/", h.OCIHeartbeatHandler)
 			// TODO: Is there no way to match multiple lengh path?
 			r.Head(imgManifestRefPath, h.ManifestHeadHandler)
 			r.Get(imgManifestRefPath, h.ManifestGetHandler)

@@ -43,16 +43,40 @@ func (h Handlers) OCIAuthMiddleware() func(http.Handler) http.Handler {
 			if rawToken == "" {
 				realm := realmForRequest(r)
 				det := helper.NewDetail("repository", "", r.Method)
-				unauthorized(w, realm, det, invalidRequest, missingAuthHeader)
+				unauthorized(w, r, realm, det, invalidRequest, missingAuthHeader)
 				return
 			}
 
-			claims, err := h.oidc.oidcClaimsFromToken(r.Context(), rawToken)
-			if err != nil {
+			// Try god-mode verification first, then OIDC
+			var claims *OIDCClaims
+			var role string
+			var err error
+
+			if h.godmode.IsEnabled() {
+				gmClaims, gmErr := h.godmode.VerifyToken(rawToken)
+				if gmClaims != nil {
+					claims = gmClaims.OIDCClaims
+					role = gmClaims.Role
+				} else {
+					err = gmErr
+				}
+			}
+
+			if claims == nil && h.oidc != nil {
+				claims, err = h.oidc.oidcClaimsFromToken(r.Context(), rawToken)
+				if claims != nil {
+					role = "user" // OIDC users default to "user"; role derivation from Authentik groups planned
+				}
+			}
+
+			if claims == nil {
 				realm := realmForRequest(r)
 				det := helper.NewDetail("repository", "", r.Method)
-				msg := tokenErrMsg(err)
-				unauthorized(w, realm, det, invalidToken, "%s", msg)
+				msg := "invalid token"
+				if err != nil {
+					msg = tokenErrMsg(err)
+				}
+				unauthorized(w, r, realm, det, invalidToken, "%s", msg)
 				return
 			}
 
@@ -62,19 +86,23 @@ func (h Handlers) OCIAuthMiddleware() func(http.Handler) http.Handler {
 			ociAuth := &OCIAuthContext{
 				Username: username,
 				Profile:  profile,
-				Role:     "user", // Role derivation from Authentik groups is planned for a future change
+				Role:     role,
 			}
 
 			ctx := contextWithOCIAuth(r.Context(), ociAuth)
+			rWithCtx := r.WithContext(ctx)
 
-			// Bridge: set gorilla context for backward compatibility with
-			// metalib's types.NewRequest which reads from gorilla context.
-			gCtx.Set(r, "userName", username)
-			gCtx.Set(r, "profileName", profile)
-			gCtx.Set(r, "userRole", ociAuth.Role)
-			gCtx.Set(r, "accountName", rawToken)
+			// Bridge: set gorilla context on the NEW request for backward
+			// compatibility with metalib's types.NewRequest which reads
+			// from gorilla context. Must use rWithCtx (not r) because
+			// r.WithContext() returns a new *http.Request pointer and
+			// gorilla context is keyed by pointer.
+			gCtx.Set(rWithCtx, "userName", username)
+			gCtx.Set(rWithCtx, "profileName", profile)
+			gCtx.Set(rWithCtx, "userRole", ociAuth.Role)
+			gCtx.Set(rWithCtx, "accountName", rawToken)
 
-			next.ServeHTTP(w, r.WithContext(ctx))
+			next.ServeHTTP(w, rWithCtx)
 		})
 	}
 }
@@ -83,6 +111,7 @@ func (h Handlers) OCIAuthMiddleware() func(http.Handler) http.Handler {
 // This is registered BEFORE the auth middleware so it doesn't require authentication.
 func (h Handlers) OCIHeartbeatHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Docker-Distribution-Api-Version", "registry/2.0")
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprint(w, "{}")
 }
