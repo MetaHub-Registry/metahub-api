@@ -112,3 +112,6 @@ tasks:
     cmds:
       - mc rm --recursive --force dev/blobs
       - mc rm --recursive --force dev/manifests
+  localConfig:
+    cmds:
+     - gonja-cli misc/config/metahub-api.yaml.tpl misc/config/local-config.yaml

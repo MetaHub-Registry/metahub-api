@@ -14,10 +14,10 @@ import (
 )
 
 const (
-	pkgNameOIDCOAuth  = "handlers/oidc_oauth.go"
-	oidcStateCookie   = "oidc_state"
+	pkgNameOIDCOAuth   = "handlers/oidc_oauth.go"
+	oidcStateCookie    = "oidc_state"
 	oidcVerifierCookie = "oidc_verifier"
-	cookieMaxAge      = 300 // 5 minutes
+	cookieMaxAge       = 300 // 5 minutes
 )
 
 // randBase64URL returns n random bytes encoded as base64url (no padding).
@@ -39,6 +39,10 @@ func s256Challenge(verifier string) string {
 // It generates a random state and code_verifier, stores them in short-lived
 // cookies, and redirects the user to Authentik's authorization endpoint.
 func (h Handlers) OIDCLogin(w http.ResponseWriter, r *http.Request) {
+	if h.oidc == nil {
+		writeJSONError(w, http.StatusNotImplemented, "OIDC authentication is not configured")
+		return
+	}
 	ctx := r.Context()
 	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
 		"package": pkgNameOIDCOAuth,
@@ -91,6 +95,10 @@ func (h Handlers) OIDCLogin(w http.ResponseWriter, r *http.Request) {
 // verifies the ID token, upserts the user, and redirects the frontend
 // with the access token in the URL fragment.
 func (h Handlers) OIDCCallback(w http.ResponseWriter, r *http.Request) {
+	if h.oidc == nil {
+		writeJSONError(w, http.StatusNotImplemented, "OIDC authentication is not configured")
+		return
+	}
 	ctx := r.Context()
 	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
 		"package": pkgNameOIDCOAuth,
@@ -169,10 +177,10 @@ func (h Handlers) OIDCCallback(w http.ResponseWriter, r *http.Request) {
 
 	// Upsert user in SQLite.
 	usr := types.User{
-		Username:  username,
-		OidcSub:   claims.Sub,
-		Email:     claims.Email,
-		Active:    1,
+		Username: username,
+		OidcSub:  claims.Sub,
+		Email:    claims.Email,
+		Active:   1,
 	}
 	exists, err := h.mag.UserManagement.UserNameExists(ctx, username)
 	if err != nil {

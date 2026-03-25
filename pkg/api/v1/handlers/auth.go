@@ -154,8 +154,32 @@ func (h Handlers) AuthHandler(w http.ResponseWriter, r *http.Request) {
 	username, _ := parseUsernameProfile(rawUsername)
 	utils.Debug(l, span, "auth request for user:'%s' acct:'%s'", username, acct)
 
-	// Exchange credentials with Authentik
-	jwt, err := h.exchangeCredentialsWithAuthentik(username, password)
+	// God-mode check: bypass OIDC if credentials match a god-mode user
+	if h.godmode.IsEnabled() && h.godmode.CheckCredentials(username, password) {
+		utils.Debug(l, span, "god-mode auth for user '%s'", username)
+		token, err := h.godmode.MintToken(username)
+		if err != nil {
+			utils.Warn(l, span, "god-mode token minting failed for user '%s': %v", username, err)
+			w.Header().Set(headerContentType, contentTypeJSON)
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"error": "token creation failed"})
+			return
+		}
+		w.Header().Set(headerContentType, contentTypeJSON)
+		json.NewEncoder(w).Encode(map[string]string{"token": token})
+		return
+	}
+
+	// OIDC path: exchange credentials with Authentik
+	if h.oidc == nil {
+		utils.Warn(l, span, "no auth provider available for user '%s' (OIDC disabled, not a god-mode user)", username)
+		w.Header().Set(headerContentType, contentTypeJSON)
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"error": "no authentication provider configured"})
+		return
+	}
+
+	jwtToken, err := h.exchangeCredentialsWithAuthentik(username, password)
 	if err != nil {
 		utils.Warn(l, span, "Authentik token exchange failed for user '%s': %v", username, err)
 		w.Header().Set(headerContentType, contentTypeJSON)
@@ -165,7 +189,7 @@ func (h Handlers) AuthHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set(headerContentType, contentTypeJSON)
-	json.NewEncoder(w).Encode(map[string]string{"token": jwt})
+	json.NewEncoder(w).Encode(map[string]string{"token": jwtToken})
 }
 
 // realmForRequest returns the auth realm URL for the given request.
@@ -187,15 +211,15 @@ func realmForRequest(r *http.Request) string {
 // which validates JWTs via JWKS and sets gorilla context for metalib compatibility.
 
 // unauthorized returns a request to the user for auth - e.g., "get a token from this endpoint"
-func unauthorized(w http.ResponseWriter, realm string, det helper.Detail, err oauthError, format string, v ...interface{}) {
+func unauthorized(w http.ResponseWriter, r *http.Request, realm string, det helper.Detail, err oauthError, format string, v ...interface{}) {
 	l := logrus.WithFields(logrus.Fields{
 		"package": "middleware",
 		"func":    "unauthorized",
 	})
 	_ = l
-	description := fmt.Sprintf(format, v...)
+	_ = fmt.Sprintf(format, v...) // description kept for debugging if needed
 	authUrl := realm + "/auth"
-	authenticateHeader := fmt.Sprintf("Bearer realm=%q,error=%q,error_description=%q", authUrl, err, description)
+	authenticateHeader := fmt.Sprintf("Bearer realm=%q,service=%q", authUrl, r.Host)
 	w.Header().Add(headerContentType, contentTypeJSON)
 	l.Infof("authenticateHeader: %s", authenticateHeader)
 	w.Header().Add("WWW-Authenticate", authenticateHeader)

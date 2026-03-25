@@ -19,9 +19,28 @@ func (h Handlers) OIDCAuthMiddleware() func(http.Handler) http.Handler {
 				return
 			}
 
-			claims, err := h.oidc.oidcClaimsFromToken(r.Context(), rawToken)
-			if err != nil {
-				msg := tokenErrMsg(err)
+			// Try god-mode verification first, then OIDC
+			var claims *OIDCClaims
+			var err error
+
+			if h.godmode.IsEnabled() {
+				gmClaims, gmErr := h.godmode.VerifyToken(rawToken)
+				if gmClaims != nil {
+					claims = gmClaims.OIDCClaims
+				} else {
+					err = gmErr
+				}
+			}
+
+			if claims == nil && h.oidc != nil {
+				claims, err = h.oidc.oidcClaimsFromToken(r.Context(), rawToken)
+			}
+
+			if claims == nil {
+				msg := "invalid token"
+				if err != nil {
+					msg = tokenErrMsg(err)
+				}
 				writeJSONError(w, http.StatusUnauthorized, msg)
 				return
 			}
