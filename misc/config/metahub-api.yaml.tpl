@@ -18,6 +18,9 @@ frontend:
   redirect: {{ FRONTEND_REDIRECT | default("https://frontend.metahub-registry.org") }}
 cors:
   enabled: {{ CORS_ENABLED |default("false")}}
+{% if TRACING_URL %}tracing:
+  name: "{{ TRACING_NAME |default("metahub-api") }}"
+  endpoint: "{{ TRACING_URL }}"{% endif %}
 logging:
   level: {{ LOGSTASH_URL |default("debug") }}{% if LOGSTASH_URL %}
   gelf: {{ LOGSTASH_URL }}:12201{% endif %}

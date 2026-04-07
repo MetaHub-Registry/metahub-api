@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"github.com/metahub-registry/metahub-api/pkg/config"
 	"github.com/metahub-registry/metahub-core/pkg/helper"
 	"github.com/metahub-registry/metahub-core/pkg/utils"
 )
@@ -96,7 +97,7 @@ func (h Handlers) exchangeCredentialsWithAuthentik(username, password string) (s
 		"client_id":  {h.oidc.Config.ClientID},
 		"username":   {username},
 		"password":   {password},
-		"scope":      {"openid profile email"},
+		"scope":      {"openid profile email groups"},
 	}
 
 	client := &http.Client{Timeout: 10 * time.Second}
@@ -140,10 +141,16 @@ func (h Handlers) AuthHandler(w http.ResponseWriter, r *http.Request) {
 	_ = ctx
 
 	rawUsername, password, hasAuth := parseBasicAuth(r)
+	// Prefer the ?account= query param as the canonical raw username: Docker sends
+	// the full "user/profile" value there unmodified, whereas the Basic auth header
+	// may have URL-encoding differences depending on client version.
 	acct := r.URL.Query().Get("account")
+	if acct != "" {
+		rawUsername = acct
+	}
 
 	// Anonymous access: no credentials provided
-	if !hasAuth || (acct == "" && rawUsername == "") {
+	if !hasAuth || rawUsername == "" {
 		utils.Debug(l, span, "anonymous auth request, returning generic token")
 		w.Header().Set(headerContentType, contentTypeJSON)
 		json.NewEncoder(w).Encode(map[string]string{"token": "REDACTED-IN-HISTORY"})
@@ -179,7 +186,7 @@ func (h Handlers) AuthHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jwtToken, err := h.exchangeCredentialsWithAuthentik(username, password)
+	authentikJWT, err := h.exchangeCredentialsWithAuthentik(username, password)
 	if err != nil {
 		utils.Warn(l, span, "Authentik token exchange failed for user '%s': %v", username, err)
 		w.Header().Set(headerContentType, contentTypeJSON)
@@ -188,11 +195,40 @@ func (h Handlers) AuthHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// If the login username contains a profile suffix (e.g., "alice/zen2"), wrap
+	// the Authentik JWT in a profile envelope token so the profile is preserved
+	// through to the OCI middleware. Without a profile suffix, return the
+	// Authentik JWT unchanged (existing behaviour).
+	_, profile := parseUsernameProfile(rawUsername)
+	if profile != defaultProfile {
+		signingKey, keyErr := config.EnvelopeSigningKey()
+		if keyErr != nil {
+			utils.Warn(l, span, "envelope signing key unavailable, returning plain Authentik JWT: %v", keyErr)
+			w.Header().Set(headerContentType, contentTypeJSON)
+			json.NewEncoder(w).Encode(map[string]string{"token": authentikJWT})
+			return
+		}
+		envelopeToken, mintErr := MintEnvelopeToken(rawUsername, authentikJWT, signingKey)
+		if mintErr != nil {
+			utils.Warn(l, span, "failed to mint envelope token for user '%s': %v", rawUsername, mintErr)
+			w.Header().Set(headerContentType, contentTypeJSON)
+			json.NewEncoder(w).Encode(map[string]string{"token": authentikJWT})
+			return
+		}
+		utils.Debug(l, span, "issued envelope token for user '%s' with profile '%s'", username, profile)
+		w.Header().Set(headerContentType, contentTypeJSON)
+		json.NewEncoder(w).Encode(map[string]string{"token": envelopeToken})
+		return
+	}
+
 	w.Header().Set(headerContentType, contentTypeJSON)
-	json.NewEncoder(w).Encode(map[string]string{"token": jwtToken})
+	json.NewEncoder(w).Encode(map[string]string{"token": authentikJWT})
 }
 
 // realmForRequest returns the auth realm URL for the given request.
+// It uses the X-Forwarded-Proto header (set by the gateway from the original
+// client connection) rather than r.Proto, which is always HTTP/2.0 when the
+// gateway proxies over h2c to the backend regardless of the client's scheme.
 func realmForRequest(r *http.Request) string {
 	switch r.Host {
 	case "metahub-registry.org":
@@ -200,10 +236,16 @@ func realmForRequest(r *http.Request) string {
 	case "metahub.qnib.org":
 		return "https://metahub.qnib.org"
 	}
-	if r.Proto == "HTTP/2.0" {
-		return "https://" + r.Host
+	scheme := r.Header.Get("X-Forwarded-Proto")
+	if scheme == "" {
+		// Fallback: no proxy header present — trust r.Proto directly.
+		if r.TLS != nil {
+			scheme = "https"
+		} else {
+			scheme = "http"
+		}
 	}
-	return "http://" + r.Host
+	return scheme + "://" + r.Host
 }
 
 // Legacy auth functions (AuthMiddleware, AuthMiddlewareHandler, AuthMiddlewareFunc,
