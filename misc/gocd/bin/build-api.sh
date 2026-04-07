@@ -43,38 +43,21 @@ if [[ -f metalib_result/result.yaml ]];then
 metalib:
    image: ${METALIB_IMAGE}
 EOF
-   
-else
-   if [[ -f metalib.tar ]];then
-      DOCKERFILE="Dockerfile.legacy"
-      echo ">> tar -xf metalib.tar -C exp/"
-      mkdir -p exp
-      tar -xf metalib.tar -C exp/
-      echo ">> pwd: $(pwd)"
-      echo ">> ls -la exp/metalib"
-      ls -la exp/metalib
-   elif [[ "${DEPLOYMENT}" == "dev" ]];then
-      echo "> git clone --branch=develop https://gitlab-ci-token:GITLAB_REPO_RO@github.com/metahub-registry/metahub-core.git exp/metalib"
-      git clone --branch=develop https://gitlab-ci-token:${GITLAB_REPO_RO}@github.com/metahub-registry/metahub-core.git exp/metalib
-   elif [[ "${DEPLOYMENT}" == "prod" ]];then
-      echo "> git clone --branch=main https://gitlab-ci-token:GITLAB_REPO_RO@github.com/metahub-registry/metahub-core.git exp/metalib"
-      git clone --branch=main https://gitlab-ci-token:${GITLAB_REPO_RO}@github.com/metahub-registry/metahub-core.git exp/metalib
-   else 
-      echo "ERROR: DEPLOYMENT '${DEPLOYMENT} not known or not set (dev|prod)"
-      exit 1
-   fi
 fi
 go mod edit -replace github.com/metahub-registry/metahub-core=/go/metahub-api/exp/metalib
 
 REGISTRY=""
 if [[ ! -z ${ZOT_REGISTRY_URL} ]];then
    REGISTRY=${ZOT_REGISTRY_URL}
+elif [[ ! -z ${HARBOR_REG} ]];then
+   REGISTRY=${HARBOR_REG}
 else
    echo "No ZOT_REGISTRY_URL defined"
    exit 1
 fi
+REGISTRY=${HARBOR_REG}
 
-NEW_IMAGE_NAME=${REGISTRY}/metahub-api
+NEW_IMAGE_NAME=${HARBOR_REG}/metahub/api
 GIT_TAG=$(git describe --tags --exact-match 2>/dev/null || true)
 if [ -n "$GIT_TAG" ]; then
    TAG="$(echo ${GIT_TAG}-${GO_PIPELINE_GROUP_NAME}|tr '[:upper:]' '[:lower:]')"
@@ -84,21 +67,19 @@ else
 fi
 if [[ ! -z "${ZOT_REGISTRY_URL}" ]];then
    REGISTRY=${ZOT_REGISTRY_URL}
-else 
-   REGISTRY=registry.gitlab.com
-   echo "${GITLAB_REGISTRY_TOKEN}" | docker login registry.gitlab.com \
-      -u qnib \
-      --password-stdin
 fi
+echo "> NEW_IMAGE_NAME: ${NEW_IMAGE_NAME}"
+echo "> Login to ${HARBOR_REG} as 'robot$good'"
+echo "HARBOR_TOKEN length: $(echo ${HARBOR_TOKEN}|wc -c)"
+docker login ${HARBOR_REG} \
+   -u 'robot$good' \
+   -p "${HARBOR_TOKEN}"
 
+docker login registry.gitlab.com \
+   -u qnib \
+   -p "${GITLAB_REGISTRY_TOKEN}"
 
 NEW_IMAGE=$(echo ${NEW_IMAGE_NAME}:${TAG} |tr '[:upper:]' '[:lower:]')
-cat >> result.yaml << EOF
-metahub:
-   image:
-      name: ${NEW_IMAGE_NAME}
-      tag: ${TAG}
-EOF
 set -x
 if [[ ! -z ${METALIB_IMAGE} ]];then
    docker build --build-arg=METALIB_IMAGE=${METALIB_IMAGE} -f ${DOCKERFILE} -t ${NEW_IMAGE} .
@@ -107,3 +88,8 @@ else
 fi
 docker push ${NEW_IMAGE}
 docker rmi ${NEW_IMAGE}
+gdh patch -f result.yaml \
+   --add=metahub.image.reg=${HARBOR_REG} \
+   --add=metahub.image.name=${NEW_IMAGE_NAME} \
+   --add=metahub.image.tag=${TAG} \
+   --add=metahub.image.full=${NEW_IMAGE}

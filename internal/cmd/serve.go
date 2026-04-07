@@ -70,6 +70,13 @@ func sCmd(cmd *cobra.Command, args []string) {
 		log.Fatalf("No authentication method configured: OIDC error: %v, god-mode: disabled", oidcErr)
 	}
 
+	// Validate envelope signing key when OIDC is active (envelope tokens require it)
+	if oidcProvider != nil {
+		if _, err := config.EnvelopeSigningKey(); err != nil {
+			log.Fatalf("Envelope token signing key not configured: %v", err)
+		}
+	}
+
 	r := router.Initialize(mag, oidcProvider, godmodeAuth)
 	addr := fmt.Sprintf(":%d", port)
 	logrus.Infof("Start serving on %s", addr)

@@ -65,6 +65,8 @@ func init() {
 	viper.BindEnv("oidc.authentik_api_url", "OIDC_AUTHENTIK_API_URL")
 	// God-mode flags with env var overrides
 	viper.BindEnv("godmode.signing_key", "GODMODE_SIGNING_KEY")
+	// Envelope token signing key (falls back to godmode.signing_key if not set)
+	viper.BindEnv("auth.envelope_signing_key", "AUTH_ENVELOPE_SIGNING_KEY")
 
 }
 

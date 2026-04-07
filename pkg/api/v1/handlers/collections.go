@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -80,6 +79,8 @@ func (h Handlers) CollectionGetOne(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	mlibUtils.Debug(l, span, " -> %s:%s", col.Repo, col.Tag)
+	// Artifact filtering (non-image config media types) is applied at the database layer
+	// in metalib (ManifestDataGetByCollectionTag). No handler-level filtering is needed.
 	// Create Breadcrumbs for the collection
 	reps := set.NewLinkedHashSetString()
 	for idx, r := range strings.Split(col.Repo, "/") {
@@ -88,7 +89,7 @@ func (h Handlers) CollectionGetOne(w http.ResponseWriter, r *http.Request) {
 			bc := utils.BreadCrumb{
 				Crumb:  r,
 				Active: 1,
-				Link:   fmt.Sprintf("/collections/%s", strings.Join(reps.AsSlice(), "/")),
+				Link:   strings.Join(reps.AsSlice(), "/"),
 				Repo:   strings.Join(reps.AsSlice(), "/"),
 				Tag:    col.Tag,
 				IDX:    idx,
@@ -107,11 +108,15 @@ func (h Handlers) CollectionGetOne(w http.ResponseWriter, r *http.Request) {
 			col.Manifests[key] = mani
 		}
 	*/
+	// Mark the last breadcrumb as active (non-clickable current position)
+	if len(breadCrumbs) > 0 {
+		breadCrumbs[len(breadCrumbs)-1].Active = 0
+	}
 	mlibUtils.Debug(l, span, "Found collection '%s:%s' with %d manifests", col.Repo, col.Tag, len(col.Manifests))
 	payload := envelope{
 		"repos":        reps.AsSlice(),
 		"bread_crumbs": breadCrumbs,
-		"collection":   col,
+		"collection":   toUICollectionDetail(col),
 	}
 	_ = h.writeJSON(w, http.StatusOK, payload)
 }
@@ -152,7 +157,7 @@ func accumulateCollectionNext(cols []types.CollectionListing, repoSlug []string,
 				breadCrumbs = append(breadCrumbs, utils.BreadCrumb{
 					Crumb:  seg,
 					Active: 1,
-					Link:   fmt.Sprintf("/collections/%s", strings.Join(reps.AsSlice(), "/")),
+					Link:   strings.Join(reps.AsSlice(), "/"),
 					Repo:   strings.Join(reps.AsSlice(), "/"),
 					IDX:    i,
 				})
@@ -183,6 +188,8 @@ func (h Handlers) CollectionGetAll(w http.ResponseWriter, r *http.Request) {
 	l = l.WithFields(logrus.Fields{"repo": pl.Repo})
 	l.Infof("CollectionGetAll: '%s'", pl.Repo)
 	repoSlug := strings.Split(pl.Repo, "/")
+	// Artifact filtering (non-image config media types) is applied at the database layer
+	// in metalib (ManifestDataGetByCollectionTag). No handler-level filtering is needed.
 	cols, err := h.mag.Database.CollectionListingGetByRepoLike(ctx, pl.Repo)
 	if err != nil {
 		h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})

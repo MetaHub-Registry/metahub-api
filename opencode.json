@@ -1,0 +1,35 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "external_directory": {
+      "~/go/src/github.com/metahub-registry/metahub-core/**": "ask",
+      "~/src/gitlab.com/qnib-frontend/metahub-ui/**": "ask"
+    }
+  },
+  "agent": {
+    "build": {
+      "permission": {
+        "external_directory": {
+          "~/go/src/github.com/metahub-registry/metahub-core/**": "allow",
+          "~/src/gitlab.com/qnib-frontend/metahub-ui/**": "allow"
+        },
+        "edit": {
+          "~/go/src/github.com/metahub-registry/metahub-core/**": "allow",
+          "~/src/gitlab.com/qnib-frontend/metahub-ui/**": "allow"
+        }
+      }
+    },
+    "plan": {
+      "permission": {
+        "external_directory": {
+          "~/go/src/github.com/metahub-registry/metahub-core/**": "allow",
+          "~/src/gitlab.com/qnib-frontend/metahub-ui/**": "allow"
+        },
+        "edit": {
+          "~/go/src/github.com/metahub-registry/metahub-core/**": "deny",
+          "~/src/gitlab.com/qnib-frontend/metahub-ui/**": "deny"
+        }
+      }
+    }
+  }
+}
