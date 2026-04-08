@@ -1,20 +1,14 @@
 version: '3'
 
 dotenv: ['.env']
-tasks:
-  git:*:
-    vars:
-      GCMD: '{{index .MATCH 0}}' 
-    cmds:
-      - git commit -{{.GCMD}} {{.CLI_ARGS}}
-      - git push
-  test:
-    cmds:
-      - ./test.sh
-  sonar:
-    cmds:
-      - ./misc/bin/sonar.sh
 
+includes:
+  dev:
+    taskfile: ./Taskfile_dev.yml
+  mh-ui:
+    taskfile: ~/src/gitlab.com/qnib-frontend/metahub-ui/Taskfile.yaml
+    dir: ~/src/gitlab.com/qnib-frontend/metahub-ui/
+tasks:
   up:*:
     vars:
       UPTYPE: '{{index .MATCH 0}}' 
@@ -22,10 +16,11 @@ tasks:
       - docker-compose -f docker-compose-{{.UPTYPE}}.yaml up -d --wait
   up:
     cmds:
-      - task: up:data
-      - task: up:monitoring
       - docker network create mh-data || true
       - docker volume create ce-registry || true
+      - task: up:data
+      - task: up:monitoring
+      - task: mh-ui:build
       - docker-compose -f docker-compose.yaml up -d --wait
   down:
     cmds:
@@ -39,7 +34,7 @@ tasks:
       - docker compose exec -ti -w /Users/christian.kniep/go/src/github.com/metahub-registry/metahub-api dev supervisorctl tail -f metahub
   seedAdmin:
     cmds:
-      - docker compose exec -ti -w /etc/metahub-admin admin ./misc/bin/run-local.sh /community-edition/collections/qnib/featuretest
+      - docker compose exec -ti -w /etc/metahub-admin admin ./misc/bin/run-local.sh /community-edition/collections/qnib/ftest
   compute:
     cmds:
       - task: compute:manifests
@@ -51,12 +46,12 @@ tasks:
       - docker compose exec -ti -w /etc/metahub-admin admin metahub-admin --config ./misc/config/compose-config.yaml compute {{ .ele }}
   seedMinimal:
     cmds:
-      - docker compose exec -ti -w /etc/metahub-admin admin ./misc/bin/parse-profiles-rules.sh
+      - docker compose exec -ti -w /etc/metahub-admin admin ./misc/bin/parse-profiles-rules.sh {{.CLI_ARGS}}
   loginDind:*:
     vars:
       PROF: '{{index .MATCH 0}}' 
     cmds:
-      - docker compose exec -ti dind sh -c "echo qnib | docker login dev:80 -u qnib#{{.PROF }} --password-stdin"
+      - docker compose exec -ti dind sh -c "echo oci | docker login dev:80 -u oci#{{.PROF }} --password-stdin"
   pushAlpine:*:
     vars:
       ARCH: '{{index .MATCH 0}}' 
@@ -70,8 +65,8 @@ tasks:
       - docker compose exec -ti dind sh -c "docker buildx build --platform linux/amd64,linux/arm64 --push -t dev:80/qnib/alpine:multiarchlatest --build-arg BASE_IMAGE=alpine:latest ./misc/dockerfiles/alpine/"
   testDind:
     cmds:
-      - docker compose exec -ti dind sh -c "docker pull dev:80/qnib/featuretest:latest"
-      - docker compose exec -ti dind sh -c "docker run -ti --rm dev:80/qnib/featuretest:latest"
+      - docker compose exec -ti dind sh -c "docker pull dev:80/qnib/ftest:latest"
+      - docker compose exec -ti dind sh -c "docker run -ti --rm dev:80/qnib/ftest:latest"
   execDind:
     cmds:
       - docker compose exec -ti dind bash

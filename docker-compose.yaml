@@ -50,6 +50,12 @@ services:
       CE_URL: ce:80
       PS1: 'dind > '
       MH_USER: qnib
+  metahub-ui:
+    image: metahub-ui
+    ports:
+      - "8082:80"
+    environment:
+      - METAHUB_API_URL=http://localhost:8080
   oci:
     build: misc/docker/oci/
     command: ["sleep", "inf"]
