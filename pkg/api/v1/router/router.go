@@ -67,6 +67,10 @@ func Initialize(mag magazine.Magazine, oidcProvider *handlers.OIDCProvider, godm
 		// OIDC login / callback (public)
 		r.Get("/login", h.OIDCLogin)
 		r.Get("/callback", h.OIDCCallback)
+		// Auth mode discovery (public) — lets the UI decide which login flow to render.
+		r.Get("/auth/config", h.AuthConfig)
+		// God-mode JSON login endpoint (public) — returns 404 when god-mode is disabled.
+		r.Post("/godmode/login", h.GodModeLogin)
 	})
 	router.Route("/api/v1/protected", func(r chi.Router) {
 		r.Use(middleware.Timeout(apiTimeout))
