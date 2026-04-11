@@ -57,8 +57,8 @@ func Initialize(mag magazine.Magazine, oidcProvider *handlers.OIDCProvider, godm
 	//Sets context for all requests
 	router.Route("/api/v1", func(r chi.Router) {
 		r.Use(middleware.Timeout(apiTimeout))
-		r.Post("/collections", h.CollectionGetAll)
-		r.Post("/collection", h.CollectionGetOne)
+		r.Post("/collections", h.RepoGetAll)
+		r.Post("/collection", h.RepoGetOne)
 		// ORAS artifact browsing (public)
 		r.Get("/oras", h.OrasGetAll)
 		r.Get("/oras/artifact", h.OrasGetOne)

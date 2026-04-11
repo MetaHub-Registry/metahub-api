@@ -282,45 +282,6 @@ func (h Handlers) handleManifest(ctx context.Context, w http.ResponseWriter, req
 	return false
 }
 
-func (h Handlers) handleManifestList(ctx context.Context, w http.ResponseWriter, req types.Request) (ok bool) {
-	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
-		"package": pkgNameOciMani,
-		"func":    "handleManifestList",
-		"repo":    req.Repo,
-		"tag":     req.Tag,
-		"digest":  utils.ShortenDigest(req.Digest),
-	})
-	defer span.End()
-	ml, found, err := h.mag.ManifestListGetByRequest(ctx, req)
-	if err != nil {
-		// 1. FALSE
-		msg := fmt.Sprintf("failed to fetch ManifestList: %v", err)
-		l.Error(msg)
-		det := helper.NewDetailFromReq(req)
-		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
-		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
-		ok = true
-		return
-	}
-	if found {
-		switch req.Method {
-		case http.MethodGet:
-			ml.WriteWWW(w)
-		case http.MethodHead:
-			ml.WriteWWWHeader(w)
-		default:
-			msg := fmt.Sprintf("unsupported method '%s' for manifest list", strings.ToUpper(req.Method))
-			l.Error(msg)
-			det := helper.NewDetailFromReq(req)
-			e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
-			helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
-		}
-		ok = true
-		return
-	}
-	return false
-}
-
 func (h Handlers) ManifestHandler(ctx context.Context, w http.ResponseWriter, req types.Request) {
 	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
 		"package": pkgNameOciMani,
@@ -356,6 +317,16 @@ func (h Handlers) ManifestHandler(ctx context.Context, w http.ResponseWriter, re
 		return
 	}
 	if !colFound {
+		// Path Z: when looking up by digest, the wrapper-based ManifestExists
+		// may miss content-leaf ManifestData nodes that have no wrapper link
+		// (e.g. the first of two single-arch pushes to the same tag — the
+		// second push reuses the wrapper and only the latest gets linked).
+		// Fall back to a direct digest lookup before returning 404.
+		if req.Digest != "" {
+			if ok := h.handleManifest(ctx, w, req); ok {
+				return
+			}
+		}
 		msg := fmt.Sprintf("Manifest for manifest(list) '%s@%s' not found", req.Repo, utils.ShortenDigest(req.Digest))
 		l.Error(msg)
 		span.AddEvent("log", trace.WithAttributes(
@@ -376,7 +347,7 @@ func (h Handlers) ManifestHandler(ctx context.Context, w http.ResponseWriter, re
 	l.Debug(msg)
 	switch mediaType {
 	case ociManifestListMediaType:
-		if ok := h.handleManifestList(ctx, w, req); ok {
+		if ok := h.handleIndex(ctx, w, req); ok {
 			return
 		}
 	case
@@ -459,23 +430,36 @@ func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	switch req.ContentType {
 	case dockerManifestMediaType:
-		h.handleDockerManifestPut(ctx, w, req, buf, prf.ID)
+		h.handleDockerManifestPut(ctx, w, req, buf, prf)
 	case ociManifestMediaType:
 		m, err := h.mag.StoreManifestUpload(ctx, req, buf)
 		if err != nil {
 			utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", err, "MANIFEST_INVALID", "failed to store manifest: %v", err)
 			return
 		}
+		// Step 4: previously the OCI v1 push path stored the manifest
+		// but never triggered any compute or rule eval — a pre-existing
+		// bug that meant OCI-format pushes never appeared in any
+		// profile's index. We now invoke the same scoped compute
+		// helper used by the Docker v2 path so OCI v1 pushes get the
+		// same multi-arch aggregation behaviour. There is no
+		// ProfileUnwindRules call here because the OCI v1 path never
+		// had one and the new helper handles deterministic annotation
+		// injection internally via ProfileInjectDeterministicAnnotations.
+		if err = h.computeAfterManifestPush(ctx, l, span, req, prf); err != nil {
+			utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", err, "INTERNAL_ERROR", "while executing computeAfterManifestPush")
+			return
+		}
 		h.ManifestPutHandlerWrapper(ctx, w, req, m)
 	case ociManifestListMediaType:
-		h.handleOCIManifestListPut(ctx, w, req, buf)
+		h.handleIndexPut(ctx, w, req, buf)
 	default:
 		e = fmt.Errorf("unsupported content type: %s (supported: %s)", req.ContentType, strings.Join([]string{dockerManifestMediaType, ociManifestMediaType}, ","))
 		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", e, "MANIFEST_INVALID", "")
 	}
 }
 
-func (h Handlers) handleDockerManifestPut(ctx context.Context, w http.ResponseWriter, req types.Request, buf []byte, profileID int64) {
+func (h Handlers) handleDockerManifestPut(ctx context.Context, w http.ResponseWriter, req types.Request, buf []byte, pusherPrf types.Profile) {
 	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
 		"package": pkgNameOciMani,
 		"func":    "handleDockerManifestPut",
@@ -489,60 +473,86 @@ func (h Handlers) handleDockerManifestPut(ctx context.Context, w http.ResponseWr
 	}
 	utils.Debug(l, span, successStoredManifestWDig, m.Digest)
 	// TODO: 2023-04-14 Unwind profile for uploaded manifest
-	if err = h.mag.Database.ProfileUnwindRules(ctx, profileID, m.ID); err != nil {
+	if err = h.mag.Database.ProfileUnwindRules(ctx, pusherPrf.ID, m.ID); err != nil {
 		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", err, "INTERNAL_ERROR", "failed to unwind profile '%s' for manifest '%s'", req.Profile, m.Label)
 		return
 	}
-	mani, found, err := h.mag.Database.ManifestGetByLabel(ctx, m.Label)
+	// Phase C3 compatibility: the wrapper :Manifest node is still created
+	// as a shim (metalib storeManifestUploadOCIManifest) until cypher
+	// queries are fully rewritten to Slot-based walks. ComputeManifest
+	// runs the wrapper-era Docker v2→OCI v1 reshaping.
+	mani, found, err := h.mag.Database.ManifestWrapperGetByLabel(ctx, m.Label)
 	if err != nil {
-		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", err, "DENIED", "while executing ManifestGetByLabel")
+		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", err, "DENIED", "while executing ManifestWrapperGetByLabel")
 		return
 	}
-	if !found {
-		err = utils.NewError(l, span, "manifest not found")
-		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", err, "INTERNAL_ERROR", "")
-		return
+	if found {
+		if err = h.mag.ComputeManifest(ctx, mani); err != nil {
+			utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", err, "INTERNAL_ERROR", "while executing ComputeManifest")
+			return
+		}
 	}
-	if err = h.mag.ComputeManifest(ctx, mani); err != nil {
-		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", err, "INTERNAL_ERROR", "while executing ComputeManifest")
-		return
-	}
-	if err = h.mag.ComputeManifestlists(ctx); err != nil {
-		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", err, "INTERNAL_ERROR", "while executing ComputeManifestlists")
+	// Push-time scoped index rebuild via the new
+	// ComputeManifestlistsForRepoTag helper. This replaces the previous
+	// full-system ComputeManifestlists sweep, which was both:
+	//
+	//   (a) O(all profiles × all collections × all tags) on every push,
+	//       wasteful even when correct
+	//   (b) silently broken for freshly-pushed content because the rule
+	//       getters it relied on walked an Upstream→Manifest edge that
+	//       does not exist in the actual graph (Upstream is linked from
+	//       ManifestData via [:ORIGINAL])
+	//
+	// Compose-level validation in the add-multiarch-tag-aggregation-e2e
+	// change confirmed that:
+	//   - The old sweep produced ZERO ManifestList rows for amd64 then
+	//     arm64 alpine pushes (CTPP had empty manifestIDs).
+	//   - The new helper produces a 1-descriptor index after the amd64
+	//     push and a 2-descriptor index after the arm64 push, with the
+	//     historical 1-descriptor index preserved as audit history.
+	//
+	// Removing the old call is therefore strictly a no-op for the happy
+	// path and a perf win for every push.
+	if err = h.computeAfterManifestPush(ctx, l, span, req, pusherPrf); err != nil {
+		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", err, "INTERNAL_ERROR", "while executing computeAfterManifestPush")
 		return
 	}
 	h.ManifestPutHandlerWrapper(ctx, w, req, m)
 }
 
-func (h Handlers) handleOCIManifestListPut(ctx context.Context, w http.ResponseWriter, req types.Request, buf []byte) {
-	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
-		"package": pkgNameOciMani,
-		"func":    "handleOCIManifestListPut",
-		"repo":    req.Repo,
-	})
-	defer span.End()
-	ml, err := types.NewManifestListFromData(buf)
-	if err != nil {
-		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", err, "MANIFEST_INVALID", "failed to parse manifest list: %v", err)
-		return
+// computeAfterManifestPush runs the scoped push-time index rebuild for the
+// just-pushed (req.Repo, req.Tag). It calls
+// metalib's ComputeManifestlistsForRepoTag, which:
+//
+//  1. Walks via the Upstream node's (repo, tag) compound key to find every
+//     ManifestData ever pushed to this (repo, tag) — multi-arch friendly.
+//  2. Injects the pusher profile's deterministic (anno eq) annotations onto
+//     each manifestdata; non-deterministic rules are silently skipped.
+//  3. Re-evaluates all rules so the new annotations propagate into
+//     Rule-[:TRUE]->Annotation edges.
+//  4. For every Profile in the system, rebuilds the per-(repo, tag, profile)
+//     ManifestList index from the matching manifestdata. Per-profile compute
+//     failures are logged inside the inner helper as warnings and do not
+//     fail the push.
+//
+// Hard errors (e.g. the raw fetcher itself fails, or the rule eval fails)
+// are returned and treated by the caller as a push failure, matching the
+// existing ComputeManifestlists error handling.
+//
+// pusherPrf is the Profile resolved from req.Profile in ManifestPutHandler;
+// passing it lets ComputeManifestlistsForRepoTag attribute injected
+// annotations to the right profile. The function intentionally takes the
+// full Profile (not just the ID) so the inner helper can log a meaningful
+// label.
+func (h Handlers) computeAfterManifestPush(ctx context.Context, l *logrus.Entry, span trace.Span, req types.Request, pusherPrf types.Profile) error {
+	utils.Debug(l, span, "computeAfterManifestPush(%s:%s, profile=%s) starting scoped index rebuild", req.Repo, req.Tag, pusherPrf.Label)
+	if err := h.mag.ComputeManifestlistsForRepoTag(ctx, req.Repo, req.Tag, &pusherPrf); err != nil {
+		return utils.ErrorHandler(l, span, err, "computeAfterManifestPush(%s:%s, profile=%s) failed", req.Repo, req.Tag, pusherPrf.Label)
 	}
-	utils.Debug(l, span, "ManifestList has %d annotations", len(ml.Annotations))
-	utils.Debug(l, span, "storing manifest list with %d manifests", len(ml.Manifests))
-	utils.Debug(l, span, "%s", utils.JsonPrettyPrint(buf))
-	if err = h.mag.StoreManifestListUpload(ctx, req, &ml); err != nil {
-		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", err, "MANIFEST_INVALID", "failed to store manifest list: %v", err)
-		return
-	}
-	utils.Debug(l, span, "successfully stored manifest list with id '%d'", ml.ID)
-	utils.Debug(l, span, " successStoredManifestWDig:%s", ml.Digest)
-	w.Header().Set("Docker-Content-Digest", ml.Digest)
-	if ml.Subject != nil {
-		w.Header().Set("OCI-Subject", string(ml.Subject.Digest))
-	}
-	w.WriteHeader(http.StatusCreated)
+	return nil
 }
 
-func (h Handlers) ManifestPutHandlerWrapper(ctx context.Context, w http.ResponseWriter, req types.Request, m types.ManifestData) {
+func (h Handlers) ManifestPutHandlerWrapper(ctx context.Context, w http.ResponseWriter, req types.Request, m types.Manifest) {
 	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
 		"package": pkgNameOciMani,
 		"func":    "api.ManifestPutHandlerWrapper",

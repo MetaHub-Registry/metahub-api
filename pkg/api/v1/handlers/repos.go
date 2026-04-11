@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	pkgNameCol = "handlers/collections.go"
+	pkgNameCol = "handlers/repos.go"
 )
 
 type Next struct {
@@ -24,11 +24,13 @@ type Next struct {
 	ManiCount int64  `json:"manifest_count"`
 }
 
-func (h Handlers) CollectionGetOne(w http.ResponseWriter, r *http.Request) {
+// RepoGetOne returns details for a single repo+tag combination.
+// Formerly CollectionGetOne; renamed as part of the Path Z Collection→Repo transition.
+func (h Handlers) RepoGetOne(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	l, ctx, span := mlibUtils.InitLogging(ctx, tracer, map[string]any{
 		"package": pkgNameCol,
-		"func":    "CollectionGetOne",
+		"func":    "RepoGetOne",
 	})
 	defer span.End()
 	type Payload struct {
@@ -43,7 +45,7 @@ func (h Handlers) CollectionGetOne(w http.ResponseWriter, r *http.Request) {
 	breadCrumbs := []utils.BreadCrumb{}
 	err := h.readJSON(w, r, &pl)
 	if err != nil {
-		logrus.Errorf("CollectionGetOne (body: %v, payload:%v): %v", r.Body, pl, err)
+		logrus.Errorf("RepoGetOne (body: %v, payload:%v): %v", r.Body, pl, err)
 		h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
 		return
 	}
@@ -60,7 +62,7 @@ func (h Handlers) CollectionGetOne(w http.ResponseWriter, r *http.Request) {
 			"repo_name": pl.RepoName,
 			"tag_name":  pl.TagName,
 		})
-		l.Info("CollectionGetOne()")
+		l.Info("RepoGetOne()")
 		col, err = h.mag.Database.CollectionListingGetByName(ctx, pl.RepoName, pl.TagName)
 		if err != nil {
 			h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
@@ -71,7 +73,7 @@ func (h Handlers) CollectionGetOne(w http.ResponseWriter, r *http.Request) {
 			"collection_id": pl.ColID,
 			"tag_id":        pl.TagID,
 		})
-		l.Info("CollectionGetOne()")
+		l.Info("RepoGetOne()")
 		col, err = h.mag.Database.CollectionListingGetByID(ctx, pl.ColID, pl.TagID)
 		if err != nil {
 			h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
@@ -167,13 +169,15 @@ func accumulateCollectionNext(cols []types.CollectionListing, repoSlug []string,
 	return
 }
 
-func (h Handlers) CollectionGetAll(w http.ResponseWriter, r *http.Request) {
+// RepoGetAll returns a navigable listing of all repos (with breadcrumb and next-navigation).
+// Formerly CollectionGetAll; renamed as part of the Path Z Collection→Repo transition.
+func (h Handlers) RepoGetAll(w http.ResponseWriter, r *http.Request) {
 	l := logrus.WithFields(logrus.Fields{
-		"package": "api/collections.go",
-		"func":    "CollectionGetAll",
+		"package": "api/repos.go",
+		"func":    "RepoGetAll",
 	})
 	ctx := r.Context()
-	ctx, span := tracer.Start(ctx, "CollectionGetAll")
+	ctx, span := tracer.Start(ctx, "RepoGetAll")
 	defer span.End()
 	type Payload struct {
 		Repo string `json:"repo"`
@@ -181,12 +185,12 @@ func (h Handlers) CollectionGetAll(w http.ResponseWriter, r *http.Request) {
 	pl := Payload{}
 	err := h.readJSON(w, r, &pl)
 	if err != nil {
-		l.Errorf("CollectionGetAll (body: %v, payload:%v): %v", r.Body, pl, err)
+		l.Errorf("RepoGetAll (body: %v, payload:%v): %v", r.Body, pl, err)
 		h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
 		return
 	}
 	l = l.WithFields(logrus.Fields{"repo": pl.Repo})
-	l.Infof("CollectionGetAll: '%s'", pl.Repo)
+	l.Infof("RepoGetAll: '%s'", pl.Repo)
 	repoSlug := strings.Split(pl.Repo, "/")
 	// Artifact filtering (non-image config media types) is applied at the database layer
 	// in metalib (ManifestDataGetByCollectionTag). No handler-level filtering is needed.
@@ -195,7 +199,7 @@ func (h Handlers) CollectionGetAll(w http.ResponseWriter, r *http.Request) {
 		h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
 		return
 	}
-	l.Warnf("CollectionGetAll: '%s' -> %d", pl.Repo, len(cols))
+	l.Warnf("RepoGetAll: '%s' -> %d", pl.Repo, len(cols))
 	next, reps, breadCrumbs, slugEnd := accumulateCollectionNext(cols, repoSlug, pl.Repo)
 	if len(breadCrumbs) > 0 {
 		breadCrumbs[len(breadCrumbs)-1].Active = 0

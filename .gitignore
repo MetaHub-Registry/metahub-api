@@ -18,3 +18,5 @@ misc/compose/sonarqube/**
 misc/sqlite/*
 results/*
 misc/config/local-config.yaml
+metahub
+sessions/*
