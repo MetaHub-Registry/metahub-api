@@ -17,7 +17,7 @@ func TestToUIManifest_FieldMapping(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	md := types.ManifestData{
+	md := types.Manifest{
 		Digest:    "sha256:abc123",
 		MediaType: "application/vnd.oci.image.manifest.v1+json",
 		Size:      12345,
@@ -50,7 +50,7 @@ func TestToUIManifest_FieldMapping(t *testing.T) {
 }
 
 func TestToUIManifest_JSONFieldNames(t *testing.T) {
-	md := types.ManifestData{
+	md := types.Manifest{
 		Digest:    "sha256:abc123",
 		MediaType: "application/vnd.oci.image.manifest.v1+json",
 		Size:      100,
@@ -81,7 +81,7 @@ func TestToUICollectionDetail_ManifestsIsArray(t *testing.T) {
 	col := types.CollectionListing{
 		Repo: "alpine",
 		Tag:  "3.23",
-		Manifests: map[string]types.ManifestData{
+		Manifests: map[string]types.Manifest{
 			"key1": {
 				Digest:    "sha256:aaa",
 				MediaType: "application/vnd.oci.image.manifest.v1+json",
@@ -125,7 +125,7 @@ func TestToUICollectionDetail_EmptyManifests(t *testing.T) {
 	col := types.CollectionListing{
 		Repo:      "test/empty",
 		Tag:       "latest",
-		Manifests: map[string]types.ManifestData{},
+		Manifests: map[string]types.Manifest{},
 	}
 
 	ui := toUICollectionDetail(col)

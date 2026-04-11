@@ -34,7 +34,7 @@ type UICollectionDetail struct {
 }
 
 // toUIManifest converts a metalib ManifestData into a UIManifest suitable for the frontend.
-func toUIManifest(md types.ManifestData) UIManifest {
+func toUIManifest(md types.Manifest) UIManifest {
 	annotations := md.Annotations.ToMap()
 	features := extractFeatures(annotations)
 	return UIManifest{

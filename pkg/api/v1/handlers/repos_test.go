@@ -110,7 +110,7 @@ func TestCollectionGetOne(t *testing.T) {
 		"Authorization": fmt.Sprintf("Bearer %s", token),
 		"Content-Type":  "application/octet-stream",
 	}, "/{repo}/{image}/blobs/uploads/{uuid}", reqBody.ToByte())
-	h.CollectionGetOne(wGet, rGet)
+	h.RepoGetOne(wGet, rGet)
 	assert.Equal(t, http.StatusOK, wGet.Code)
 	var resp CollectionResponse
 	err = json.Unmarshal(wGet.Body.Bytes(), &resp)
@@ -176,7 +176,7 @@ func TestCollectionGetAll(t *testing.T) {
 		"Authorization": fmt.Sprintf("Bearer %s", token),
 		"Content-Type":  "application/octet-stream",
 	}, "/{repo}/{image}/blobs/uploads/{uuid}", reqBody.ToByte())
-	h.CollectionGetAll(wGet, rGet)
+	h.RepoGetAll(wGet, rGet)
 	if wGet.Code != http.StatusOK {
 		t.Fatalf("Expected %d, got %d", http.StatusOK, wGet.Code)
 	}
@@ -200,7 +200,7 @@ func TestCollectionGetAll(t *testing.T) {
 		"Authorization": fmt.Sprintf("Bearer %s", token),
 		"Content-Type":  "application/octet-stream",
 	}, "/api/v1/collections", reqBodyFT.ToByte())
-	h.CollectionGetAll(wGetFT, rGetFT)
+	h.RepoGetAll(wGetFT, rGetFT)
 	if wGetFT.Code != http.StatusOK {
 		t.Fatalf("Expected %d, got %d", http.StatusOK, wGetFT.Code)
 	}
@@ -291,7 +291,7 @@ func TestCollectionGetOneBreadcrumbs(t *testing.T) {
 		"Authorization": fmt.Sprintf("Bearer %s", token),
 		"Content-Type":  "application/octet-stream",
 	}, "/{repo}/{image}/blobs/uploads/{uuid}", reqBody.ToByte())
-	h.CollectionGetOne(wGet, rGet)
+	h.RepoGetOne(wGet, rGet)
 	assert.Equal(t, http.StatusOK, wGet.Code)
 
 	var resp CollectionResponse
@@ -330,7 +330,7 @@ func TestCollectionGetAll_OrasOnlyRepoAbsent(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/collections",
 		bytes.NewBuffer(body))
 	req.Header.Set("Content-Type", "application/json")
-	h.CollectionGetAll(w, req)
+	h.RepoGetAll(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	var resp CollectionsResponse
@@ -389,7 +389,7 @@ func TestCollectionGetOne_UIResponseShape(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/collection",
 		bytes.NewBuffer(reqBody.ToByte()))
 	req.Header.Set("Content-Type", "application/json")
-	h.CollectionGetOne(w, req)
+	h.RepoGetOne(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
 
 	// Parse raw JSON to verify structure independent of Go type definitions
@@ -486,7 +486,7 @@ func TestCollectionGetOne_ManifestMediaTypeField(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/collection",
 		bytes.NewBuffer(reqBody.ToByte()))
 	req.Header.Set("Content-Type", "application/json")
-	h.CollectionGetOne(w, req)
+	h.RepoGetOne(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
 
 	// Parse raw JSON and check manifest field names

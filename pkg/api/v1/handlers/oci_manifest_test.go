@@ -495,7 +495,7 @@ func TestManifestOCITest(t *testing.T) {
 		t.Fatalf("wManiPut.Code: %d, expected %d", wCfgPost.Code, http.StatusCreated)
 	}
 	/// Manifest
-	mani := types.ManifestData{
+	mani := types.Manifest{
 		Data: []byte(`{
 			"schemaVersion": 2,
 			"config": {
@@ -666,7 +666,7 @@ func TestManifestOCITestNoLayers(t *testing.T) {
 		},
 		"layers": []
 	}`)
-	mani := types.ManifestData{
+	mani := types.Manifest{
 		Data: dat,
 	}
 	expManiDigest := digest.FromBytes(mani.Data)
@@ -723,7 +723,7 @@ func TestManifestHeadHandlerDigest(t *testing.T) {
 	testRepo := "oci"
 	testImage := "conformance"
 	testTag := "headtest"
-	mani := types.ManifestData{
+	mani := types.Manifest{
 		Data: []byte(`{
 			"schemaVersion": 2,
 			"config": {
