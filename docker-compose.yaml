@@ -68,8 +68,8 @@ services:
       OCI_ROOT_URL: "http://dev:80"
       OCI_NAMESPACE: "oci/confirmance"
       OCI_CROSSMOUNT_NAMESPACE: "oci/confirmance"
-      OCI_USERNAME: "qnib"
-      OCI_PASSWORD:  "qnib"
+      OCI_USERNAME: "oci"
+      OCI_PASSWORD:  "oci"
       OCI_TEST_PULL: 1
       OCI_TEST_PUSH: 0
       OCI_TEST_CONTENT_DISCOVERY: 0

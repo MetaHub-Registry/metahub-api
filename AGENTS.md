@@ -1,10 +1,10 @@
 # Agent Instructions
 
-## Use gitlab 
+## Use gitlab
 
 The command `glab` allows to interact with gitlab.
 
-### Setup 
+### Setup
 
 #### OpenSpec Change
 
