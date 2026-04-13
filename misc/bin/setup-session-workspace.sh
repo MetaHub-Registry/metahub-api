@@ -126,6 +126,61 @@ cd "${S}"
 echo "[workspace] Skills: $(ls -1 .opencode/skills/ | wc -l | tr -d ' ') copied"
 echo "[workspace] Commands: $(ls -1 .opencode/command/ | wc -l | tr -d ' ') copied"
 
+# --- Seed CONTEXT.md from each repo's main branch (if it exists) ---
+# Per-repo context: copy CONTEXT.md from each worktree (inherited from main)
+for repo_dir in "${S}"/*/; do
+  repo_name=$(basename "$repo_dir")
+  if [ -f "${repo_dir}/CONTEXT.md" ]; then
+    echo "[workspace] Seeded ${repo_name}/CONTEXT.md from repo"
+  fi
+done
+
+# Session-level context: check if a previous session left one in Obsidian
+# The Obsidian MCP server is used at runtime by the agent, not by this script.
+# Instead, we create a stub CONTEXT.md that the agent should fill in.
+if [ ! -f "${S}/CONTEXT.md" ]; then
+  cat > "${S}/CONTEXT.md" <<CTXEOF
+# Session Context: ${DESC}
+
+> This file provides context for the AI agent working in this session.
+> Fill in the sections below before starting work, or let the agent
+> update them as the session progresses.
+
+## Goals
+
+<!-- What does this session set out to achieve? -->
+
+## Relevant Files
+
+<!-- Key files per repo that the agent should read first -->
+
+### metahub-api
+<!-- e.g. pkg/api/v1/handlers/repos.go -->
+
+### metalib
+<!-- e.g. pkg/backends/neo/collection.go -->
+
+### metahub-admin
+<!-- nothing expected -->
+
+### metahub-ui
+<!-- e.g. src/pages/Collections.tsx -->
+
+## Architecture Notes
+
+<!-- How the pieces fit together for this session's scope -->
+
+## Patterns to Follow
+
+<!-- "Look at X for an example of how we do Y" -->
+
+## Constraints
+
+<!-- Things to avoid, known pitfalls -->
+CTXEOF
+  echo "[workspace] Created stub CONTEXT.md — fill in before starting work"
+fi
+
 # --- opencode.sh launch wrapper ---
 cat > "${S}/opencode.sh" <<'EOF'
 #!/usr/bin/env bash
@@ -188,6 +243,10 @@ as worktrees within this directory. The opencode instance running here
 can edit only files within this session.
 
 Start opencode from this directory: \`./opencode.sh\`
+
+**Read \`CONTEXT.md\` first** — it contains session goals, relevant
+files, and architecture notes. Each repo worktree may also have its
+own \`CONTEXT.md\` with repo-specific context from previous sessions.
 
 ## Repos and Branches
 
@@ -271,6 +330,35 @@ Metahub/DevDiary/sessions/${DESC}/YYYY-MM-DD-hhmm-<change-name>.md
 ### Specs and Docs
 
 Use \`Metahub/docs\` in Obsidian to document specs, graph constructs, and architectural decisions.
+
+## Context Notes (CONTEXT.md)
+
+Before calling \`task finish\`, write context notes that help the next
+session (or the next agent) understand what was done and where things stand.
+
+### Per-repo CONTEXT.md
+
+In each **modified** repo worktree, write or update \`CONTEXT.md\` with:
+
+- **What changed** — summary of modifications in this repo
+- **Key files** — the important files for understanding the changes
+- **Architecture notes** — how the changes fit into the repo's structure
+- **Open questions** — anything unresolved or deferred
+- **Gotchas** — pitfalls discovered during development
+
+This file gets committed when \`task finish\` runs and merges into
+\`main\`, so the next session inherits it automatically.
+
+### Session-level CONTEXT.md
+
+Update the \`CONTEXT.md\` in this session root with:
+
+- **What was achieved** — session goals vs actual outcome
+- **Cross-repo relationships** — how changes in one repo depend on another
+- **Deferred work** — what was discovered but not done
+- **Next steps** — what a follow-up session should tackle
+
+This file is written to Obsidian as a DevDiary entry by the agent.
 
 ## Event Logging (VictoriaLogs)
 

@@ -154,6 +154,17 @@ tasks:
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-admin", REPO_DIR: "{{.REPO_ADMIN_DIR}}" }
       - task: _finalize-repo
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-ui", REPO_DIR: "{{.REPO_UI_DIR}}" }
+      # Write session-level CONTEXT.md to Obsidian if it exists in the session dir
+      - |
+        set -e
+        S="$(pwd)/{{.SESSION_DIR}}/{{.DESC}}"
+        DESC="{{.DESC}}"
+        if [ -f "${S}/CONTEXT.md" ]; then
+          echo "[session] CONTEXT.md found — will be available for next session"
+        else
+          echo "[session] NOTE: No CONTEXT.md in session root."
+          echo "[session] The agent should write one before finishing to help the next session."
+        fi
       - |
         echo ""
         echo "=== Session '{{.DESC}}' finalized ==="
@@ -530,6 +541,17 @@ tasks:
         fi
 
         echo "[${REPO_NAME}] ${REAL_COMMITS} change commit(s) found"
+
+        # Commit CONTEXT.md if the agent wrote one
+        if [ -f CONTEXT.md ] && ! git diff --quiet CONTEXT.md 2>/dev/null; then
+          echo "[${REPO_NAME}] Committing CONTEXT.md"
+          git add CONTEXT.md
+          git commit -m "Update CONTEXT.md for session ${DESC}"
+        elif [ -f CONTEXT.md ] && ! git ls-files --error-unmatch CONTEXT.md >/dev/null 2>&1; then
+          echo "[${REPO_NAME}] Committing new CONTEXT.md"
+          git add CONTEXT.md
+          git commit -m "Add CONTEXT.md for session ${DESC}"
+        fi
 
         # Archive OpenSpec changes if present
         if [ -d .openspec/changes ]; then
