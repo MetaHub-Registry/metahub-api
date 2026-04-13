@@ -4,133 +4,176 @@ version: '3'
 # Session management — create / suspend / resume / remove worktrees
 #
 # Usage:
-#   task session:new     -- <branch-name>   # create session (new branches)
-#   task session:suspend -- <branch-name>   # remove worktrees, keep branches
-#   task session:resume  -- <branch-name>   # recreate worktrees from branches
-#   task session:rm      -- <branch-name>   # remove worktrees, keep branches
-#   task session:list                       # list active sessions
+#   task session:new:<level> -- <description>  # create session with bump
+#     <level> = major | minor | patch
+#     <description> = short kebab-case session name (e.g. "add-auth")
 #
-# Branch resolution for `new`:
-#   1. Local branch exists         → use it
-#   2. Remote tracking branch      → create local from remote
-#   3. Neither                     → create a new branch from HEAD
+#   Example: task session:new:patch -- add-oauth-support
+#
+#   This will:
+#     1. Query each repo's next MR number via glab
+#     2. Create branches like 99-add-oauth-support in each repo
+#     3. Run bump2version <level> in each repo (e.g. 3.0.0 → 3.0.1-dev1)
+#     4. Push branches to origin
+#     5. Create draft MRs in GitLab
+#     6. Update the dev-stack Taskfile with new branch names
+#     7. Commit & push the dev-stack change
+#
+#   task session:suspend -- <description>      # remove worktrees, keep branches
+#   task session:resume  -- <description>      # recreate worktrees from branches
+#   task session:rm      -- <description>      # alias for suspend
+#   task session:list                          # list active sessions
 #
 # Branch resolution for `resume`:
-#   1. Local branch exists         → use it
-#   2. Remote tracking branch      → create local from remote
-#   3. Neither                     → FAIL (branch must exist somewhere)
+#   The resume task scans the session metadata file to find repo-specific
+#   branch names (since each repo may have a different MR-number prefix).
 # ---------------------------------------------------------------------------
 
 vars:
   SESSION_DIR: sessions
-  # Repo definitions — name:dir:is_go_path
-  # is_go_path=1 means the dir is relative to the parent of this repo
-  # is_go_path=0 means the dir is an absolute path
-  REPOS: "metahub-api:.:go metalib:../metahub-core:go metahub-admin:../metahub-admin:go metahub-ui:~/src/gitlab.com/qnib-frontend/metahub-ui:abs"
+  DEV_STACK_DIR: ~/src/gitlab.com/qnib-ansible/dev-stack
+  # Repo definitions — name:dir:glab_repo (glab_repo empty = use git remote)
+  REPO_API_DIR: "."
+  REPO_LIB_DIR: "../metahub-core"
+  REPO_ADMIN_DIR: "../metahub-admin"
+  REPO_UI_DIR: "~/src/gitlab.com/qnib-frontend/metahub-ui"
 
 tasks:
   # ---------------------------------------------------------------------------
-  # session:new — create a full session with worktrees for all repos
+  # session:new:<level> — create a full session with MR-prefixed branches
   # ---------------------------------------------------------------------------
-  new:
-    desc: "Create a session: task session:new -- <branch-name>"
+  new:*:
+    desc: "Create a session: task session:new:<major|minor|patch> -- <description>"
     requires:
       vars: [CLI_ARGS]
     vars:
-      BRANCH: "{{.CLI_ARGS}}"
+      LEVEL: '{{index .MATCH 0}}'
+      DESC: "{{.CLI_ARGS}}"
     preconditions:
       - sh: '[ -n "{{.CLI_ARGS}}" ]'
-        msg: "Usage: task session:new -- <branch-name>"
+        msg: "Usage: task session:new:<level> -- <description>"
       - sh: 'echo "{{.CLI_ARGS}}" | grep -qE "^[a-z0-9][a-z0-9-]*[a-z0-9]$"'
-        msg: "Branch name must be kebab-case (lowercase, hyphens, no leading/trailing hyphen)"
+        msg: "Description must be kebab-case (lowercase, hyphens, no leading/trailing hyphen)"
+      - sh: 'echo "{{.LEVEL}}" | grep -qE "^(major|minor|patch)$"'
+        msg: "Level must be one of: major, minor, patch (got '{{.LEVEL}}')"
       - sh: '[ ! -d "{{.SESSION_DIR}}/{{.CLI_ARGS}}" ]'
         msg: "Session directory '{{.SESSION_DIR}}/{{.CLI_ARGS}}' already exists"
+      - sh: 'command -v glab >/dev/null 2>&1'
+        msg: "glab CLI is required but not found"
+      - sh: 'command -v bump2version >/dev/null 2>&1'
+        msg: "bump2version is required but not found"
     cmds:
-      - mkdir -p "{{.SESSION_DIR}}/{{.BRANCH}}"
-      - task: _worktree-add
-        vars: { BRANCH: "{{.BRANCH}}", REPO_NAME: "metahub-api", REPO_DIR: "." }
-      - task: _worktree-add
-        vars: { BRANCH: "{{.BRANCH}}", REPO_NAME: "metalib", REPO_DIR: "../metahub-core" }
-      - task: _worktree-add
-        vars: { BRANCH: "{{.BRANCH}}", REPO_NAME: "metahub-admin", REPO_DIR: "../metahub-admin" }
-      - task: _worktree-add
-        vars: { BRANCH: "{{.BRANCH}}", REPO_NAME: "metahub-ui", REPO_DIR: "~/src/gitlab.com/qnib-frontend/metahub-ui" }
+      - mkdir -p "{{.SESSION_DIR}}/{{.DESC}}"
+
+      # --- metahub-api ---
+      - task: _branch-bump-mr
+        vars:
+          DESC: "{{.DESC}}"
+          LEVEL: "{{.LEVEL}}"
+          REPO_NAME: "metahub-api"
+          REPO_DIR: "{{.REPO_API_DIR}}"
+
+      # --- metalib ---
+      - task: _branch-bump-mr
+        vars:
+          DESC: "{{.DESC}}"
+          LEVEL: "{{.LEVEL}}"
+          REPO_NAME: "metalib"
+          REPO_DIR: "{{.REPO_LIB_DIR}}"
+
+      # --- metahub-admin ---
+      - task: _branch-bump-mr
+        vars:
+          DESC: "{{.DESC}}"
+          LEVEL: "{{.LEVEL}}"
+          REPO_NAME: "metahub-admin"
+          REPO_DIR: "{{.REPO_ADMIN_DIR}}"
+
+      # --- metahub-ui ---
+      - task: _branch-bump-mr
+        vars:
+          DESC: "{{.DESC}}"
+          LEVEL: "{{.LEVEL}}"
+          REPO_NAME: "metahub-ui"
+          REPO_DIR: "{{.REPO_UI_DIR}}"
+
+      # --- Update dev-stack ---
+      - task: _update-dev-stack
+        vars: { DESC: "{{.DESC}}" }
+
       - echo ""
-      - echo "=== Session '{{.BRANCH}}' created ==="
-      - echo "Worktrees at {{.SESSION_DIR}}/{{.BRANCH}}/"
-      - ls -1 "{{.SESSION_DIR}}/{{.BRANCH}}/"
+      - echo "=== Session '{{.DESC}}' created ==="
+      - echo "Worktrees at {{.SESSION_DIR}}/{{.DESC}}/"
+      - ls -1 "{{.SESSION_DIR}}/{{.DESC}}/"
+      - echo ""
+      - echo "Branch mapping:"
+      - cat "{{.SESSION_DIR}}/{{.DESC}}/.branches"
 
   # ---------------------------------------------------------------------------
   # session:suspend — remove worktrees but keep branches for later resume
   # ---------------------------------------------------------------------------
   suspend:
-    desc: "Suspend a session (remove worktrees, keep branches): task session:suspend -- <branch-name>"
+    desc: "Suspend a session (remove worktrees, keep branches): task session:suspend -- <description>"
     requires:
       vars: [CLI_ARGS]
     vars:
-      BRANCH: "{{.CLI_ARGS}}"
+      DESC: "{{.CLI_ARGS}}"
     preconditions:
       - sh: '[ -n "{{.CLI_ARGS}}" ]'
-        msg: "Usage: task session:suspend -- <branch-name>"
+        msg: "Usage: task session:suspend -- <description>"
       - sh: '[ -d "{{.SESSION_DIR}}/{{.CLI_ARGS}}" ]'
         msg: "Session directory '{{.SESSION_DIR}}/{{.CLI_ARGS}}' does not exist"
     cmds:
-      - task: _worktree-rm
-        vars: { BRANCH: "{{.BRANCH}}", REPO_NAME: "metahub-api", REPO_DIR: "." }
-      - task: _worktree-rm
-        vars: { BRANCH: "{{.BRANCH}}", REPO_NAME: "metalib", REPO_DIR: "../metahub-core" }
-      - task: _worktree-rm
-        vars: { BRANCH: "{{.BRANCH}}", REPO_NAME: "metahub-admin", REPO_DIR: "../metahub-admin" }
-      - task: _worktree-rm
-        vars: { BRANCH: "{{.BRANCH}}", REPO_NAME: "metahub-ui", REPO_DIR: "~/src/gitlab.com/qnib-frontend/metahub-ui" }
-      - rmdir "{{.SESSION_DIR}}/{{.BRANCH}}" 2>/dev/null || true
+      - task: _worktree-rm-from-meta
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-api", REPO_DIR: "{{.REPO_API_DIR}}" }
+      - task: _worktree-rm-from-meta
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metalib", REPO_DIR: "{{.REPO_LIB_DIR}}" }
+      - task: _worktree-rm-from-meta
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-admin", REPO_DIR: "{{.REPO_ADMIN_DIR}}" }
+      - task: _worktree-rm-from-meta
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-ui", REPO_DIR: "{{.REPO_UI_DIR}}" }
       - echo ""
-      - echo "=== Session '{{.BRANCH}}' suspended ==="
-      - 'echo "Branches preserved. Resume with: task session:resume -- {{.BRANCH}}"'
+      - echo "=== Session '{{.DESC}}' suspended ==="
+      - 'echo "Branches preserved. Resume with: task session:resume -- {{.DESC}}"'
 
   # ---------------------------------------------------------------------------
   # session:resume — recreate worktrees from existing branches
   # ---------------------------------------------------------------------------
   resume:
-    desc: "Resume a suspended session: task session:resume -- <branch-name>"
+    desc: "Resume a suspended session: task session:resume -- <description>"
     requires:
       vars: [CLI_ARGS]
     vars:
-      BRANCH: "{{.CLI_ARGS}}"
+      DESC: "{{.CLI_ARGS}}"
     preconditions:
       - sh: '[ -n "{{.CLI_ARGS}}" ]'
-        msg: "Usage: task session:resume -- <branch-name>"
-      - sh: 'echo "{{.CLI_ARGS}}" | grep -qE "^[a-z0-9][a-z0-9-]*[a-z0-9]$"'
-        msg: "Branch name must be kebab-case (lowercase, hyphens, no leading/trailing hyphen)"
-      - sh: '[ ! -d "{{.SESSION_DIR}}/{{.CLI_ARGS}}" ]'
-        msg: "Session '{{.SESSION_DIR}}/{{.CLI_ARGS}}' already active — suspend it first or use a different name"
+        msg: "Usage: task session:resume -- <description>"
+      - sh: '[ -f "{{.SESSION_DIR}}/{{.CLI_ARGS}}/.branches" ]'
+        msg: "No branch metadata found at '{{.SESSION_DIR}}/{{.CLI_ARGS}}/.branches' — was this session created with new:<level>?"
     cmds:
-      - mkdir -p "{{.SESSION_DIR}}/{{.BRANCH}}"
-      - task: _worktree-resume
-        vars: { BRANCH: "{{.BRANCH}}", REPO_NAME: "metahub-api", REPO_DIR: "." }
-      - task: _worktree-resume
-        vars: { BRANCH: "{{.BRANCH}}", REPO_NAME: "metalib", REPO_DIR: "../metahub-core" }
-      - task: _worktree-resume
-        vars: { BRANCH: "{{.BRANCH}}", REPO_NAME: "metahub-admin", REPO_DIR: "../metahub-admin" }
-      - task: _worktree-resume
-        vars: { BRANCH: "{{.BRANCH}}", REPO_NAME: "metahub-ui", REPO_DIR: "~/src/gitlab.com/qnib-frontend/metahub-ui" }
+      - task: _worktree-resume-from-meta
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-api", REPO_DIR: "{{.REPO_API_DIR}}" }
+      - task: _worktree-resume-from-meta
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metalib", REPO_DIR: "{{.REPO_LIB_DIR}}" }
+      - task: _worktree-resume-from-meta
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-admin", REPO_DIR: "{{.REPO_ADMIN_DIR}}" }
+      - task: _worktree-resume-from-meta
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-ui", REPO_DIR: "{{.REPO_UI_DIR}}" }
       - echo ""
-      - echo "=== Session '{{.BRANCH}}' resumed ==="
-      - echo "Worktrees at {{.SESSION_DIR}}/{{.BRANCH}}/"
-      - ls -1 "{{.SESSION_DIR}}/{{.BRANCH}}/"
+      - echo "=== Session '{{.DESC}}' resumed ==="
+      - echo "Worktrees at {{.SESSION_DIR}}/{{.DESC}}/"
+      - ls -1 "{{.SESSION_DIR}}/{{.DESC}}/"
 
   # ---------------------------------------------------------------------------
   # session:rm — alias for suspend (worktrees removed, branches kept)
   # ---------------------------------------------------------------------------
   rm:
-    desc: "Remove a session (alias for suspend): task session:rm -- <branch-name>"
+    desc: "Remove a session (alias for suspend): task session:rm -- <description>"
     requires:
       vars: [CLI_ARGS]
-    vars:
-      BRANCH: "{{.CLI_ARGS}}"
     preconditions:
       - sh: '[ -n "{{.CLI_ARGS}}" ]'
-        msg: "Usage: task session:rm -- <branch-name>"
+        msg: "Usage: task session:rm -- <description>"
       - sh: '[ -d "{{.SESSION_DIR}}/{{.CLI_ARGS}}" ]'
         msg: "Session directory '{{.SESSION_DIR}}/{{.CLI_ARGS}}' does not exist"
     cmds:
@@ -146,34 +189,48 @@ tasks:
         if [ -d "{{.SESSION_DIR}}" ] && [ "$(ls -A "{{.SESSION_DIR}}" 2>/dev/null)" ]; then
           for s in "{{.SESSION_DIR}}"/*/; do
             name=$(basename "$s")
-            repos=$(ls -1 "$s" 2>/dev/null | tr '\n' ' ')
-            echo "${name}:  ${repos}"
+            if [ -f "$s/.branches" ]; then
+              echo "${name}:"
+              sed 's/^/  /' "$s/.branches"
+            else
+              repos=$(ls -1 "$s" 2>/dev/null | grep -v '^\.' | tr '\n' ' ')
+              echo "${name}:  ${repos}"
+            fi
           done
         else
           echo "No active sessions."
         fi
 
+  # ===========================================================================
+  # Internal helpers
+  # ===========================================================================
+
   # ---------------------------------------------------------------------------
-  # Internal: _worktree-add — add a single worktree with branch resolution
-  #
-  # Branch resolution order:
-  #   1. Local branch exists       → git worktree add <path> <branch>
-  #   2. Remote branch exists      → git worktree add <path> <branch>  (auto-tracks)
-  #   3. Neither                   → git worktree add -b <branch> <path>
-  #
-  # After creating the worktree, the branch is pushed to origin (with -u) if
-  # it does not yet have a remote tracking branch. This ensures GoCD and other
-  # CI systems can see the branch immediately.
+  # _branch-bump-mr — full per-repo flow:
+  #   1. Query next MR number
+  #   2. Create branch <mr-number>-<desc>
+  #   3. Create worktree
+  #   4. Run bump2version
+  #   5. Push branch
+  #   6. Create draft MR
+  #   7. Record branch name in metadata
   # ---------------------------------------------------------------------------
-  _worktree-add:
+  _branch-bump-mr:
     internal: true
     requires:
-      vars: [BRANCH, REPO_NAME, REPO_DIR]
+      vars: [DESC, LEVEL, REPO_NAME, REPO_DIR]
     vars:
-      WORKTREE_PATH:
-        sh: echo "$(pwd)/{{.SESSION_DIR}}/{{.BRANCH}}/{{.REPO_NAME}}"
       EXPANDED_DIR:
         sh: eval echo "{{.REPO_DIR}}"
+      WORKTREE_PATH:
+        sh: echo "$(pwd)/{{.SESSION_DIR}}/{{.DESC}}/{{.REPO_NAME}}"
+      BRANCH:
+        sh: |
+          cd "$(eval echo "{{.REPO_DIR}}")"
+          NEXT=$(glab mr list -A -P 1 -F json 2>/dev/null \
+            | python3 -c "import json,sys; mrs=json.load(sys.stdin); print(mrs[0]['iid']+1 if mrs else 1)" 2>/dev/null \
+            || echo "1")
+          echo "${NEXT}-{{.DESC}}"
     preconditions:
       - sh: '[ -d "{{.EXPANDED_DIR}}" ]'
         msg: "Source repo '{{.REPO_NAME}}' not found at '{{.REPO_DIR}}'"
@@ -181,83 +238,147 @@ tasks:
         msg: "'{{.REPO_DIR}}' is not a git repository"
     cmds:
       - |
-        cd "{{.EXPANDED_DIR}}"
+        set -e
+        REPO_DIR="{{.EXPANDED_DIR}}"
+        BRANCH="{{.BRANCH}}"
+        LEVEL="{{.LEVEL}}"
+        REPO_NAME="{{.REPO_NAME}}"
+        WT_PATH="{{.WORKTREE_PATH}}"
+        DESC="{{.DESC}}"
+        # Absolute path to the .branches metadata file (computed before any cd)
+        BRANCHES_FILE="$(pwd)/{{.SESSION_DIR}}/{{.DESC}}/.branches"
 
-        # Fetch latest to ensure remote branches are up to date
+        echo ""
+        echo "=== [${REPO_NAME}] Creating branch '${BRANCH}' ==="
+
+        cd "${REPO_DIR}"
+
+        # Fetch latest
         git fetch --quiet origin 2>/dev/null || true
 
-        # Resolve branch
-        if git show-ref --verify --quiet "refs/heads/{{.BRANCH}}"; then
-          echo "[{{.REPO_NAME}}] Using existing local branch '{{.BRANCH}}'"
-          git worktree add "{{.WORKTREE_PATH}}" "{{.BRANCH}}"
-        elif git show-ref --verify --quiet "refs/remotes/origin/{{.BRANCH}}"; then
-          echo "[{{.REPO_NAME}}] Tracking remote branch 'origin/{{.BRANCH}}'"
-          git worktree add --track -b "{{.BRANCH}}" "{{.WORKTREE_PATH}}" "origin/{{.BRANCH}}"
+        # Create worktree with new branch from main
+        if git show-ref --verify --quiet "refs/heads/${BRANCH}"; then
+          echo "[${REPO_NAME}] Using existing local branch '${BRANCH}'"
+          git worktree add "${WT_PATH}" "${BRANCH}"
+        elif git show-ref --verify --quiet "refs/remotes/origin/${BRANCH}"; then
+          echo "[${REPO_NAME}] Tracking remote branch 'origin/${BRANCH}'"
+          git worktree add --track -b "${BRANCH}" "${WT_PATH}" "origin/${BRANCH}"
         else
-          echo "[{{.REPO_NAME}}] Creating new branch '{{.BRANCH}}' from HEAD"
-          git worktree add -b "{{.BRANCH}}" "{{.WORKTREE_PATH}}"
+          echo "[${REPO_NAME}] Creating new branch '${BRANCH}' from HEAD"
+          git worktree add -b "${BRANCH}" "${WT_PATH}"
         fi
 
-        # Ensure the branch is pushed to origin so CI (GoCD) can see it
-        cd "{{.WORKTREE_PATH}}"
-        if ! git config "branch.{{.BRANCH}}.remote" >/dev/null 2>&1; then
-          echo "[{{.REPO_NAME}}] Pushing '{{.BRANCH}}' to origin..."
-          git push -u origin "{{.BRANCH}}"
+        # Bump version in the worktree
+        cd "${WT_PATH}"
+        if [ -f .bumpversion.cfg ]; then
+          echo "[${REPO_NAME}] Running bump2version ${LEVEL}..."
+          bump2version --allow-dirty --no-commit --no-tag "${LEVEL}"
+          # Read new version from config
+          NEW_VER=$(grep "current_version" .bumpversion.cfg | head -1 | cut -d= -f2 | tr -d ' ')
+          echo "[${REPO_NAME}] Version bumped to ${NEW_VER}"
+          git add -A
+          git commit -m "Bump version: ${LEVEL} → ${NEW_VER}"
         else
-          echo "[{{.REPO_NAME}}] Branch '{{.BRANCH}}' already tracks origin"
+          echo "[${REPO_NAME}] No .bumpversion.cfg found — skipping version bump"
         fi
 
+        # Push branch to origin
+        echo "[${REPO_NAME}] Pushing '${BRANCH}' to origin..."
+        git push -u origin "${BRANCH}"
+
+        # Create draft MR
+        echo "[${REPO_NAME}] Creating draft MR..."
+        MR_TITLE="Draft: ${DESC}"
+        glab mr create \
+          --source-branch "${BRANCH}" \
+          --target-branch main \
+          --title "${MR_TITLE}" \
+          --description "Session: ${DESC}" \
+          --draft \
+          --no-editor \
+          2>&1 || echo "[${REPO_NAME}] WARNING: MR creation failed (may already exist)"
+
+        # Record branch in session metadata
+        echo "${REPO_NAME}=${BRANCH}" >> "${BRANCHES_FILE}"
+
   # ---------------------------------------------------------------------------
-  # Internal: _worktree-resume — add worktree from existing branch (no create)
-  #
-  # Unlike _worktree-add, this FAILS if the branch does not exist locally
-  # or on the remote. It will never create a new branch from HEAD.
+  # _update-dev-stack — update the dev-stack Taskfile.yml with new branches
   # ---------------------------------------------------------------------------
-  _worktree-resume:
+  _update-dev-stack:
     internal: true
     requires:
-      vars: [BRANCH, REPO_NAME, REPO_DIR]
+      vars: [DESC]
     vars:
-      WORKTREE_PATH:
-        sh: echo "$(pwd)/{{.SESSION_DIR}}/{{.BRANCH}}/{{.REPO_NAME}}"
-      EXPANDED_DIR:
-        sh: eval echo "{{.REPO_DIR}}"
+      DEV_STACK_EXPANDED:
+        sh: eval echo "{{.DEV_STACK_DIR}}"
+      API_BRANCH:
+        sh: grep "^metahub-api=" "{{.SESSION_DIR}}/{{.DESC}}/.branches" | cut -d= -f2
+      LIB_BRANCH:
+        sh: grep "^metalib=" "{{.SESSION_DIR}}/{{.DESC}}/.branches" | cut -d= -f2
+      ADMIN_BRANCH:
+        sh: grep "^metahub-admin=" "{{.SESSION_DIR}}/{{.DESC}}/.branches" | cut -d= -f2
+      UI_BRANCH:
+        sh: grep "^metahub-ui=" "{{.SESSION_DIR}}/{{.DESC}}/.branches" | cut -d= -f2
     preconditions:
-      - sh: '[ -d "{{.EXPANDED_DIR}}" ]'
-        msg: "Source repo '{{.REPO_NAME}}' not found at '{{.REPO_DIR}}'"
-      - sh: 'git -C "{{.EXPANDED_DIR}}" rev-parse --git-dir >/dev/null 2>&1'
-        msg: "'{{.REPO_DIR}}' is not a git repository"
+      - sh: '[ -d "{{.DEV_STACK_EXPANDED}}" ]'
+        msg: "Dev-stack directory not found at {{.DEV_STACK_DIR}}"
+      - sh: '[ -f "{{.DEV_STACK_EXPANDED}}/Taskfile.yml" ]'
+        msg: "Dev-stack Taskfile.yml not found"
     cmds:
       - |
-        cd "{{.EXPANDED_DIR}}"
+        set -e
+        DEV_STACK="{{.DEV_STACK_EXPANDED}}"
+        API="{{.API_BRANCH}}"
+        LIB="{{.LIB_BRANCH}}"
+        ADMIN="{{.ADMIN_BRANCH}}"
+        UI="{{.UI_BRANCH}}"
+        DESC="{{.DESC}}"
 
-        # Fetch latest to ensure remote branches are up to date
-        git fetch --quiet origin 2>/dev/null || true
+        echo ""
+        echo "=== Updating dev-stack Taskfile ==="
+        echo "  API:   ${API}"
+        echo "  LIB:   ${LIB}"
+        echo "  ADMIN: ${ADMIN}"
+        echo "  UI:    ${UI}"
 
-        # Resolve branch — must already exist
-        if git show-ref --verify --quiet "refs/heads/{{.BRANCH}}"; then
-          echo "[{{.REPO_NAME}}] Resuming from local branch '{{.BRANCH}}'"
-          git worktree add "{{.WORKTREE_PATH}}" "{{.BRANCH}}"
-        elif git show-ref --verify --quiet "refs/remotes/origin/{{.BRANCH}}"; then
-          echo "[{{.REPO_NAME}}] Resuming from remote branch 'origin/{{.BRANCH}}'"
-          git worktree add --track -b "{{.BRANCH}}" "{{.WORKTREE_PATH}}" "origin/{{.BRANCH}}"
-        else
-          echo "[{{.REPO_NAME}}] ERROR: Branch '{{.BRANCH}}' not found locally or on origin"
-          exit 1
-        fi
+        # Update the dev: task line in the dev-stack Taskfile
+        # Pattern: render:<api>:<lib>:<admin>:<ce>:<oci>:<ui>
+        # CE and OCI stay as 'main' and 'dev' respectively
+        cd "${DEV_STACK}"
+
+        # Replace the dev: task's render line (not the quick:*: template line)
+        # The dev: line has literal branch names; the quick:*: line has {{ .BRANCH }}
+        NEW_LINE="      - task: render:${API}:${LIB}:${ADMIN}:main:dev:${UI}"
+        # Match the line under dev: that starts with "      - task: render:" but
+        # does NOT contain "{{" (which is the quick:*: template line)
+        awk -v new="${NEW_LINE}" '
+          /- task: render:/ && !/\{\{/ { print new; next }
+          { print }
+        ' Taskfile.yml > Taskfile.yml.tmp && mv Taskfile.yml.tmp Taskfile.yml
+
+        echo "[dev-stack] Updated Taskfile.yml"
+
+        # Commit and push the dev-stack change
+        git add Taskfile.yml
+        git commit -m "start new session ${DESC}" || echo "[dev-stack] Nothing to commit"
+        git push || echo "[dev-stack] Push failed — push manually"
+
+        echo "[dev-stack] Committed and pushed"
 
   # ---------------------------------------------------------------------------
-  # Internal: _worktree-rm — remove a single worktree
+  # _worktree-rm-from-meta — remove worktree using branch from metadata
   # ---------------------------------------------------------------------------
-  _worktree-rm:
+  _worktree-rm-from-meta:
     internal: true
     requires:
-      vars: [BRANCH, REPO_NAME, REPO_DIR]
+      vars: [DESC, REPO_NAME, REPO_DIR]
     vars:
-      WORKTREE_PATH:
-        sh: echo "$(pwd)/{{.SESSION_DIR}}/{{.BRANCH}}/{{.REPO_NAME}}"
       EXPANDED_DIR:
         sh: eval echo "{{.REPO_DIR}}"
+      BRANCH:
+        sh: grep "^{{.REPO_NAME}}=" "{{.SESSION_DIR}}/{{.DESC}}/.branches" 2>/dev/null | cut -d= -f2 || echo ""
+      WORKTREE_PATH:
+        sh: echo "$(pwd)/{{.SESSION_DIR}}/{{.DESC}}/{{.REPO_NAME}}"
     cmds:
       - |
         cd "{{.EXPANDED_DIR}}"
@@ -267,5 +388,42 @@ tasks:
         else
           echo "[{{.REPO_NAME}}] No worktree found — skipping"
         fi
-        # Clean up stale worktree entries
         git worktree prune 2>/dev/null || true
+
+  # ---------------------------------------------------------------------------
+  # _worktree-resume-from-meta — recreate worktree from branch in metadata
+  # ---------------------------------------------------------------------------
+  _worktree-resume-from-meta:
+    internal: true
+    requires:
+      vars: [DESC, REPO_NAME, REPO_DIR]
+    vars:
+      EXPANDED_DIR:
+        sh: eval echo "{{.REPO_DIR}}"
+      BRANCH:
+        sh: grep "^{{.REPO_NAME}}=" "{{.SESSION_DIR}}/{{.DESC}}/.branches" | cut -d= -f2
+      WORKTREE_PATH:
+        sh: echo "$(pwd)/{{.SESSION_DIR}}/{{.DESC}}/{{.REPO_NAME}}"
+    preconditions:
+      - sh: '[ -n "{{.BRANCH}}" ]'
+        msg: "No branch found for '{{.REPO_NAME}}' in session '{{.DESC}}'"
+      - sh: '[ -d "{{.EXPANDED_DIR}}" ]'
+        msg: "Source repo '{{.REPO_NAME}}' not found at '{{.REPO_DIR}}'"
+    cmds:
+      - |
+        cd "{{.EXPANDED_DIR}}"
+        BRANCH="{{.BRANCH}}"
+        WT_PATH="{{.WORKTREE_PATH}}"
+
+        git fetch --quiet origin 2>/dev/null || true
+
+        if git show-ref --verify --quiet "refs/heads/${BRANCH}"; then
+          echo "[{{.REPO_NAME}}] Resuming from local branch '${BRANCH}'"
+          git worktree add "${WT_PATH}" "${BRANCH}"
+        elif git show-ref --verify --quiet "refs/remotes/origin/${BRANCH}"; then
+          echo "[{{.REPO_NAME}}] Resuming from remote branch 'origin/${BRANCH}'"
+          git worktree add --track -b "${BRANCH}" "${WT_PATH}" "origin/${BRANCH}"
+        else
+          echo "[{{.REPO_NAME}}] ERROR: Branch '${BRANCH}' not found locally or on origin"
+          exit 1
+        fi

@@ -21,6 +21,7 @@ type Version struct {
 	Major int `json:"major"`
 	Minor int `json:"minor"`
 	Patch int `json:"patch"`
+	Dev   int `json:"dev,omitempty"`
 }
 
 // parseCmd represents the parse command
@@ -29,7 +30,14 @@ var versionCmd = &cobra.Command{
 	Short: "Prints the version of the application",
 	Run: func(cmd *cobra.Command, args []string) {
 		if jsonFlag {
-			vSplit := strings.Split(version, ".")
+			// Split off optional -devN suffix
+			base := version
+			var dev int
+			if idx := strings.Index(version, "-dev"); idx != -1 {
+				dev, _ = strconv.Atoi(version[idx+4:])
+				base = version[:idx]
+			}
+			vSplit := strings.Split(base, ".")
 			major, _ := strconv.Atoi(vSplit[0])
 			minor, _ := strconv.Atoi(vSplit[1])
 			patch, _ := strconv.Atoi(vSplit[2])
@@ -37,6 +45,7 @@ var versionCmd = &cobra.Command{
 				Major: major,
 				Minor: minor,
 				Patch: patch,
+				Dev:   dev,
 			}
 			b, err := json.Marshal(v) //, "", "\t")
 			if err != nil {
