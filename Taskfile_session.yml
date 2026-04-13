@@ -1,0 +1,271 @@
+version: '3'
+
+# ---------------------------------------------------------------------------
+# Session management — create / suspend / resume / remove worktrees
+#
+# Usage:
+#   task session:new     -- <branch-name>   # create session (new branches)
+#   task session:suspend -- <branch-name>   # remove worktrees, keep branches
+#   task session:resume  -- <branch-name>   # recreate worktrees from branches
+#   task session:rm      -- <branch-name>   # remove worktrees, keep branches
+#   task session:list                       # list active sessions
+#
+# Branch resolution for `new`:
+#   1. Local branch exists         → use it
+#   2. Remote tracking branch      → create local from remote
+#   3. Neither                     → create a new branch from HEAD
+#
+# Branch resolution for `resume`:
+#   1. Local branch exists         → use it
+#   2. Remote tracking branch      → create local from remote
+#   3. Neither                     → FAIL (branch must exist somewhere)
+# ---------------------------------------------------------------------------
+
+vars:
+  SESSION_DIR: sessions
+  # Repo definitions — name:dir:is_go_path
+  # is_go_path=1 means the dir is relative to the parent of this repo
+  # is_go_path=0 means the dir is an absolute path
+  REPOS: "metahub-api:.:go metalib:../metahub-core:go metahub-admin:../metahub-admin:go metahub-ui:~/src/gitlab.com/qnib-frontend/metahub-ui:abs"
+
+tasks:
+  # ---------------------------------------------------------------------------
+  # session:new — create a full session with worktrees for all repos
+  # ---------------------------------------------------------------------------
+  new:
+    desc: "Create a session: task session:new -- <branch-name>"
+    requires:
+      vars: [CLI_ARGS]
+    vars:
+      BRANCH: "{{.CLI_ARGS}}"
+    preconditions:
+      - sh: '[ -n "{{.CLI_ARGS}}" ]'
+        msg: "Usage: task session:new -- <branch-name>"
+      - sh: 'echo "{{.CLI_ARGS}}" | grep -qE "^[a-z0-9][a-z0-9-]*[a-z0-9]$"'
+        msg: "Branch name must be kebab-case (lowercase, hyphens, no leading/trailing hyphen)"
+      - sh: '[ ! -d "{{.SESSION_DIR}}/{{.CLI_ARGS}}" ]'
+        msg: "Session directory '{{.SESSION_DIR}}/{{.CLI_ARGS}}' already exists"
+    cmds:
+      - mkdir -p "{{.SESSION_DIR}}/{{.BRANCH}}"
+      - task: _worktree-add
+        vars: { BRANCH: "{{.BRANCH}}", REPO_NAME: "metahub-api", REPO_DIR: "." }
+      - task: _worktree-add
+        vars: { BRANCH: "{{.BRANCH}}", REPO_NAME: "metalib", REPO_DIR: "../metahub-core" }
+      - task: _worktree-add
+        vars: { BRANCH: "{{.BRANCH}}", REPO_NAME: "metahub-admin", REPO_DIR: "../metahub-admin" }
+      - task: _worktree-add
+        vars: { BRANCH: "{{.BRANCH}}", REPO_NAME: "metahub-ui", REPO_DIR: "~/src/gitlab.com/qnib-frontend/metahub-ui" }
+      - echo ""
+      - echo "=== Session '{{.BRANCH}}' created ==="
+      - echo "Worktrees at {{.SESSION_DIR}}/{{.BRANCH}}/"
+      - ls -1 "{{.SESSION_DIR}}/{{.BRANCH}}/"
+
+  # ---------------------------------------------------------------------------
+  # session:suspend — remove worktrees but keep branches for later resume
+  # ---------------------------------------------------------------------------
+  suspend:
+    desc: "Suspend a session (remove worktrees, keep branches): task session:suspend -- <branch-name>"
+    requires:
+      vars: [CLI_ARGS]
+    vars:
+      BRANCH: "{{.CLI_ARGS}}"
+    preconditions:
+      - sh: '[ -n "{{.CLI_ARGS}}" ]'
+        msg: "Usage: task session:suspend -- <branch-name>"
+      - sh: '[ -d "{{.SESSION_DIR}}/{{.CLI_ARGS}}" ]'
+        msg: "Session directory '{{.SESSION_DIR}}/{{.CLI_ARGS}}' does not exist"
+    cmds:
+      - task: _worktree-rm
+        vars: { BRANCH: "{{.BRANCH}}", REPO_NAME: "metahub-api", REPO_DIR: "." }
+      - task: _worktree-rm
+        vars: { BRANCH: "{{.BRANCH}}", REPO_NAME: "metalib", REPO_DIR: "../metahub-core" }
+      - task: _worktree-rm
+        vars: { BRANCH: "{{.BRANCH}}", REPO_NAME: "metahub-admin", REPO_DIR: "../metahub-admin" }
+      - task: _worktree-rm
+        vars: { BRANCH: "{{.BRANCH}}", REPO_NAME: "metahub-ui", REPO_DIR: "~/src/gitlab.com/qnib-frontend/metahub-ui" }
+      - rmdir "{{.SESSION_DIR}}/{{.BRANCH}}" 2>/dev/null || true
+      - echo ""
+      - echo "=== Session '{{.BRANCH}}' suspended ==="
+      - 'echo "Branches preserved. Resume with: task session:resume -- {{.BRANCH}}"'
+
+  # ---------------------------------------------------------------------------
+  # session:resume — recreate worktrees from existing branches
+  # ---------------------------------------------------------------------------
+  resume:
+    desc: "Resume a suspended session: task session:resume -- <branch-name>"
+    requires:
+      vars: [CLI_ARGS]
+    vars:
+      BRANCH: "{{.CLI_ARGS}}"
+    preconditions:
+      - sh: '[ -n "{{.CLI_ARGS}}" ]'
+        msg: "Usage: task session:resume -- <branch-name>"
+      - sh: 'echo "{{.CLI_ARGS}}" | grep -qE "^[a-z0-9][a-z0-9-]*[a-z0-9]$"'
+        msg: "Branch name must be kebab-case (lowercase, hyphens, no leading/trailing hyphen)"
+      - sh: '[ ! -d "{{.SESSION_DIR}}/{{.CLI_ARGS}}" ]'
+        msg: "Session '{{.SESSION_DIR}}/{{.CLI_ARGS}}' already active — suspend it first or use a different name"
+    cmds:
+      - mkdir -p "{{.SESSION_DIR}}/{{.BRANCH}}"
+      - task: _worktree-resume
+        vars: { BRANCH: "{{.BRANCH}}", REPO_NAME: "metahub-api", REPO_DIR: "." }
+      - task: _worktree-resume
+        vars: { BRANCH: "{{.BRANCH}}", REPO_NAME: "metalib", REPO_DIR: "../metahub-core" }
+      - task: _worktree-resume
+        vars: { BRANCH: "{{.BRANCH}}", REPO_NAME: "metahub-admin", REPO_DIR: "../metahub-admin" }
+      - task: _worktree-resume
+        vars: { BRANCH: "{{.BRANCH}}", REPO_NAME: "metahub-ui", REPO_DIR: "~/src/gitlab.com/qnib-frontend/metahub-ui" }
+      - echo ""
+      - echo "=== Session '{{.BRANCH}}' resumed ==="
+      - echo "Worktrees at {{.SESSION_DIR}}/{{.BRANCH}}/"
+      - ls -1 "{{.SESSION_DIR}}/{{.BRANCH}}/"
+
+  # ---------------------------------------------------------------------------
+  # session:rm — alias for suspend (worktrees removed, branches kept)
+  # ---------------------------------------------------------------------------
+  rm:
+    desc: "Remove a session (alias for suspend): task session:rm -- <branch-name>"
+    requires:
+      vars: [CLI_ARGS]
+    vars:
+      BRANCH: "{{.CLI_ARGS}}"
+    preconditions:
+      - sh: '[ -n "{{.CLI_ARGS}}" ]'
+        msg: "Usage: task session:rm -- <branch-name>"
+      - sh: '[ -d "{{.SESSION_DIR}}/{{.CLI_ARGS}}" ]'
+        msg: "Session directory '{{.SESSION_DIR}}/{{.CLI_ARGS}}' does not exist"
+    cmds:
+      - task: suspend
+
+  # ---------------------------------------------------------------------------
+  # session:list — show active sessions
+  # ---------------------------------------------------------------------------
+  list:
+    desc: "List active sessions"
+    cmds:
+      - |
+        if [ -d "{{.SESSION_DIR}}" ] && [ "$(ls -A "{{.SESSION_DIR}}" 2>/dev/null)" ]; then
+          for s in "{{.SESSION_DIR}}"/*/; do
+            name=$(basename "$s")
+            repos=$(ls -1 "$s" 2>/dev/null | tr '\n' ' ')
+            echo "${name}:  ${repos}"
+          done
+        else
+          echo "No active sessions."
+        fi
+
+  # ---------------------------------------------------------------------------
+  # Internal: _worktree-add — add a single worktree with branch resolution
+  #
+  # Branch resolution order:
+  #   1. Local branch exists       → git worktree add <path> <branch>
+  #   2. Remote branch exists      → git worktree add <path> <branch>  (auto-tracks)
+  #   3. Neither                   → git worktree add -b <branch> <path>
+  #
+  # After creating the worktree, the branch is pushed to origin (with -u) if
+  # it does not yet have a remote tracking branch. This ensures GoCD and other
+  # CI systems can see the branch immediately.
+  # ---------------------------------------------------------------------------
+  _worktree-add:
+    internal: true
+    requires:
+      vars: [BRANCH, REPO_NAME, REPO_DIR]
+    vars:
+      WORKTREE_PATH:
+        sh: echo "$(pwd)/{{.SESSION_DIR}}/{{.BRANCH}}/{{.REPO_NAME}}"
+      EXPANDED_DIR:
+        sh: eval echo "{{.REPO_DIR}}"
+    preconditions:
+      - sh: '[ -d "{{.EXPANDED_DIR}}" ]'
+        msg: "Source repo '{{.REPO_NAME}}' not found at '{{.REPO_DIR}}'"
+      - sh: 'git -C "{{.EXPANDED_DIR}}" rev-parse --git-dir >/dev/null 2>&1'
+        msg: "'{{.REPO_DIR}}' is not a git repository"
+    cmds:
+      - |
+        cd "{{.EXPANDED_DIR}}"
+
+        # Fetch latest to ensure remote branches are up to date
+        git fetch --quiet origin 2>/dev/null || true
+
+        # Resolve branch
+        if git show-ref --verify --quiet "refs/heads/{{.BRANCH}}"; then
+          echo "[{{.REPO_NAME}}] Using existing local branch '{{.BRANCH}}'"
+          git worktree add "{{.WORKTREE_PATH}}" "{{.BRANCH}}"
+        elif git show-ref --verify --quiet "refs/remotes/origin/{{.BRANCH}}"; then
+          echo "[{{.REPO_NAME}}] Tracking remote branch 'origin/{{.BRANCH}}'"
+          git worktree add --track -b "{{.BRANCH}}" "{{.WORKTREE_PATH}}" "origin/{{.BRANCH}}"
+        else
+          echo "[{{.REPO_NAME}}] Creating new branch '{{.BRANCH}}' from HEAD"
+          git worktree add -b "{{.BRANCH}}" "{{.WORKTREE_PATH}}"
+        fi
+
+        # Ensure the branch is pushed to origin so CI (GoCD) can see it
+        cd "{{.WORKTREE_PATH}}"
+        if ! git config "branch.{{.BRANCH}}.remote" >/dev/null 2>&1; then
+          echo "[{{.REPO_NAME}}] Pushing '{{.BRANCH}}' to origin..."
+          git push -u origin "{{.BRANCH}}"
+        else
+          echo "[{{.REPO_NAME}}] Branch '{{.BRANCH}}' already tracks origin"
+        fi
+
+  # ---------------------------------------------------------------------------
+  # Internal: _worktree-resume — add worktree from existing branch (no create)
+  #
+  # Unlike _worktree-add, this FAILS if the branch does not exist locally
+  # or on the remote. It will never create a new branch from HEAD.
+  # ---------------------------------------------------------------------------
+  _worktree-resume:
+    internal: true
+    requires:
+      vars: [BRANCH, REPO_NAME, REPO_DIR]
+    vars:
+      WORKTREE_PATH:
+        sh: echo "$(pwd)/{{.SESSION_DIR}}/{{.BRANCH}}/{{.REPO_NAME}}"
+      EXPANDED_DIR:
+        sh: eval echo "{{.REPO_DIR}}"
+    preconditions:
+      - sh: '[ -d "{{.EXPANDED_DIR}}" ]'
+        msg: "Source repo '{{.REPO_NAME}}' not found at '{{.REPO_DIR}}'"
+      - sh: 'git -C "{{.EXPANDED_DIR}}" rev-parse --git-dir >/dev/null 2>&1'
+        msg: "'{{.REPO_DIR}}' is not a git repository"
+    cmds:
+      - |
+        cd "{{.EXPANDED_DIR}}"
+
+        # Fetch latest to ensure remote branches are up to date
+        git fetch --quiet origin 2>/dev/null || true
+
+        # Resolve branch — must already exist
+        if git show-ref --verify --quiet "refs/heads/{{.BRANCH}}"; then
+          echo "[{{.REPO_NAME}}] Resuming from local branch '{{.BRANCH}}'"
+          git worktree add "{{.WORKTREE_PATH}}" "{{.BRANCH}}"
+        elif git show-ref --verify --quiet "refs/remotes/origin/{{.BRANCH}}"; then
+          echo "[{{.REPO_NAME}}] Resuming from remote branch 'origin/{{.BRANCH}}'"
+          git worktree add --track -b "{{.BRANCH}}" "{{.WORKTREE_PATH}}" "origin/{{.BRANCH}}"
+        else
+          echo "[{{.REPO_NAME}}] ERROR: Branch '{{.BRANCH}}' not found locally or on origin"
+          exit 1
+        fi
+
+  # ---------------------------------------------------------------------------
+  # Internal: _worktree-rm — remove a single worktree
+  # ---------------------------------------------------------------------------
+  _worktree-rm:
+    internal: true
+    requires:
+      vars: [BRANCH, REPO_NAME, REPO_DIR]
+    vars:
+      WORKTREE_PATH:
+        sh: echo "$(pwd)/{{.SESSION_DIR}}/{{.BRANCH}}/{{.REPO_NAME}}"
+      EXPANDED_DIR:
+        sh: eval echo "{{.REPO_DIR}}"
+    cmds:
+      - |
+        cd "{{.EXPANDED_DIR}}"
+        if git worktree list | grep -q "{{.WORKTREE_PATH}}"; then
+          echo "[{{.REPO_NAME}}] Removing worktree at {{.WORKTREE_PATH}}"
+          git worktree remove "{{.WORKTREE_PATH}}" --force 2>/dev/null || true
+        else
+          echo "[{{.REPO_NAME}}] No worktree found — skipping"
+        fi
+        # Clean up stale worktree entries
+        git worktree prune 2>/dev/null || true

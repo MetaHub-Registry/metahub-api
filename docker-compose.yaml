@@ -66,8 +66,8 @@ services:
      - mh-data
     environment:
       OCI_ROOT_URL: "http://dev:80"
-      OCI_NAMESPACE: "oci/confirmance"
-      OCI_CROSSMOUNT_NAMESPACE: "oci/confirmance"
+      OCI_NAMESPACE: "oci/conformance"
+      OCI_CROSSMOUNT_NAMESPACE: "oci/conformance"
       OCI_USERNAME: "oci"
       OCI_PASSWORD:  "oci"
       OCI_TEST_PULL: 1

@@ -30,6 +30,27 @@ const (
 	failedCheckManifestExists   = "failed to check if manifest exists"
 )
 
+// clientAcceptsIndex returns true when the request's Accept header includes an
+// image-index (or Docker manifest-list) media type. When false, the client has
+// explicitly asked for a single manifest and the response path should attempt
+// content-negotiation by unwrapping a single-descriptor index.
+func clientAcceptsIndex(r *http.Request) bool {
+	for _, a := range r.Header.Values("Accept") {
+		for _, mt := range strings.Split(a, ",") {
+			mt = strings.TrimSpace(mt)
+			// Strip optional quality parameter (e.g. ";q=0.9")
+			if idx := strings.Index(mt, ";"); idx != -1 {
+				mt = strings.TrimSpace(mt[:idx])
+			}
+			switch mt {
+			case ociManifestListMediaType, dockerManifestListMediaType, "*/*":
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (h Handlers) ManifestHeadHandlerDigest(ctx context.Context, w http.ResponseWriter, r *http.Request, up upstream.UpstreamTriple) {
 	req := types.NewRequest(ctx, r)
 	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
@@ -215,7 +236,7 @@ func (h Handlers) ManifestHeadHandler(w http.ResponseWriter, r *http.Request) {
 	})
 	_ = l
 	defer span.End()
-	h.ManifestHandler(ctx, w, req)
+	h.ManifestHandler(ctx, w, r, req)
 }
 
 func (h Handlers) ManifestDelHandler(w http.ResponseWriter, r *http.Request) {
@@ -282,7 +303,78 @@ func (h Handlers) handleManifest(ctx context.Context, w http.ResponseWriter, req
 	return false
 }
 
-func (h Handlers) ManifestHandler(ctx context.Context, w http.ResponseWriter, req types.Request) {
+// dispatchByMediaType routes a manifest GET/HEAD to the appropriate handler
+// based on the stored media type and the client's Accept header. Returns true
+// if the response was written.
+func (h Handlers) dispatchByMediaType(ctx context.Context, w http.ResponseWriter, r *http.Request, req types.Request, mediaType string) bool {
+	switch mediaType {
+	case ociManifestListMediaType:
+		// Content negotiation: when the client requests only single-manifest
+		// types (i.e. does NOT accept index/manifest-list), try to unwrap
+		// a single-descriptor index into the underlying manifest.
+		if !clientAcceptsIndex(r) {
+			if ok := h.handleIndexAsManifest(ctx, w, r, req); ok {
+				return true
+			}
+		}
+		return h.handleIndex(ctx, w, req)
+	case ociManifestMediaType, dockerManifestMediaType:
+		return h.handleManifest(ctx, w, req)
+	default:
+		msg := fmt.Sprintf("unkown mediaType '%s'", mediaType)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
+		return true
+	}
+}
+
+// handleIndexAsManifest implements Accept-header content negotiation for tags
+// that resolve to an index. When the index contains exactly one descriptor and
+// the client did not ask for an index media type, this helper serves the
+// underlying single manifest (with its own digest and media type) so that OCI
+// conformance tests and simple clients get the manifest they pushed rather
+// than the server-side aggregated index.
+//
+// Returns true if the response was written (caller should stop), false if the
+// caller should fall through to the normal index path.
+func (h Handlers) handleIndexAsManifest(ctx context.Context, w http.ResponseWriter, r *http.Request, req types.Request) bool {
+	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
+		"package": pkgNameOciMani,
+		"func":    "handleIndexAsManifest",
+		"repo":    req.Repo,
+		"tag":     req.Tag,
+	})
+	defer span.End()
+	ml, found, err := h.mag.IndexGetByRequest(ctx, req)
+	if err != nil || !found {
+		return false // let normal path handle errors / not-found
+	}
+	if len(ml.Manifests) != 1 {
+		utils.Debug(l, span, "index has %d descriptors, cannot unwrap to single manifest", len(ml.Manifests))
+		return false // multi-descriptor → serve index as-is
+	}
+	// Single descriptor: serve the underlying manifest
+	singleDigest := ml.Manifests[0].Digest
+	utils.Debug(l, span, "content-negotiation: unwrapping single-descriptor index to manifest %s", utils.ShortenDigest(singleDigest))
+	maniReq := req
+	maniReq.Digest = singleDigest
+	m, mFound, mErr := h.mag.ManifestGetByRequest(ctx, maniReq)
+	if mErr != nil || !mFound {
+		return false // fall through to normal index path
+	}
+	switch req.Method {
+	case http.MethodGet:
+		m.WriteWWW(w)
+	case http.MethodHead:
+		m.WriteWWWHead(w)
+	default:
+		return false
+	}
+	return true
+}
+
+func (h Handlers) ManifestHandler(ctx context.Context, w http.ResponseWriter, r *http.Request, req types.Request) {
 	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
 		"package": pkgNameOciMani,
 		"func":    "ManifestHandler",
@@ -345,23 +437,7 @@ func (h Handlers) ManifestHandler(ctx context.Context, w http.ResponseWriter, re
 		attribute.String("log.message", msg),
 	))
 	l.Debug(msg)
-	switch mediaType {
-	case ociManifestListMediaType:
-		if ok := h.handleIndex(ctx, w, req); ok {
-			return
-		}
-	case
-		ociManifestMediaType,
-		dockerManifestMediaType:
-		if ok := h.handleManifest(ctx, w, req); ok {
-			return
-		}
-	default:
-		msg := fmt.Sprintf("unkown mediaType '%s'", mediaType)
-		l.Error(msg)
-		det := helper.NewDetailFromReq(req)
-		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
-		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
+	if ok := h.dispatchByMediaType(ctx, w, r, req, mediaType); ok {
 		return
 	}
 	msg = fmt.Sprintf("no manifest '%s:%s' found for profile '%s'", req.Repo, req.Tag, req.Profile)
@@ -382,7 +458,7 @@ func (h Handlers) ManifestGetHandler(w http.ResponseWriter, r *http.Request) {
 	})
 	defer span.End()
 	_ = l
-	h.ManifestHandler(ctx, w, req)
+	h.ManifestHandler(ctx, w, r, req)
 }
 
 func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
@@ -570,6 +646,13 @@ func (h Handlers) ManifestPutHandlerWrapper(ctx context.Context, w http.Response
 		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 		return
 	}
-	w.Header().Set("Location", fmt.Sprintf("%s://%s/v2/%s/manifests/%s", req.Protocol, req.Host, req.Repo, req.Tag))
+	// Use tag if present, otherwise fall back to digest for the Location header.
+	// When a manifest is pushed by digest reference (e.g., PUT /v2/<name>/manifests/sha256:...),
+	// req.Tag is empty and we must use the digest to build the correct Location.
+	ref := req.Tag
+	if ref == "" {
+		ref = req.Digest
+	}
+	w.Header().Set("Location", fmt.Sprintf("%s://%s/v2/%s/manifests/%s", req.Protocol, req.Host, req.Repo, ref))
 	w.WriteHeader(http.StatusCreated)
 }

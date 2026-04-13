@@ -20,3 +20,5 @@ results/*
 misc/config/local-config.yaml
 metahub
 sessions/*
+test.log
+junit.xml
