@@ -83,6 +83,8 @@ tasks:
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-admin", REPO_DIR: "{{.REPO_ADMIN_DIR}}" }
       - task: _branch-and-mr
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-ui", REPO_DIR: "{{.REPO_UI_DIR}}" }
+      - task: _setup-session-workspace
+        vars: { DESC: "{{.DESC}}" }
       - task: _update-dev-stack
         vars: { DESC: "{{.DESC}}" }
       - echo ""
@@ -420,6 +422,31 @@ tasks:
           2>&1 || echo "[${REPO_NAME}] WARNING: MR creation failed (may already exist)"
 
         echo "${REPO_NAME}=${BRANCH}" >> "${BRANCHES_FILE}"
+
+  # ---------------------------------------------------------------------------
+  # _setup-session-workspace — generate opencode config, AGENTS.md, Taskfile
+  # ---------------------------------------------------------------------------
+  _setup-session-workspace:
+    internal: true
+    requires:
+      vars: [DESC]
+    vars:
+      SESSION_PATH:
+        sh: echo "$(pwd)/{{.SESSION_DIR}}/{{.DESC}}"
+      API_ROOT:
+        sh: pwd
+      LIB_OPENCODE:
+        sh: eval echo "{{.REPO_LIB_DIR}}/.opencode"
+      API_OPENCODE:
+        sh: echo "$(pwd)/.opencode"
+    cmds:
+      - |
+        "{{.API_ROOT}}/misc/bin/setup-session-workspace.sh" \
+          "{{.SESSION_PATH}}" \
+          "{{.DESC}}" \
+          "{{.API_ROOT}}" \
+          "{{.LIB_OPENCODE}}" \
+          "{{.API_OPENCODE}}"
 
   # ---------------------------------------------------------------------------
   # _bump-dev — iterate dev version in a single repo worktree
