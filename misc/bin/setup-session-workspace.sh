@@ -9,6 +9,10 @@ LIB_OC="$4"
 API_OC="$5"
 BRANCHES_FILE="${S}/.branches"
 
+# Relative path from session dir back to metahub-api root
+# Session lives at <api-root>/sessions/<desc>/ → two levels up
+REL_API_ROOT="../.."
+
 echo ""
 echo "=== Setting up session workspace ==="
 
@@ -132,7 +136,7 @@ safehouse opencode
 EOF
 chmod +x "${S}/opencode.sh"
 
-# --- Taskfile.yml — forwarding tasks ---
+# --- Taskfile.yml — forwarding tasks using relative path ---
 cat > "${S}/Taskfile.yml" <<EOF
 version: '3'
 
@@ -140,19 +144,32 @@ tasks:
   dev:
     desc: "Iterate dev version in all repos"
     cmds:
-      - task -d "${API_ROOT}" session:dev -- ${DESC}
+      - task -d "${REL_API_ROOT}" session:dev -- ${DESC}
   finish:
     desc: "Finalize session: test, sonar, archive, push, comment MRs"
     cmds:
-      - task -d "${API_ROOT}" session:finish -- ${DESC}
+      - task -d "${REL_API_ROOT}" session:finish -- ${DESC}
   suspend:
     desc: "Suspend session (remove worktrees, keep branches)"
     cmds:
-      - task -d "${API_ROOT}" session:suspend -- ${DESC}
+      - task -d "${REL_API_ROOT}" session:suspend -- ${DESC}
   resume:
     desc: "Resume session (recreate worktrees)"
     cmds:
-      - task -d "${API_ROOT}" session:resume -- ${DESC}
+      - task -d "${REL_API_ROOT}" session:resume -- ${DESC}
+  version:*:*:
+    desc: "Set release version for a repo"
+    vars:
+      REPO: '{{index .MATCH 0}}'
+      LEVEL: '{{index .MATCH 1}}'
+    cmds:
+      - task -d "${REL_API_ROOT}" session:version:{{.REPO}}:{{.LEVEL}} -- ${DESC}
+  close:*:
+    desc: "Close MR for unchanged repo"
+    vars:
+      REPO: '{{index .MATCH 0}}'
+    cmds:
+      - task -d "${REL_API_ROOT}" session:close:{{.REPO}} -- ${DESC}
 EOF
 
 # --- AGENTS.md — auto-generated with session context ---
@@ -170,6 +187,8 @@ This is a self-contained session workspace. All repos are checked out
 as worktrees within this directory. The opencode instance running here
 can edit only files within this session.
 
+Start opencode from this directory: \`./opencode.sh\`
+
 ## Repos and Branches
 
 | Repo | Branch | Worktree |
@@ -181,21 +200,24 @@ can edit only files within this session.
 
 ## Session Tasks
 
-Run these from within this session directory:
+All tasks run from this session directory:
 
 | Task | Command |
 |------|---------|
 | Iterate dev version | \`task dev\` |
 | Finalize session | \`task finish\` |
+| Set release version | \`task version:REPO:LEVEL\` |
+| Close unchanged repo | \`task close:REPO\` |
 | Suspend (free disk) | \`task suspend\` |
 | Resume | \`task resume\` |
 
-Or from the metahub-api root:
-
-| Task | Command |
-|------|---------|
-| Set release version | \`task session:version:REPO:LEVEL -- ${DESC}\` |
-| Close unchanged repo | \`task session:close:REPO -- ${DESC}\` |
+Examples:
+\`\`\`bash
+task version:metalib:minor
+task version:metahub-api:patch
+task close:metahub-admin
+task close:metahub-ui
+\`\`\`
 
 ## Commits and Pushes
 
@@ -205,7 +227,8 @@ Or from the metahub-api root:
 
 ## After Each Change
 
-Run these steps in **only the repo(s) that were actually modified**.
+Run these steps **from within the repo worktree** that was modified
+(e.g. \`cd metahub-ui/\`).
 
 ### 1. Tests — run the full test suite with coverage
 
@@ -226,6 +249,15 @@ Use the SonarQube MCP server to verify quality gate status.
 
 All three steps must pass before a change is considered complete.
 
+## Partial Test Runs
+
+When running tests for a single package, always forward log output into a file:
+
+\`\`\`bash
+go test -timeout 300s -count=1 -coverprofile=/tmp/cover.out ./pkg/some/... 2>&1 > test.log
+tail -3 test.log
+\`\`\`
+
 ## Documentation
 
 ### DevDiary (Obsidian)
@@ -243,10 +275,18 @@ Use \`Metahub/docs\` in Obsidian to document specs, graph constructs, and archit
 ## Event Logging (VictoriaLogs)
 
 \`\`\`bash
-VL_AGENT="claude-opus-4-6" ${API_ROOT}/misc/bin/vl-event.sh <event_type> <phase> "<message>" [key=value ...]
+VL_AGENT="claude-opus-4-6" ${REL_API_ROOT}/misc/bin/vl-event.sh <event_type> <phase> "<message>" [key=value ...]
 \`\`\`
 
-See the main AGENTS.md at \`${API_ROOT}/AGENTS.md\` for full event logging conventions.
+### When to emit events
+
+| Moment | event_type | phase | Extra fields |
+|---|---|---|---|
+| Before starting an OpenSpec task | \`task\` | \`start\` | \`change\`, \`task_num\`, \`task_total\`, \`task_desc\` |
+| After completing an OpenSpec task | \`task\` | \`end\` | \`change\`, \`task_num\`, \`task_total\`, \`task_desc\`, \`duration_s\` |
+| After creating an OpenSpec artifact | \`artifact\` | \`create\` | \`change\`, \`artifact\` |
+| When a new change is created | \`change\` | \`start\` | \`change\` |
+| When a change is archived | \`change\` | \`archive\` | \`change\` |
 EOF
 
 echo "[workspace] AGENTS.md generated"
