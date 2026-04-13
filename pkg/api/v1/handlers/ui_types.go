@@ -13,6 +13,7 @@ type UIManifest struct {
 	MediaType   string            `json:"media_type"`
 	Platform    UIPlatform        `json:"platform"`
 	Size        int64             `json:"size"`
+	ContentSize int64             `json:"content_size,omitempty"`
 	Registry    string            `json:"registry"`
 	Annotations map[string]string `json:"annotations,omitempty"`
 }
@@ -47,6 +48,7 @@ func toUIManifest(md types.Manifest) UIManifest {
 			Features:     features,
 		},
 		Size:        md.Size,
+		ContentSize: md.ContentSize,
 		Registry:    md.Upstream.Reg,
 		Annotations: annotations,
 	}

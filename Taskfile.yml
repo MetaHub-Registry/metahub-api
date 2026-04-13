@@ -5,6 +5,10 @@ dotenv: ['.env']
 includes:
   dev:
     taskfile: ./Taskfile_dev.yml
+  session:
+    taskfile: ./Taskfile_session.yml
+  e2e:
+    taskfile: ./Taskfile_e2e_dev.yml
   mh-ui:
     taskfile: ~/src/gitlab.com/qnib-frontend/metahub-ui/Taskfile.yaml
     dir: ~/src/gitlab.com/qnib-frontend/metahub-ui/
@@ -83,6 +87,10 @@ tasks:
   ociBuild:
     cmds:
       - docker compose exec -ti -w /opt/results/distribution-spec/conformance oci go test -c
+  ociConformance:
+    desc: Run the full OCI conformance suite (push+pull+discovery+management)
+    cmds:
+      - docker compose exec -ti -e OCI_TEST_PUSH=1 -e OCI_TEST_PULL=1 -e OCI_TEST_CONTENT_DISCOVERY=1 -e OCI_TEST_CONTENT_MANAGEMENT=1 oci /usr/local/src/distribution-spec/conformance/conformance.test
   ociTest:*:*:*:*:
     vars:
       PUSH: '{{index .MATCH 0}}' 
