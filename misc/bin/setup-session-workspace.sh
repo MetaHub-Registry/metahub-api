@@ -126,6 +126,18 @@ cd "${S}"
 echo "[workspace] Skills: $(ls -1 .opencode/skills/ | wc -l | tr -d ' ') copied"
 echo "[workspace] Commands: $(ls -1 .opencode/command/ | wc -l | tr -d ' ') copied"
 
+# --- .opencodeignore — copy from metahub-api if it exists ---
+if [ -f "${API_ROOT}/.opencodeignore" ] && [ ! -f "${S}/.opencodeignore" ]; then
+  # Use the session-level ignore from the api repo's sessions template,
+  # or fall back to the repo-level one as a base
+  if [ -f "${API_ROOT}/sessions/.opencodeignore" ]; then
+    cp "${API_ROOT}/sessions/.opencodeignore" "${S}/.opencodeignore"
+  else
+    cp "${API_ROOT}/.opencodeignore" "${S}/.opencodeignore"
+  fi
+  echo "[workspace] .opencodeignore copied"
+fi
+
 # --- Seed CONTEXT.md from each repo's main branch (if it exists) ---
 # Per-repo context: copy CONTEXT.md from each worktree (inherited from main)
 for repo_dir in "${S}"/*/; do
