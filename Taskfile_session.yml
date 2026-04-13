@@ -1,61 +1,72 @@
 version: '3'
 
 # ---------------------------------------------------------------------------
-# Session management — create / suspend / resume / remove worktrees
+# Session management — create / iterate / finalize / suspend / resume
 #
 # Usage:
-#   task session:new:<level> -- <description>  # create session with bump
-#     <level> = major | minor | patch
-#     <description> = short kebab-case session name (e.g. "add-auth")
+#   task session:new     -- <description>           # start a session
+#   task session:dev     -- <description>            # iterate dev version
+#   task session:finish  -- <description>            # finalize all repos
+#   task session:version:<repo>:<level> -- <desc>    # set release version
+#   task session:close:<repo>           -- <desc>    # close MR (no changes)
+#   task session:suspend -- <description>            # remove worktrees
+#   task session:resume  -- <description>            # recreate worktrees
+#   task session:list                                # list active sessions
 #
-#   Example: task session:new:patch -- add-oauth-support
+# Workflow:
 #
-#   This will:
-#     1. Query each repo's next MR number via glab
-#     2. Create branches like 99-add-oauth-support in each repo
-#     3. Run bump2version <level> in each repo (e.g. 3.0.0 → 3.0.1-dev1)
-#     4. Push branches to origin
-#     5. Create draft MRs in GitLab
-#     6. Update the dev-stack Taskfile with new branch names
-#     7. Commit & push the dev-stack change
+#   1. START
+#      task session:new -- add-oauth-support
+#        → branches all repos, bumps to X.Y.Z-dev1, pushes, draft MRs
 #
-#   task session:suspend -- <description>      # remove worktrees, keep branches
-#   task session:resume  -- <description>      # recreate worktrees from branches
-#   task session:rm      -- <description>      # alias for suspend
-#   task session:list                          # list active sessions
+#   2. WORK (repeat)
+#      OpenSpec propose/apply/explore in each worktree
+#      After each change: tests + sonar run automatically
+#      task session:dev -- add-oauth-support   (optional dev iteration)
 #
-# Branch resolution for `resume`:
-#   The resume task scans the session metadata file to find repo-specific
-#   branch names (since each repo may have a different MR-number prefix).
+#   3. FINISH
+#      task session:finish -- add-oauth-support
+#        → per repo: archive OpenSpec changes, run tests, sonar, push
+#        → updates each MR with a summary comment
+#        → human reviews and merges
+#
+#   4. VERSION (per repo, after finish)
+#      task session:version:metalib:minor -- add-oauth-support
+#      task session:version:metahub-api:patch -- add-oauth-support
+#      task session:close:metahub-admin -- add-oauth-support
+#      task session:close:metahub-ui -- add-oauth-support
+#
+# The human does the actual merge.
+#
+# Version philosophy:
+#   The semver level (major/minor/patch) is decided at session END,
+#   per-repo, based on actual changes — not guessed at the start.
+#   During the session, versions use -devN on the CURRENT base version.
 # ---------------------------------------------------------------------------
 
 vars:
   SESSION_DIR: sessions
   DEV_STACK_DIR: ~/src/gitlab.com/qnib-ansible/dev-stack
-  # Repo definitions — name:dir:glab_repo (glab_repo empty = use git remote)
   REPO_API_DIR: "."
   REPO_LIB_DIR: "../metahub-core"
   REPO_ADMIN_DIR: "../metahub-admin"
   REPO_UI_DIR: "~/src/gitlab.com/qnib-frontend/metahub-ui"
 
 tasks:
-  # ---------------------------------------------------------------------------
-  # session:new:<level> — create a full session with MR-prefixed branches
-  # ---------------------------------------------------------------------------
-  new:*:
-    desc: "Create a session: task session:new:<major|minor|patch> -- <description>"
+  # ===========================================================================
+  # session:new — start a session
+  # ===========================================================================
+  new:
+    desc: "Create a session: task session:new -- <description>"
     requires:
       vars: [CLI_ARGS]
     vars:
-      LEVEL: '{{index .MATCH 0}}'
       DESC: "{{.CLI_ARGS}}"
     preconditions:
       - sh: '[ -n "{{.CLI_ARGS}}" ]'
-        msg: "Usage: task session:new:<level> -- <description>"
+        msg: "Usage: task session:new -- <description>"
       - sh: 'echo "{{.CLI_ARGS}}" | grep -qE "^[a-z0-9][a-z0-9-]*[a-z0-9]$"'
         msg: "Description must be kebab-case (lowercase, hyphens, no leading/trailing hyphen)"
-      - sh: 'echo "{{.LEVEL}}" | grep -qE "^(major|minor|patch)$"'
-        msg: "Level must be one of: major, minor, patch (got '{{.LEVEL}}')"
       - sh: '[ ! -d "{{.SESSION_DIR}}/{{.CLI_ARGS}}" ]'
         msg: "Session directory '{{.SESSION_DIR}}/{{.CLI_ARGS}}' already exists"
       - sh: 'command -v glab >/dev/null 2>&1'
@@ -64,56 +75,182 @@ tasks:
         msg: "bump2version is required but not found"
     cmds:
       - mkdir -p "{{.SESSION_DIR}}/{{.DESC}}"
-
-      # --- metahub-api ---
-      - task: _branch-bump-mr
-        vars:
-          DESC: "{{.DESC}}"
-          LEVEL: "{{.LEVEL}}"
-          REPO_NAME: "metahub-api"
-          REPO_DIR: "{{.REPO_API_DIR}}"
-
-      # --- metalib ---
-      - task: _branch-bump-mr
-        vars:
-          DESC: "{{.DESC}}"
-          LEVEL: "{{.LEVEL}}"
-          REPO_NAME: "metalib"
-          REPO_DIR: "{{.REPO_LIB_DIR}}"
-
-      # --- metahub-admin ---
-      - task: _branch-bump-mr
-        vars:
-          DESC: "{{.DESC}}"
-          LEVEL: "{{.LEVEL}}"
-          REPO_NAME: "metahub-admin"
-          REPO_DIR: "{{.REPO_ADMIN_DIR}}"
-
-      # --- metahub-ui ---
-      - task: _branch-bump-mr
-        vars:
-          DESC: "{{.DESC}}"
-          LEVEL: "{{.LEVEL}}"
-          REPO_NAME: "metahub-ui"
-          REPO_DIR: "{{.REPO_UI_DIR}}"
-
-      # --- Update dev-stack ---
+      - task: _branch-and-mr
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-api", REPO_DIR: "{{.REPO_API_DIR}}" }
+      - task: _branch-and-mr
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metalib", REPO_DIR: "{{.REPO_LIB_DIR}}" }
+      - task: _branch-and-mr
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-admin", REPO_DIR: "{{.REPO_ADMIN_DIR}}" }
+      - task: _branch-and-mr
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-ui", REPO_DIR: "{{.REPO_UI_DIR}}" }
       - task: _update-dev-stack
         vars: { DESC: "{{.DESC}}" }
-
       - echo ""
       - echo "=== Session '{{.DESC}}' created ==="
       - echo "Worktrees at {{.SESSION_DIR}}/{{.DESC}}/"
-      - ls -1 "{{.SESSION_DIR}}/{{.DESC}}/"
+      - ls -1 "{{.SESSION_DIR}}/{{.DESC}}/" | grep -v '^\.'
       - echo ""
       - echo "Branch mapping:"
       - cat "{{.SESSION_DIR}}/{{.DESC}}/.branches"
 
-  # ---------------------------------------------------------------------------
-  # session:suspend — remove worktrees but keep branches for later resume
-  # ---------------------------------------------------------------------------
+  # ===========================================================================
+  # session:dev — iterate the dev version in all repos
+  # ===========================================================================
+  dev:
+    desc: "Iterate dev version: task session:dev -- <description>"
+    requires:
+      vars: [CLI_ARGS]
+    vars:
+      DESC: "{{.CLI_ARGS}}"
+    preconditions:
+      - sh: '[ -n "{{.CLI_ARGS}}" ]'
+        msg: "Usage: task session:dev -- <description>"
+      - sh: '[ -f "{{.SESSION_DIR}}/{{.CLI_ARGS}}/.branches" ]'
+        msg: "Session '{{.CLI_ARGS}}' not found — run session:new first"
+    cmds:
+      - task: _bump-dev
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-api", REPO_DIR: "{{.REPO_API_DIR}}" }
+      - task: _bump-dev
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metalib", REPO_DIR: "{{.REPO_LIB_DIR}}" }
+      - task: _bump-dev
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-admin", REPO_DIR: "{{.REPO_ADMIN_DIR}}" }
+      - task: _bump-dev
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-ui", REPO_DIR: "{{.REPO_UI_DIR}}" }
+      - echo ""
+      - echo "=== Dev iteration complete ==="
+
+  # ===========================================================================
+  # session:finish — finalize the session across all repos
+  #
+  # Per repo that has changes beyond the initial dev bump:
+  #   1. Archive OpenSpec changes (if any .openspec/ dir exists)
+  #   2. Run the full test suite
+  #   3. Submit SonarQube analysis
+  #   4. Push the branch
+  #   5. Update the MR description with a summary
+  #
+  # Repos with no changes are reported as "unchanged".
+  # The human decides per-repo: version:<repo>:<level> or close:<repo>.
+  # ===========================================================================
+  finish:
+    desc: "Finalize session: task session:finish -- <description>"
+    requires:
+      vars: [CLI_ARGS]
+    vars:
+      DESC: "{{.CLI_ARGS}}"
+    preconditions:
+      - sh: '[ -n "{{.CLI_ARGS}}" ]'
+        msg: "Usage: task session:finish -- <description>"
+      - sh: '[ -f "{{.SESSION_DIR}}/{{.CLI_ARGS}}/.branches" ]'
+        msg: "Session '{{.CLI_ARGS}}' not found"
+    cmds:
+      - task: _finalize-repo
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-api", REPO_DIR: "{{.REPO_API_DIR}}" }
+      - task: _finalize-repo
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metalib", REPO_DIR: "{{.REPO_LIB_DIR}}" }
+      - task: _finalize-repo
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-admin", REPO_DIR: "{{.REPO_ADMIN_DIR}}" }
+      - task: _finalize-repo
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-ui", REPO_DIR: "{{.REPO_UI_DIR}}" }
+      - |
+        echo ""
+        echo "=== Session '{{.DESC}}' finalized ==="
+        echo ""
+        echo "Next steps per repo:"
+        echo "  Changed repos:   task session:version:REPO:LEVEL -- {{.DESC}}"
+        echo "  Unchanged repos: task session:close:REPO -- {{.DESC}}"
+        echo ""
+        echo "Status:"
+        grep '\.status=' "{{.SESSION_DIR}}/{{.DESC}}/.branches" 2>/dev/null | sed 's/^/  /' || echo "  (no status yet)"
+
+  # ===========================================================================
+  # session:version:<repo>:<level> — set the release version for a single repo
+  # ===========================================================================
+  version:*:*:
+    desc: "Set release version: task session:version:<repo>:<major|minor|patch> -- <description>"
+    requires:
+      vars: [CLI_ARGS]
+    vars:
+      REPO_NAME: '{{index .MATCH 0}}'
+      LEVEL: '{{index .MATCH 1}}'
+      DESC: "{{.CLI_ARGS}}"
+      REPO_DIR:
+        sh: |
+          case "{{index .MATCH 0}}" in
+            metahub-api)   eval echo "{{.REPO_API_DIR}}" ;;
+            metalib)       eval echo "{{.REPO_LIB_DIR}}" ;;
+            metahub-admin) eval echo "{{.REPO_ADMIN_DIR}}" ;;
+            metahub-ui)    eval echo "{{.REPO_UI_DIR}}" ;;
+            *) echo "" ;;
+          esac
+    preconditions:
+      - sh: '[ -n "{{.CLI_ARGS}}" ]'
+        msg: "Usage: task session:version:<repo>:<level> -- <description>"
+      - sh: 'echo "{{.LEVEL}}" | grep -qE "^(major|minor|patch)$"'
+        msg: "Level must be one of: major, minor, patch (got '{{.LEVEL}}')"
+      - sh: '[ -f "{{.SESSION_DIR}}/{{.CLI_ARGS}}/.branches" ]'
+        msg: "Session '{{.CLI_ARGS}}' not found"
+      - sh: 'grep -q "^{{.REPO_NAME}}=" "{{.SESSION_DIR}}/{{.CLI_ARGS}}/.branches"'
+        msg: "Repo '{{.REPO_NAME}}' not found in session '{{.CLI_ARGS}}'"
+      - sh: '[ -n "{{.REPO_DIR}}" ]'
+        msg: "Unknown repo '{{.REPO_NAME}}'. Must be one of: metahub-api, metalib, metahub-admin, metahub-ui"
+    cmds:
+      - task: _version-repo
+        vars:
+          DESC: "{{.DESC}}"
+          REPO_NAME: "{{.REPO_NAME}}"
+          REPO_DIR: "{{.REPO_DIR}}"
+          LEVEL: "{{.LEVEL}}"
+
+  # ===========================================================================
+  # session:close:<repo> — close MR for a repo with no changes
+  # ===========================================================================
+  close:*:
+    desc: "Close MR (no changes): task session:close:<repo> -- <description>"
+    requires:
+      vars: [CLI_ARGS]
+    vars:
+      REPO_NAME: '{{index .MATCH 0}}'
+      DESC: "{{.CLI_ARGS}}"
+      REPO_DIR:
+        sh: |
+          case "{{index .MATCH 0}}" in
+            metahub-api)   eval echo "{{.REPO_API_DIR}}" ;;
+            metalib)       eval echo "{{.REPO_LIB_DIR}}" ;;
+            metahub-admin) eval echo "{{.REPO_ADMIN_DIR}}" ;;
+            metahub-ui)    eval echo "{{.REPO_UI_DIR}}" ;;
+            *) echo "" ;;
+          esac
+    preconditions:
+      - sh: '[ -n "{{.CLI_ARGS}}" ]'
+        msg: "Usage: task session:close:<repo> -- <description>"
+      - sh: '[ -f "{{.SESSION_DIR}}/{{.CLI_ARGS}}/.branches" ]'
+        msg: "Session '{{.CLI_ARGS}}' not found"
+      - sh: 'grep -q "^{{.REPO_NAME}}=" "{{.SESSION_DIR}}/{{.CLI_ARGS}}/.branches"'
+        msg: "Repo '{{.REPO_NAME}}' not found in session '{{.CLI_ARGS}}'"
+    cmds:
+      - |
+        set -e
+        DESC="{{.DESC}}"
+        REPO_NAME="{{.REPO_NAME}}"
+        BRANCH=$(grep "^${REPO_NAME}=" "{{.SESSION_DIR}}/${DESC}/.branches" | cut -d= -f2)
+        WT_PATH="$(pwd)/{{.SESSION_DIR}}/${DESC}/${REPO_NAME}"
+        BRANCHES_FILE="$(pwd)/{{.SESSION_DIR}}/${DESC}/.branches"
+
+        echo ""
+        echo "=== [${REPO_NAME}] Closing MR (no changes) ==="
+
+        cd "${WT_PATH}" 2>/dev/null || cd "{{.REPO_DIR}}"
+        glab mr close "${BRANCH}" 2>&1 || echo "[${REPO_NAME}] WARNING: Could not close MR"
+        echo "[${REPO_NAME}] MR closed"
+
+        echo "${REPO_NAME}.status=closed" >> "${BRANCHES_FILE}"
+
+  # ===========================================================================
+  # session:suspend — remove worktrees, keep branches
+  # ===========================================================================
   suspend:
-    desc: "Suspend a session (remove worktrees, keep branches): task session:suspend -- <description>"
+    desc: "Suspend a session: task session:suspend -- <description>"
     requires:
       vars: [CLI_ARGS]
     vars:
@@ -124,23 +261,23 @@ tasks:
       - sh: '[ -d "{{.SESSION_DIR}}/{{.CLI_ARGS}}" ]'
         msg: "Session directory '{{.SESSION_DIR}}/{{.CLI_ARGS}}' does not exist"
     cmds:
-      - task: _worktree-rm-from-meta
+      - task: _worktree-rm
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-api", REPO_DIR: "{{.REPO_API_DIR}}" }
-      - task: _worktree-rm-from-meta
+      - task: _worktree-rm
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metalib", REPO_DIR: "{{.REPO_LIB_DIR}}" }
-      - task: _worktree-rm-from-meta
+      - task: _worktree-rm
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-admin", REPO_DIR: "{{.REPO_ADMIN_DIR}}" }
-      - task: _worktree-rm-from-meta
+      - task: _worktree-rm
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-ui", REPO_DIR: "{{.REPO_UI_DIR}}" }
       - echo ""
       - echo "=== Session '{{.DESC}}' suspended ==="
-      - 'echo "Branches preserved. Resume with: task session:resume -- {{.DESC}}"'
+      - 'echo "Resume with: task session:resume -- {{.DESC}}"'
 
-  # ---------------------------------------------------------------------------
-  # session:resume — recreate worktrees from existing branches
-  # ---------------------------------------------------------------------------
+  # ===========================================================================
+  # session:resume — recreate worktrees from branches
+  # ===========================================================================
   resume:
-    desc: "Resume a suspended session: task session:resume -- <description>"
+    desc: "Resume a session: task session:resume -- <description>"
     requires:
       vars: [CLI_ARGS]
     vars:
@@ -149,24 +286,23 @@ tasks:
       - sh: '[ -n "{{.CLI_ARGS}}" ]'
         msg: "Usage: task session:resume -- <description>"
       - sh: '[ -f "{{.SESSION_DIR}}/{{.CLI_ARGS}}/.branches" ]'
-        msg: "No branch metadata found at '{{.SESSION_DIR}}/{{.CLI_ARGS}}/.branches' — was this session created with new:<level>?"
+        msg: "No branch metadata found at '{{.SESSION_DIR}}/{{.CLI_ARGS}}/.branches'"
     cmds:
-      - task: _worktree-resume-from-meta
+      - task: _worktree-resume
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-api", REPO_DIR: "{{.REPO_API_DIR}}" }
-      - task: _worktree-resume-from-meta
+      - task: _worktree-resume
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metalib", REPO_DIR: "{{.REPO_LIB_DIR}}" }
-      - task: _worktree-resume-from-meta
+      - task: _worktree-resume
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-admin", REPO_DIR: "{{.REPO_ADMIN_DIR}}" }
-      - task: _worktree-resume-from-meta
+      - task: _worktree-resume
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-ui", REPO_DIR: "{{.REPO_UI_DIR}}" }
       - echo ""
       - echo "=== Session '{{.DESC}}' resumed ==="
-      - echo "Worktrees at {{.SESSION_DIR}}/{{.DESC}}/"
-      - ls -1 "{{.SESSION_DIR}}/{{.DESC}}/"
+      - ls -1 "{{.SESSION_DIR}}/{{.DESC}}/" | grep -v '^\.'
 
-  # ---------------------------------------------------------------------------
-  # session:rm — alias for suspend (worktrees removed, branches kept)
-  # ---------------------------------------------------------------------------
+  # ===========================================================================
+  # session:rm — alias for suspend
+  # ===========================================================================
   rm:
     desc: "Remove a session (alias for suspend): task session:rm -- <description>"
     requires:
@@ -179,9 +315,9 @@ tasks:
     cmds:
       - task: suspend
 
-  # ---------------------------------------------------------------------------
+  # ===========================================================================
   # session:list — show active sessions
-  # ---------------------------------------------------------------------------
+  # ===========================================================================
   list:
     desc: "List active sessions"
     cmds:
@@ -191,7 +327,11 @@ tasks:
             name=$(basename "$s")
             if [ -f "$s/.branches" ]; then
               echo "${name}:"
-              sed 's/^/  /' "$s/.branches"
+              grep -v '\.' "$s/.branches" | sed 's/^/  /'
+              if grep -q '\.' "$s/.branches" 2>/dev/null; then
+                echo "  ---"
+                grep '\.' "$s/.branches" | sed 's/^/  /'
+              fi
             else
               repos=$(ls -1 "$s" 2>/dev/null | grep -v '^\.' | tr '\n' ' ')
               echo "${name}:  ${repos}"
@@ -206,19 +346,12 @@ tasks:
   # ===========================================================================
 
   # ---------------------------------------------------------------------------
-  # _branch-bump-mr — full per-repo flow:
-  #   1. Query next MR number
-  #   2. Create branch <mr-number>-<desc>
-  #   3. Create worktree
-  #   4. Run bump2version
-  #   5. Push branch
-  #   6. Create draft MR
-  #   7. Record branch name in metadata
+  # _branch-and-mr — create branch, worktree, bump dev, push, create draft MR
   # ---------------------------------------------------------------------------
-  _branch-bump-mr:
+  _branch-and-mr:
     internal: true
     requires:
-      vars: [DESC, LEVEL, REPO_NAME, REPO_DIR]
+      vars: [DESC, REPO_NAME, REPO_DIR]
     vars:
       EXPANDED_DIR:
         sh: eval echo "{{.REPO_DIR}}"
@@ -241,22 +374,16 @@ tasks:
         set -e
         REPO_DIR="{{.EXPANDED_DIR}}"
         BRANCH="{{.BRANCH}}"
-        LEVEL="{{.LEVEL}}"
         REPO_NAME="{{.REPO_NAME}}"
         WT_PATH="{{.WORKTREE_PATH}}"
-        DESC="{{.DESC}}"
-        # Absolute path to the .branches metadata file (computed before any cd)
         BRANCHES_FILE="$(pwd)/{{.SESSION_DIR}}/{{.DESC}}/.branches"
 
         echo ""
         echo "=== [${REPO_NAME}] Creating branch '${BRANCH}' ==="
 
         cd "${REPO_DIR}"
-
-        # Fetch latest
         git fetch --quiet origin 2>/dev/null || true
 
-        # Create worktree with new branch from main
         if git show-ref --verify --quiet "refs/heads/${BRANCH}"; then
           echo "[${REPO_NAME}] Using existing local branch '${BRANCH}'"
           git worktree add "${WT_PATH}" "${BRANCH}"
@@ -268,41 +395,249 @@ tasks:
           git worktree add -b "${BRANCH}" "${WT_PATH}"
         fi
 
-        # Bump version in the worktree
+        # Bump to -dev1 (keeps base version, adds dev marker)
         cd "${WT_PATH}"
         if [ -f .bumpversion.cfg ]; then
-          echo "[${REPO_NAME}] Running bump2version ${LEVEL}..."
-          bump2version --allow-dirty --no-commit --no-tag "${LEVEL}"
-          # Read new version from config
+          echo "[${REPO_NAME}] Bumping to dev1..."
+          bump2version --allow-dirty --no-commit --no-tag dev
           NEW_VER=$(grep "current_version" .bumpversion.cfg | head -1 | cut -d= -f2 | tr -d ' ')
-          echo "[${REPO_NAME}] Version bumped to ${NEW_VER}"
+          echo "[${REPO_NAME}] Version: ${NEW_VER}"
           git add -A
-          git commit -m "Bump version: ${LEVEL} → ${NEW_VER}"
-        else
-          echo "[${REPO_NAME}] No .bumpversion.cfg found — skipping version bump"
+          git commit -m "Start dev: ${NEW_VER}"
         fi
 
-        # Push branch to origin
         echo "[${REPO_NAME}] Pushing '${BRANCH}' to origin..."
         git push -u origin "${BRANCH}"
 
-        # Create draft MR
         echo "[${REPO_NAME}] Creating draft MR..."
-        MR_TITLE="Draft: ${DESC}"
         glab mr create \
           --source-branch "${BRANCH}" \
           --target-branch main \
-          --title "${MR_TITLE}" \
-          --description "Session: ${DESC}" \
+          --title "Draft: {{.DESC}}" \
+          --description "Session: {{.DESC}}" \
           --draft \
           --no-editor \
           2>&1 || echo "[${REPO_NAME}] WARNING: MR creation failed (may already exist)"
 
-        # Record branch in session metadata
         echo "${REPO_NAME}=${BRANCH}" >> "${BRANCHES_FILE}"
 
   # ---------------------------------------------------------------------------
-  # _update-dev-stack — update the dev-stack Taskfile.yml with new branches
+  # _bump-dev — iterate dev version in a single repo worktree
+  # ---------------------------------------------------------------------------
+  _bump-dev:
+    internal: true
+    requires:
+      vars: [DESC, REPO_NAME, REPO_DIR]
+    vars:
+      WORKTREE_PATH:
+        sh: echo "$(pwd)/{{.SESSION_DIR}}/{{.DESC}}/{{.REPO_NAME}}"
+    cmds:
+      - |
+        set -e
+        REPO_NAME="{{.REPO_NAME}}"
+        WT_PATH="{{.WORKTREE_PATH}}"
+
+        if [ ! -d "${WT_PATH}" ]; then
+          echo "[${REPO_NAME}] Worktree not found — skipping (suspended?)"
+          exit 0
+        fi
+
+        cd "${WT_PATH}"
+        if [ -f .bumpversion.cfg ]; then
+          bump2version --allow-dirty --no-commit --no-tag dev
+          NEW_VER=$(grep "current_version" .bumpversion.cfg | head -1 | cut -d= -f2 | tr -d ' ')
+          echo "[${REPO_NAME}] → ${NEW_VER}"
+          git add -A
+          git commit -m "Dev iteration: ${NEW_VER}"
+          git push
+        else
+          echo "[${REPO_NAME}] No .bumpversion.cfg — skipping"
+        fi
+
+  # ---------------------------------------------------------------------------
+  # _finalize-repo — archive changes, test, sonar, push, comment on MR
+  #
+  # Detects whether the repo has changes beyond the initial dev bump.
+  # If no real changes: marks as unchanged, skips tests.
+  # If changes exist: runs full checklist, pushes, comments on MR.
+  # ---------------------------------------------------------------------------
+  _finalize-repo:
+    internal: true
+    requires:
+      vars: [DESC, REPO_NAME, REPO_DIR]
+    vars:
+      WORKTREE_PATH:
+        sh: echo "$(pwd)/{{.SESSION_DIR}}/{{.DESC}}/{{.REPO_NAME}}"
+      BRANCH:
+        sh: grep "^{{.REPO_NAME}}=" "{{.SESSION_DIR}}/{{.DESC}}/.branches" | cut -d= -f2
+    cmds:
+      - |
+        set -e
+        REPO_NAME="{{.REPO_NAME}}"
+        WT_PATH="{{.WORKTREE_PATH}}"
+        BRANCH="{{.BRANCH}}"
+        DESC="{{.DESC}}"
+        BRANCHES_FILE="$(pwd)/{{.SESSION_DIR}}/${DESC}/.branches"
+
+        if [ ! -d "${WT_PATH}" ]; then
+          echo "[${REPO_NAME}] Worktree not found — skipping (suspended?)"
+          exit 0
+        fi
+
+        cd "${WT_PATH}"
+
+        echo ""
+        echo "=== [${REPO_NAME}] Finalizing ==="
+
+        # Count commits beyond main (excluding the dev bump commits)
+        COMMIT_COUNT=$(git rev-list --count main..HEAD 2>/dev/null || echo "0")
+        # The initial dev bump is 1 commit; anything more means real work
+        # Also count dev iteration commits (grep for "Dev iteration:" and "Start dev:")
+        INFRA_COMMITS=$(git log main..HEAD --oneline 2>/dev/null | grep -cE "^[0-9a-f]+ (Start dev:|Dev iteration:)" || echo "0")
+        REAL_COMMITS=$((COMMIT_COUNT - INFRA_COMMITS))
+
+        if [ "${REAL_COMMITS}" -le 0 ]; then
+          echo "[${REPO_NAME}] No changes beyond dev bumps — unchanged"
+          echo "${REPO_NAME}.status=unchanged" >> "${BRANCHES_FILE}"
+          return
+        fi
+
+        echo "[${REPO_NAME}] ${REAL_COMMITS} change commit(s) found"
+
+        # Archive OpenSpec changes if present
+        if [ -d .openspec/changes ]; then
+          for change_dir in .openspec/changes/*/; do
+            [ -d "$change_dir" ] || continue
+            change_name=$(basename "$change_dir")
+            if [ -f "$change_dir/tasks.md" ] && ! [ -d ".openspec/archive/$change_name" ]; then
+              echo "[${REPO_NAME}] Archiving OpenSpec change: ${change_name}"
+              mkdir -p ".openspec/archive"
+              mv "$change_dir" ".openspec/archive/${change_name}"
+              git add -A
+              git commit -m "Archive OpenSpec change: ${change_name}"
+            fi
+          done
+        fi
+
+        # Run tests
+        echo "[${REPO_NAME}] Running tests..."
+        if [ -f ./test.sh ]; then
+          ./test.sh 2>&1 > test.log || true
+          tail -5 test.log
+          echo ""
+        else
+          echo "[${REPO_NAME}] No test.sh — skipping tests"
+        fi
+
+        # Run SonarQube analysis
+        echo "[${REPO_NAME}] Running SonarQube analysis..."
+        if [ -f .env ] && [ -f ./misc/bin/sonar.sh ]; then
+          source .env 2>/dev/null || true
+          ./misc/bin/sonar.sh 2>&1 || echo "[${REPO_NAME}] WARNING: SonarQube analysis failed"
+        else
+          echo "[${REPO_NAME}] No sonar setup — skipping"
+        fi
+
+        # Push
+        echo "[${REPO_NAME}] Pushing..."
+        git push
+
+        # Build MR comment with commit summary
+        COMMIT_SUMMARY=$(git log main..HEAD --oneline --no-decorate 2>/dev/null \
+          | grep -vE "^[0-9a-f]+ (Start dev:|Dev iteration:)" \
+          | head -20 \
+          | sed 's/^/- /')
+        CURRENT_VER=$(grep "current_version" .bumpversion.cfg 2>/dev/null | head -1 | cut -d= -f2 | tr -d ' ')
+
+        MR_COMMENT=$(cat <<EOF
+        ## Session finalized: ${DESC}
+
+        **Current version:** ${CURRENT_VER}
+        **Commits:** ${REAL_COMMITS}
+
+        ### Changes
+        ${COMMIT_SUMMARY}
+
+        ---
+        *Awaiting version decision and human review.*
+        EOF
+        )
+
+        echo "[${REPO_NAME}] Adding MR comment..."
+        glab mr note "${BRANCH}" -m "${MR_COMMENT}" 2>&1 \
+          || echo "[${REPO_NAME}] WARNING: Could not add MR comment"
+
+        echo "${REPO_NAME}.status=finalized" >> "${BRANCHES_FILE}"
+        echo "[${REPO_NAME}] Finalized (${REAL_COMMITS} commits)"
+
+  # ---------------------------------------------------------------------------
+  # _version-repo — bump a single repo to its release version
+  # ---------------------------------------------------------------------------
+  _version-repo:
+    internal: true
+    requires:
+      vars: [DESC, REPO_NAME, REPO_DIR, LEVEL]
+    vars:
+      WORKTREE_PATH:
+        sh: echo "$(pwd)/{{.SESSION_DIR}}/{{.DESC}}/{{.REPO_NAME}}"
+      BRANCH:
+        sh: grep "^{{.REPO_NAME}}=" "{{.SESSION_DIR}}/{{.DESC}}/.branches" | cut -d= -f2
+      CURRENT_VERSION:
+        sh: |
+          WT="$(pwd)/{{.SESSION_DIR}}/{{.DESC}}/{{.REPO_NAME}}"
+          grep "current_version" "${WT}/.bumpversion.cfg" 2>/dev/null | head -1 | cut -d= -f2 | tr -d ' '
+      TARGET_VERSION:
+        sh: |
+          WT="$(pwd)/{{.SESSION_DIR}}/{{.DESC}}/{{.REPO_NAME}}"
+          CURRENT=$(grep "current_version" "${WT}/.bumpversion.cfg" 2>/dev/null | head -1 | cut -d= -f2 | tr -d ' ')
+          BASE="${CURRENT%%-dev*}"
+          IFS='.' read -r major minor patch <<< "$BASE"
+          case "{{.LEVEL}}" in
+            patch) patch=$((patch + 1)) ;;
+            minor) minor=$((minor + 1)); patch=0 ;;
+            major) major=$((major + 1)); minor=0; patch=0 ;;
+          esac
+          echo "${major}.${minor}.${patch}"
+    cmds:
+      - |
+        set -e
+        REPO_NAME="{{.REPO_NAME}}"
+        WT_PATH="{{.WORKTREE_PATH}}"
+        LEVEL="{{.LEVEL}}"
+        CURRENT="{{.CURRENT_VERSION}}"
+        TARGET="{{.TARGET_VERSION}}"
+        BRANCH="{{.BRANCH}}"
+        DESC="{{.DESC}}"
+        BRANCHES_FILE="$(pwd)/{{.SESSION_DIR}}/${DESC}/.branches"
+
+        echo ""
+        echo "=== [${REPO_NAME}] Version: ${CURRENT} → ${TARGET} (${LEVEL}) ==="
+
+        cd "${WT_PATH}"
+
+        # Bump to clean release version
+        bump2version --allow-dirty --no-commit --no-tag --new-version "${TARGET}" "${LEVEL}"
+        echo "[${REPO_NAME}] Version set to ${TARGET}"
+        git add -A
+        git commit -m "Release ${TARGET}"
+        git push
+
+        # Mark MR as ready
+        echo "[${REPO_NAME}] Marking MR as ready..."
+        glab mr update "${BRANCH}" --draft=false 2>&1 \
+          || echo "[${REPO_NAME}] WARNING: Could not update MR draft status"
+
+        # Update MR title to include version
+        glab mr update "${BRANCH}" --title "${DESC} (${TARGET})" 2>&1 \
+          || echo "[${REPO_NAME}] WARNING: Could not update MR title"
+
+        echo "${REPO_NAME}.status=versioned" >> "${BRANCHES_FILE}"
+        echo "${REPO_NAME}.version=${TARGET}" >> "${BRANCHES_FILE}"
+
+        echo "[${REPO_NAME}] Ready for review: ${TARGET}"
+
+  # ---------------------------------------------------------------------------
+  # _update-dev-stack — update dev-stack Taskfile with new branches
   # ---------------------------------------------------------------------------
   _update-dev-stack:
     internal: true
@@ -341,16 +676,9 @@ tasks:
         echo "  ADMIN: ${ADMIN}"
         echo "  UI:    ${UI}"
 
-        # Update the dev: task line in the dev-stack Taskfile
-        # Pattern: render:<api>:<lib>:<admin>:<ce>:<oci>:<ui>
-        # CE and OCI stay as 'main' and 'dev' respectively
         cd "${DEV_STACK}"
 
-        # Replace the dev: task's render line (not the quick:*: template line)
-        # The dev: line has literal branch names; the quick:*: line has {{ .BRANCH }}
         NEW_LINE="      - task: render:${API}:${LIB}:${ADMIN}:main:dev:${UI}"
-        # Match the line under dev: that starts with "      - task: render:" but
-        # does NOT contain "{{" (which is the quick:*: template line)
         awk -v new="${NEW_LINE}" '
           /- task: render:/ && !/\{\{/ { print new; next }
           { print }
@@ -358,7 +686,6 @@ tasks:
 
         echo "[dev-stack] Updated Taskfile.yml"
 
-        # Commit and push the dev-stack change
         git add Taskfile.yml
         git commit -m "start new session ${DESC}" || echo "[dev-stack] Nothing to commit"
         git push || echo "[dev-stack] Push failed — push manually"
@@ -366,24 +693,22 @@ tasks:
         echo "[dev-stack] Committed and pushed"
 
   # ---------------------------------------------------------------------------
-  # _worktree-rm-from-meta — remove worktree using branch from metadata
+  # _worktree-rm — remove a single worktree
   # ---------------------------------------------------------------------------
-  _worktree-rm-from-meta:
+  _worktree-rm:
     internal: true
     requires:
       vars: [DESC, REPO_NAME, REPO_DIR]
     vars:
       EXPANDED_DIR:
         sh: eval echo "{{.REPO_DIR}}"
-      BRANCH:
-        sh: grep "^{{.REPO_NAME}}=" "{{.SESSION_DIR}}/{{.DESC}}/.branches" 2>/dev/null | cut -d= -f2 || echo ""
       WORKTREE_PATH:
         sh: echo "$(pwd)/{{.SESSION_DIR}}/{{.DESC}}/{{.REPO_NAME}}"
     cmds:
       - |
         cd "{{.EXPANDED_DIR}}"
         if git worktree list | grep -q "{{.WORKTREE_PATH}}"; then
-          echo "[{{.REPO_NAME}}] Removing worktree at {{.WORKTREE_PATH}}"
+          echo "[{{.REPO_NAME}}] Removing worktree"
           git worktree remove "{{.WORKTREE_PATH}}" --force 2>/dev/null || true
         else
           echo "[{{.REPO_NAME}}] No worktree found — skipping"
@@ -391,9 +716,9 @@ tasks:
         git worktree prune 2>/dev/null || true
 
   # ---------------------------------------------------------------------------
-  # _worktree-resume-from-meta — recreate worktree from branch in metadata
+  # _worktree-resume — recreate worktree from branch in metadata
   # ---------------------------------------------------------------------------
-  _worktree-resume-from-meta:
+  _worktree-resume:
     internal: true
     requires:
       vars: [DESC, REPO_NAME, REPO_DIR]

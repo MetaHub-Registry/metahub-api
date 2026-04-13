@@ -2,29 +2,35 @@
 
 ## Sessions and Git Worktrees
 
-A **session** groups related work across multiple repos under a single branch name.
+A **session** groups related work across multiple repos. Each repo gets its own MR-numbered branch (e.g. `99-add-oauth` in metahub-api, `123-add-oauth` in metalib). The session name is the coordination link.
 
 ```
-sessions/<main-change-name>/
-├── metahub-api/      # git worktree on branch <main-change-name>
-├── metalib/          # git worktree on branch <main-change-name>
-├── metahub-ui/       # git worktree on branch <main-change-name>
-└── metahub-admin/    # git worktree on branch <main-change-name>
+sessions/add-oauth/
+├── .branches              # metadata: repo=branch mapping + status
+├── metahub-api/           # git worktree on branch 99-add-oauth
+├── metalib/               # git worktree on branch 123-add-oauth
+├── metahub-admin/         # git worktree on branch 45-add-oauth
+└── metahub-ui/            # git worktree on branch 4-add-oauth
 ```
 
 ### Rules
 
-- Each worktree has its own OpenSpec change, all sharing the same branch name `<main-change-name>`. The **shared branch name** is the coordination link across repos — no manifest needed.
+- Each worktree has its own OpenSpec change(s). The **session name** is the coordination link across repos.
 - Each worktree is independent; changes in one do not block changes in another.
 - Within a session, **additional OpenSpec changes** may be created in any repo for:
   - **Sub-changes** — when a feature or migration within the session blows the scope of the main change.
   - **Deferred changes** — future work discovered during the session but not acted on now. These can be carried into a later session.
+- **Version levels are decided at session end**, per-repo, based on actual changes. During the session, versions use `-devN` on the current base version (e.g. `3.0.0-dev1`, not `3.0.1-dev1`).
 
 ### Session Lifecycle
 
-1. **Create** — set up worktrees across repos with the same branch name.
+1. **Create** — `task session:new -- <description>`. Sets up worktrees, branches, draft MRs, bumps to `-dev1`.
 2. **Work** — use OpenSpec propose/apply/explore within each worktree as needed.
-3. **Complete** — run the "After Each Change" checklist per modified repo, archive changes, push.
+3. **Iterate** — `task session:dev -- <description>` (optional). Bumps all repos to next `-devN`.
+4. **Finish** — `task session:finish -- <description>`. Archives OpenSpec changes, runs tests + sonar, pushes all branches, adds summary comments to MRs.
+5. **Version** — per modified repo: `task session:version:<repo>:<level> -- <description>`. Sets the release version, marks MR as ready.
+6. **Close** — per unchanged repo: `task session:close:<repo> -- <description>`. Closes the MR without merge.
+7. **Merge** — the human reviews and merges each ready MR.
 
 ## Use GitLab
 
@@ -86,12 +92,20 @@ tail -3 test.log
 After each major change, create a DevDiary entry in Obsidian at:
 
 ```
-Metahub/DevDiary/<version>/YYYY-MM-DD-hhmm-<change-name>.md
+Metahub/DevDiary/sessions/<session-name>/YYYY-MM-DD-hhmm-<change-name>.md
 ```
 
-The **version** is read from `.bumpversion.cfg` (`current_version`), e.g. `v2.8.0`.
+The **session name** comes from the session description (e.g. `add-oauth-support`).
 
 Describe what was done, why, and link to any specs or graph constructs.
+
+At release time, create a release note at:
+
+```
+Metahub/DevDiary/releases/<repo>/v<X.Y.Z>.md
+```
+
+This links back to the session(s) that contributed to the release.
 
 ### Specs and Docs
 
