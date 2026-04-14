@@ -499,6 +499,21 @@ func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", err, "INTERNAL_ERROR", "failed to fetch profile '%s'", req.Profile)
 		return
 	}
+	// If label lookup failed, try matching by tag (e.g. "zen2" → "cpu#zen2").
+	// The profile field from docker login may contain only the tag portion.
+	if !found {
+		prfs, prfErr := h.mag.Database.ProfileGetAll(ctx)
+		if prfErr == nil {
+			for _, candidate := range prfs {
+				if candidate.Tag == req.Profile {
+					prf = candidate
+					found = true
+					l.Infof("resolved profile tag '%s' to label '%s'", req.Profile, prf.Label)
+					break
+				}
+			}
+		}
+	}
 	if !found {
 		e = fmt.Errorf("profile '%s' not found", req.Profile)
 		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", e, "INTERNAL_ERROR", "")
@@ -513,18 +528,16 @@ func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 			utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", err, "MANIFEST_INVALID", "failed to store manifest: %v", err)
 			return
 		}
-		// Step 4: previously the OCI v1 push path stored the manifest
-		// but never triggered any compute or rule eval — a pre-existing
-		// bug that meant OCI-format pushes never appeared in any
-		// profile's index. We now invoke the same scoped compute
-		// helper used by the Docker v2 path so OCI v1 pushes get the
-		// same multi-arch aggregation behaviour. There is no
-		// ProfileUnwindRules call here because the OCI v1 path never
-		// had one and the new helper handles deterministic annotation
-		// injection internally via ProfileInjectDeterministicAnnotations.
-		if err = h.computeAfterManifestPush(ctx, l, span, req, prf); err != nil {
-			utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", err, "INTERNAL_ERROR", "while executing computeAfterManifestPush")
-			return
+		// ORAS artifacts (non-empty ArtifactType) do not participate in
+		// multi-arch Index aggregation or profile-based filtering, so skip
+		// the compute step. Container images still need it for index rebuild.
+		if m.ArtifactType != "" {
+			utils.Info(l, span, "ORAS artifact detected (type=%s), skipping computeAfterManifestPush", m.ArtifactType)
+		} else {
+			if err = h.computeAfterManifestPush(ctx, l, span, req, prf); err != nil {
+				utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", err, "INTERNAL_ERROR", "while executing computeAfterManifestPush")
+				return
+			}
 		}
 		h.ManifestPutHandlerWrapper(ctx, w, req, m)
 	case ociManifestListMediaType:

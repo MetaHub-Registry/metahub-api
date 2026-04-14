@@ -15,7 +15,29 @@ type UIManifest struct {
 	Size        int64             `json:"size"`
 	ContentSize int64             `json:"content_size,omitempty"`
 	Registry    string            `json:"registry"`
+	Upstream    string            `json:"upstream,omitempty"`
 	Annotations map[string]string `json:"annotations,omitempty"`
+	Profiles    []string          `json:"profiles"`
+}
+
+// ProfileDetailResponse is the response DTO for GET /api/v1/profiles/{label}.
+type ProfileDetailResponse struct {
+	ID              int64             `json:"id"`
+	Name            string            `json:"name"`
+	Tag             string            `json:"tag"`
+	Label           string            `json:"label"`
+	Rules           []ProfileRuleResp `json:"rules"`
+	CollectionCount int64             `json:"collection_count"`
+	ManifestCount   int64             `json:"manifest_count"`
+}
+
+// ProfileRuleResp is the response DTO for a single profile rule.
+type ProfileRuleResp struct {
+	ID    int64  `json:"id"`
+	Type  string `json:"type"`
+	Op    string `json:"op"`
+	Key   string `json:"key"`
+	Value string `json:"value"`
 }
 
 // UIPlatform matches the frontend's platform sub-object, including optional features.
@@ -38,6 +60,18 @@ type UICollectionDetail struct {
 func toUIManifest(md types.Manifest) UIManifest {
 	annotations := md.Annotations.ToMap()
 	features := extractFeatures(annotations)
+
+	// Build the full upstream URL when repo is known.
+	// Prefer the human-readable tag form over the digest form.
+	var upstream string
+	if md.Upstream.Repo != "" {
+		if md.Upstream.Tag != "" {
+			upstream = md.Upstream.Reg + "/" + md.Upstream.Repo + ":" + md.Upstream.Tag
+		} else {
+			upstream = md.Upstream.String()
+		}
+	}
+
 	return UIManifest{
 		Digest:    md.Digest,
 		MediaType: md.MediaType,
@@ -50,6 +84,7 @@ func toUIManifest(md types.Manifest) UIManifest {
 		Size:        md.Size,
 		ContentSize: md.ContentSize,
 		Registry:    md.Upstream.Reg,
+		Upstream:    upstream,
 		Annotations: annotations,
 	}
 }
