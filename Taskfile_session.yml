@@ -474,6 +474,14 @@ tasks:
         set -e
         REPO_NAME="{{.REPO_NAME}}"
         WT_PATH="{{.WORKTREE_PATH}}"
+        BRANCHES_FILE="$(pwd)/{{.SESSION_DIR}}/{{.DESC}}/.branches"
+
+        # Skip repos that are already closed or versioned
+        LAST_STATUS=$(grep "^${REPO_NAME}\.status=" "${BRANCHES_FILE}" 2>/dev/null | tail -1 | cut -d= -f2)
+        if [ "${LAST_STATUS}" = "closed" ] || [ "${LAST_STATUS}" = "versioned" ]; then
+          echo "[${REPO_NAME}] Status is '${LAST_STATUS}' — skipping dev bump"
+          exit 0
+        fi
 
         if [ ! -d "${WT_PATH}" ]; then
           echo "[${REPO_NAME}] Worktree not found — skipping (suspended?)"
@@ -507,7 +515,7 @@ tasks:
       WORKTREE_PATH:
         sh: echo "$(pwd)/{{.SESSION_DIR}}/{{.DESC}}/{{.REPO_NAME}}"
       BRANCH:
-        sh: grep "^{{.REPO_NAME}}=" "{{.SESSION_DIR}}/{{.DESC}}/.branches" | cut -d= -f2
+        sh: grep "^{{.REPO_NAME}}=" "{{.SESSION_DIR}}/{{.DESC}}/.branches" 2>/dev/null | cut -d= -f2
     cmds:
       - |
         set -e
@@ -517,8 +525,19 @@ tasks:
         DESC="{{.DESC}}"
         BRANCHES_FILE="$(pwd)/{{.SESSION_DIR}}/${DESC}/.branches"
 
+        # Skip repos that are already closed, versioned, or finalized
+        LAST_STATUS=$(grep "^${REPO_NAME}\.status=" "${BRANCHES_FILE}" 2>/dev/null | tail -1 | cut -d= -f2)
+        if [ "${LAST_STATUS}" = "closed" ]; then
+          echo "[${REPO_NAME}] Already closed — skipping"
+          exit 0
+        fi
+        if [ "${LAST_STATUS}" = "versioned" ]; then
+          echo "[${REPO_NAME}] Already versioned — skipping"
+          exit 0
+        fi
+
         if [ ! -d "${WT_PATH}" ]; then
-          echo "[${REPO_NAME}] Worktree not found — skipping (suspended?)"
+          echo "[${REPO_NAME}] Worktree not found — skipping (suspended or closed?)"
           exit 0
         fi
 
@@ -630,7 +649,7 @@ tasks:
       WORKTREE_PATH:
         sh: echo "$(pwd)/{{.SESSION_DIR}}/{{.DESC}}/{{.REPO_NAME}}"
       BRANCH:
-        sh: grep "^{{.REPO_NAME}}=" "{{.SESSION_DIR}}/{{.DESC}}/.branches" | cut -d= -f2
+        sh: grep "^{{.REPO_NAME}}=" "{{.SESSION_DIR}}/{{.DESC}}/.branches" 2>/dev/null | cut -d= -f2
       CURRENT_VERSION:
         sh: |
           WT="$(pwd)/{{.SESSION_DIR}}/{{.DESC}}/{{.REPO_NAME}}"
@@ -639,6 +658,7 @@ tasks:
         sh: |
           WT="$(pwd)/{{.SESSION_DIR}}/{{.DESC}}/{{.REPO_NAME}}"
           CURRENT=$(grep "current_version" "${WT}/.bumpversion.cfg" 2>/dev/null | head -1 | cut -d= -f2 | tr -d ' ')
+          if [ -z "${CURRENT}" ]; then echo "0.0.0"; exit 0; fi
           BASE="${CURRENT%%-dev*}"
           IFS='.' read -r major minor patch <<< "$BASE"
           case "{{.LEVEL}}" in
@@ -658,6 +678,18 @@ tasks:
         BRANCH="{{.BRANCH}}"
         DESC="{{.DESC}}"
         BRANCHES_FILE="$(pwd)/{{.SESSION_DIR}}/${DESC}/.branches"
+
+        # Guard: skip if repo is closed
+        LAST_STATUS=$(grep "^${REPO_NAME}\.status=" "${BRANCHES_FILE}" 2>/dev/null | tail -1 | cut -d= -f2)
+        if [ "${LAST_STATUS}" = "closed" ]; then
+          echo "[${REPO_NAME}] Closed — cannot version"
+          exit 1
+        fi
+
+        if [ ! -d "${WT_PATH}" ]; then
+          echo "[${REPO_NAME}] ERROR: Worktree not found at ${WT_PATH}"
+          exit 1
+        fi
 
         echo ""
         echo "=== [${REPO_NAME}] Version: ${CURRENT} → ${TARGET} (${LEVEL}) ==="
@@ -755,7 +787,12 @@ tasks:
         sh: echo "$(pwd)/{{.SESSION_DIR}}/{{.DESC}}/{{.REPO_NAME}}"
     cmds:
       - |
-        cd "{{.EXPANDED_DIR}}"
+        REPO_DIR="{{.EXPANDED_DIR}}"
+        if [ ! -d "${REPO_DIR}" ]; then
+          echo "[{{.REPO_NAME}}] Source repo not found — skipping"
+          exit 0
+        fi
+        cd "${REPO_DIR}"
         if git worktree list | grep -q "{{.WORKTREE_PATH}}"; then
           echo "[{{.REPO_NAME}}] Removing worktree"
           git worktree remove "{{.WORKTREE_PATH}}" --force 2>/dev/null || true
@@ -775,29 +812,50 @@ tasks:
       EXPANDED_DIR:
         sh: eval echo "{{.REPO_DIR}}"
       BRANCH:
-        sh: grep "^{{.REPO_NAME}}=" "{{.SESSION_DIR}}/{{.DESC}}/.branches" | cut -d= -f2
+        sh: grep "^{{.REPO_NAME}}=" "{{.SESSION_DIR}}/{{.DESC}}/.branches" 2>/dev/null | cut -d= -f2
       WORKTREE_PATH:
         sh: echo "$(pwd)/{{.SESSION_DIR}}/{{.DESC}}/{{.REPO_NAME}}"
-    preconditions:
-      - sh: '[ -n "{{.BRANCH}}" ]'
-        msg: "No branch found for '{{.REPO_NAME}}' in session '{{.DESC}}'"
-      - sh: '[ -d "{{.EXPANDED_DIR}}" ]'
-        msg: "Source repo '{{.REPO_NAME}}' not found at '{{.REPO_DIR}}'"
     cmds:
       - |
-        cd "{{.EXPANDED_DIR}}"
+        set -e
+        REPO_NAME="{{.REPO_NAME}}"
         BRANCH="{{.BRANCH}}"
         WT_PATH="{{.WORKTREE_PATH}}"
+        BRANCHES_FILE="$(pwd)/{{.SESSION_DIR}}/{{.DESC}}/.branches"
 
+        # Skip closed repos
+        LAST_STATUS=$(grep "^${REPO_NAME}\.status=" "${BRANCHES_FILE}" 2>/dev/null | tail -1 | cut -d= -f2)
+        if [ "${LAST_STATUS}" = "closed" ]; then
+          echo "[${REPO_NAME}] Closed — skipping resume"
+          exit 0
+        fi
+
+        if [ -z "${BRANCH}" ]; then
+          echo "[${REPO_NAME}] No branch found in .branches — skipping"
+          exit 0
+        fi
+
+        REPO_DIR="{{.EXPANDED_DIR}}"
+        if [ ! -d "${REPO_DIR}" ]; then
+          echo "[${REPO_NAME}] Source repo not found at {{.REPO_DIR}} — skipping"
+          exit 0
+        fi
+
+        cd "${REPO_DIR}"
         git fetch --quiet origin 2>/dev/null || true
 
+        if [ -d "${WT_PATH}" ]; then
+          echo "[${REPO_NAME}] Worktree already exists — skipping"
+          exit 0
+        fi
+
         if git show-ref --verify --quiet "refs/heads/${BRANCH}"; then
-          echo "[{{.REPO_NAME}}] Resuming from local branch '${BRANCH}'"
+          echo "[${REPO_NAME}] Resuming from local branch '${BRANCH}'"
           git worktree add "${WT_PATH}" "${BRANCH}"
         elif git show-ref --verify --quiet "refs/remotes/origin/${BRANCH}"; then
-          echo "[{{.REPO_NAME}}] Resuming from remote branch 'origin/${BRANCH}'"
+          echo "[${REPO_NAME}] Resuming from remote branch 'origin/${BRANCH}'"
           git worktree add --track -b "${BRANCH}" "${WT_PATH}" "origin/${BRANCH}"
         else
-          echo "[{{.REPO_NAME}}] ERROR: Branch '${BRANCH}' not found locally or on origin"
+          echo "[${REPO_NAME}] ERROR: Branch '${BRANCH}' not found locally or on origin"
           exit 1
         fi
