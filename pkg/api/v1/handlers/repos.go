@@ -115,10 +115,34 @@ func (h Handlers) RepoGetOne(w http.ResponseWriter, r *http.Request) {
 		breadCrumbs[len(breadCrumbs)-1].Active = 0
 	}
 	mlibUtils.Debug(l, span, "Found collection '%s:%s' with %d manifests", col.Repo, col.Tag, len(col.Manifests))
+	uiDetail := toUICollectionDetail(col)
+	// Resolve profile labels for each manifest.
+	if len(uiDetail.Manifests) > 0 {
+		digests := make([]string, len(uiDetail.Manifests))
+		for i, m := range uiDetail.Manifests {
+			digests[i] = m.Digest
+		}
+		profileMap, pErr := h.mag.Database.ManifestGetProfileLabels(ctx, digests)
+		if pErr != nil {
+			mlibUtils.Debug(l, span, "ManifestGetProfileLabels failed (non-fatal): %v", pErr)
+		} else {
+			for i := range uiDetail.Manifests {
+				if labels, ok := profileMap[uiDetail.Manifests[i].Digest]; ok {
+					uiDetail.Manifests[i].Profiles = labels
+				}
+			}
+		}
+	}
+	// Ensure all manifests have a non-nil Profiles slice for JSON serialization.
+	for i := range uiDetail.Manifests {
+		if uiDetail.Manifests[i].Profiles == nil {
+			uiDetail.Manifests[i].Profiles = []string{}
+		}
+	}
 	payload := envelope{
 		"repos":        reps.AsSlice(),
 		"bread_crumbs": breadCrumbs,
-		"collection":   toUICollectionDetail(col),
+		"collection":   uiDetail,
 	}
 	_ = h.writeJSON(w, http.StatusOK, payload)
 }
@@ -180,7 +204,8 @@ func (h Handlers) RepoGetAll(w http.ResponseWriter, r *http.Request) {
 	ctx, span := tracer.Start(ctx, "RepoGetAll")
 	defer span.End()
 	type Payload struct {
-		Repo string `json:"repo"`
+		Repo    string `json:"repo"`
+		Profile string `json:"profile"`
 	}
 	pl := Payload{}
 	err := h.readJSON(w, r, &pl)
@@ -189,12 +214,12 @@ func (h Handlers) RepoGetAll(w http.ResponseWriter, r *http.Request) {
 		h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
 		return
 	}
-	l = l.WithFields(logrus.Fields{"repo": pl.Repo})
-	l.Infof("RepoGetAll: '%s'", pl.Repo)
+	l = l.WithFields(logrus.Fields{"repo": pl.Repo, "profile": pl.Profile})
+	l.Infof("RepoGetAll: '%s' (profile: '%s')", pl.Repo, pl.Profile)
 	repoSlug := strings.Split(pl.Repo, "/")
-	// Artifact filtering (non-image config media types) is applied at the database layer
-	// in metalib (ManifestDataGetByCollectionTag). No handler-level filtering is needed.
-	cols, err := h.mag.Database.CollectionListingGetByRepoLike(ctx, pl.Repo)
+	// When a profile is specified, filter collection listings to only those
+	// served under that profile. Otherwise fall back to unfiltered.
+	cols, err := h.mag.Database.CollectionListingGetByRepoLikeForProfile(ctx, pl.Repo, pl.Profile)
 	if err != nil {
 		h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
 		return

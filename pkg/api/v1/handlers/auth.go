@@ -158,13 +158,15 @@ func (h Handlers) AuthHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Parse username/profile from the Docker username
-	username, _ := parseUsernameProfile(rawUsername)
-	utils.Debug(l, span, "auth request for user:'%s' acct:'%s'", username, acct)
+	username, profile := parseUsernameProfile(rawUsername)
+	utils.Debug(l, span, "auth request for user:'%s' profile:'%s' acct:'%s'", username, profile, acct)
 
-	// God-mode check: bypass OIDC if credentials match a god-mode user
+	// God-mode check: bypass OIDC if credentials match a god-mode user.
+	// Use rawUsername (which preserves the /profile suffix) so the minted
+	// token carries the profile through to the OCI auth middleware.
 	if h.godmode.IsEnabled() && h.godmode.CheckCredentials(username, password) {
-		utils.Debug(l, span, "god-mode auth for user '%s'", username)
-		token, err := h.godmode.MintToken(username)
+		utils.Debug(l, span, "god-mode auth for user '%s' (profile '%s')", username, profile)
+		token, err := h.godmode.MintToken(rawUsername)
 		if err != nil {
 			utils.Warn(l, span, "god-mode token minting failed for user '%s': %v", username, err)
 			w.Header().Set(headerContentType, contentTypeJSON)
@@ -199,7 +201,6 @@ func (h Handlers) AuthHandler(w http.ResponseWriter, r *http.Request) {
 	// the Authentik JWT in a profile envelope token so the profile is preserved
 	// through to the OCI middleware. Without a profile suffix, return the
 	// Authentik JWT unchanged (existing behaviour).
-	_, profile := parseUsernameProfile(rawUsername)
 	if profile != defaultProfile {
 		signingKey, keyErr := config.EnvelopeSigningKey()
 		if keyErr != nil {

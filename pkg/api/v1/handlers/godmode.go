@@ -81,18 +81,23 @@ func (g *GodModeAuth) GetRole(username string) string {
 }
 
 // MintToken creates an HMAC-SHA256 signed JWT for a god-mode user.
-func (g *GodModeAuth) MintToken(username string) (string, error) {
+// rawUsername may contain a profile suffix (e.g. "oci/zen2") which is preserved
+// in the JWT claims so the OCI middleware can extract the profile. The role is
+// resolved from the base username (without profile suffix).
+func (g *GodModeAuth) MintToken(rawUsername string) (string, error) {
 	if g == nil {
 		return "", fmt.Errorf("god-mode is not enabled")
 	}
 
-	role := g.GetRole(username)
+	// Resolve role from the base username (without profile suffix)
+	baseUsername, _ := parseUsernameProfile(rawUsername)
+	role := g.GetRole(baseUsername)
 
 	now := time.Now()
 	claims := jwt.MapClaims{
-		"sub":                username,
-		"preferred_username": username,
-		"email":              username + "@godmode",
+		"sub":                rawUsername,
+		"preferred_username": rawUsername,
+		"email":              baseUsername + "@godmode",
 		"iss":                godModeIssuer,
 		"aud":                godModeIssuer,
 		"iat":                now.Unix(),
