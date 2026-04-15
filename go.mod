@@ -128,4 +128,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/metahub-registry/metahub-core => /Users/christian.kniep/go/src/github.com/metahub-registry/metahub-api/sessions/manipulation-fix/metalib
+replace github.com/metahub-registry/metahub-core => /Users/christian.kniep/go/src/github.com/metahub-registry/metahub-api/sessions/pullthrough-repo/metalib

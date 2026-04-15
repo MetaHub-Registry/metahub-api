@@ -393,6 +393,14 @@ func (h Handlers) ManifestHandler(ctx context.Context, w http.ResponseWriter, r 
 		"digest":  utils.ShortenDigest(req.Digest),
 	})
 	defer span.End()
+	// Detect upstream registry prefix (e.g. "zot.example.com/library/alpine" → target="zot.example.com", repo="library/alpine").
+	// Only matches against configured registries — unknown prefixes are treated as local repo names.
+	var targetReg string
+	if regHost, strippedRepo, found := h.mag.ResolveUpstreamRegistry(req.Repo); found {
+		targetReg = regHost
+		utils.Info(l, span, "upstream prefix detected: registry=%s, stripped repo=%s", targetReg, strippedRepo)
+		req.Repo = strippedRepo
+	}
 	up := upstream.UpstreamTriple{
 		Reg:     req.Host,
 		Repo:    req.Repo,
@@ -429,6 +437,26 @@ func (h Handlers) ManifestHandler(ctx context.Context, w http.ResponseWriter, r 
 				return
 			}
 		}
+		// Pullthrough: when a tag-based request is not found locally, try
+		// upstream registries. If a targetReg was detected from the repo
+		// prefix, only that registry is tried; otherwise all are iterated.
+		if req.Tag != "" {
+			utils.Info(l, span, "manifest not found locally, attempting pullthrough for %s:%s (target=%s)", req.Repo, req.Tag, targetReg)
+			_, _, e := h.mag.Database.CollectionGetCreateByRepoTag(ctx, req.Repo, req.Tag)
+			if e != nil {
+				utils.ErrorHandler(l, span, e, "failed to CollectionGetCreateByRepoTag")
+			}
+			upGeneric := up
+			upGeneric.Profile = defaultProfile
+			_, upFound, e := h.mag.HeadManifestNotFound(ctx, req, targetReg)
+			if e == nil && upFound {
+				// Upstream found — retry the local lookup
+				mediaType, colFound, err = h.mag.Database.ManifestExists(ctx, up)
+				if err == nil && colFound {
+					goto found
+				}
+			}
+		}
 		msg := fmt.Sprintf("Manifest for manifest(list) '%s@%s' not found", req.Repo, utils.ShortenDigest(req.Digest))
 		l.Error(msg)
 		span.AddEvent("log", trace.WithAttributes(
@@ -441,6 +469,7 @@ func (h Handlers) ManifestHandler(ctx context.Context, w http.ResponseWriter, r 
 		helper.WriteOCIErrror(w, http.StatusNotFound, e)
 		return
 	}
+found:
 	msg := fmt.Sprintf("Manifest found with type '%s'", mediaType)
 	span.AddEvent("log", trace.WithAttributes(
 		attribute.String("log.severity", "debug"),
