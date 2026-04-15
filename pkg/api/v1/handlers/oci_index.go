@@ -24,6 +24,7 @@ func (h Handlers) handleIndex(ctx context.Context, w http.ResponseWriter, req ty
 		"repo":    req.Repo,
 		"tag":     req.Tag,
 		"digest":  utils.ShortenDigest(req.Digest),
+		"profile": req.Profile,
 	})
 	defer span.End()
 	ml, found, err := h.mag.IndexGetByRequest(ctx, req)
@@ -34,6 +35,22 @@ func (h Handlers) handleIndex(ctx context.Context, w http.ResponseWriter, req ty
 		return
 	}
 	if found {
+		// Lazy manipulation: if the pulling profile has manipulations,
+		// apply them to the Index's manifests on-demand. Manipulated
+		// copies are cached in the graph + MinIO for subsequent pulls.
+		if len(ml.Manifests) > 0 && req.Profile != "" {
+			prf, prfFound, prfErr := h.mag.Database.ProfileGetByLabel(ctx, req.Profile)
+			if prfErr != nil {
+				utils.Warn(l, span, "failed to fetch profile '%s' for manipulation check: %v", req.Profile, prfErr)
+			} else if prfFound {
+				manipulated, manipErr := h.mag.ApplyManipulationsToManifests(ctx, prf, ml.Manifests)
+				if manipErr != nil {
+					utils.Warn(l, span, "lazy manipulation failed for profile '%s' (serving original): %v", req.Profile, manipErr)
+				} else {
+					ml.Manifests = manipulated
+				}
+			}
+		}
 		switch req.Method {
 		case http.MethodGet:
 			ml.WriteWWW(w)

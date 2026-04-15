@@ -354,6 +354,16 @@ func (h Handlers) handleIndexAsManifest(ctx context.Context, w http.ResponseWrit
 		utils.Debug(l, span, "index has %d descriptors, cannot unwrap to single manifest", len(ml.Manifests))
 		return false // multi-descriptor → serve index as-is
 	}
+	// Lazy manipulation for single-descriptor index unwrap
+	if req.Profile != "" {
+		prf, prfFound, prfErr := h.mag.Database.ProfileGetByLabel(ctx, req.Profile)
+		if prfErr == nil && prfFound {
+			manipulated, manipErr := h.mag.ApplyManipulationsToManifests(ctx, prf, ml.Manifests)
+			if manipErr == nil {
+				ml.Manifests = manipulated
+			}
+		}
+	}
 	// Single descriptor: serve the underlying manifest
 	singleDigest := ml.Manifests[0].Digest
 	utils.Debug(l, span, "content-negotiation: unwrapping single-descriptor index to manifest %s", utils.ShortenDigest(singleDigest))
@@ -528,11 +538,14 @@ func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 			utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", err, "MANIFEST_INVALID", "failed to store manifest: %v", err)
 			return
 		}
-		// ORAS artifacts (non-empty ArtifactType) do not participate in
-		// multi-arch Index aggregation or profile-based filtering, so skip
-		// the compute step. Container images still need it for index rebuild.
+		// Skip compute step when it cannot meaningfully run:
+		// - ORAS artifacts (non-empty ArtifactType) do not participate in
+		//   multi-arch Index aggregation or profile-based filtering.
+		// - Push-by-digest (empty tag) has no Slot triple to compute against.
 		if m.ArtifactType != "" {
 			utils.Info(l, span, "ORAS artifact detected (type=%s), skipping computeAfterManifestPush", m.ArtifactType)
+		} else if req.Tag == "" {
+			utils.Info(l, span, "Push-by-digest (no tag), skipping computeAfterManifestPush")
 		} else {
 			if err = h.computeAfterManifestPush(ctx, l, span, req, prf); err != nil {
 				utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", err, "INTERNAL_ERROR", "while executing computeAfterManifestPush")
