@@ -384,6 +384,57 @@ func (h Handlers) handleIndexAsManifest(ctx context.Context, w http.ResponseWrit
 	return true
 }
 
+// resolveUpstreamTarget detects an upstream registry prefix on req.Repo
+// (e.g. "zot.example.com/library/alpine" → target="zot.example.com"). Only matches
+// against configured registries — unknown prefixes return "" and are treated
+// as local repo names.
+//
+// D5/D6 (prefix-preserving pullthrough): the registry prefix is intentionally
+// NOT stripped from req.Repo. Preserving the prefix means pullthrough-populated
+// repos live in a namespace region (<upstream-host>/<rest>) that cannot collide
+// with client-push repos or admin-parsed aliases. Only the target registry is
+// threaded into pullthrough discovery; the local alias stays as the full URL path.
+func (h Handlers) resolveUpstreamTarget(l *logrus.Entry, span trace.Span, repo string) string {
+	if regHost, _, found := h.mag.ResolveUpstreamRegistry(repo); found {
+		utils.Info(l, span, "upstream prefix detected: registry=%s (local alias preserved: %s)", regHost, repo)
+		return regHost
+	}
+	return ""
+}
+
+// tryPullthroughOnMiss attempts pullthrough when a tag-based manifest lookup
+// failed locally. Returns (mediaType, found) after retrying ManifestExists.
+// When found is false, the caller SHOULD return a 404 to the client.
+func (h Handlers) tryPullthroughOnMiss(ctx context.Context, l *logrus.Entry, span trace.Span, req types.Request, up upstream.UpstreamTriple, targetReg string) (string, bool) {
+	utils.Info(l, span, "manifest not found locally, attempting pullthrough for %s:%s (target=%s)", req.Repo, req.Tag, targetReg)
+	if _, _, e := h.mag.Database.CollectionGetCreateByRepoTag(ctx, req.Repo, req.Tag); e != nil {
+		utils.ErrorHandler(l, span, e, "failed to CollectionGetCreateByRepoTag")
+	}
+	_, upFound, e := h.mag.HeadManifestNotFound(ctx, req, targetReg)
+	if e != nil || !upFound {
+		return "", false
+	}
+	mediaType, colFound, err := h.mag.Database.ManifestExists(ctx, up)
+	if err != nil || !colFound {
+		return "", false
+	}
+	return mediaType, true
+}
+
+// writeManifestNotFound writes the 404 MANIFEST_UNKNOWN response.
+func writeManifestNotFound(w http.ResponseWriter, l *logrus.Entry, span trace.Span, req types.Request) {
+	msg := fmt.Sprintf("Manifest for manifest(list) '%s@%s' not found", req.Repo, utils.ShortenDigest(req.Digest))
+	l.Error(msg)
+	span.AddEvent("log", trace.WithAttributes(
+		attribute.String("log.severity", "debug"),
+		attribute.String("log.message", msg),
+	))
+	msg = fmt.Sprintf("no manifest '%s:%s' found for profile '%s'", req.Repo, req.Tag, req.Profile)
+	det := helper.NewDetailFromReq(req)
+	e := helper.NewErrPayload("MANIFEST_UNKNOWN", msg, det)
+	helper.WriteOCIErrror(w, http.StatusNotFound, e)
+}
+
 func (h Handlers) ManifestHandler(ctx context.Context, w http.ResponseWriter, r *http.Request, req types.Request) {
 	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
 		"package": pkgNameOciMani,
@@ -393,19 +444,8 @@ func (h Handlers) ManifestHandler(ctx context.Context, w http.ResponseWriter, r 
 		"digest":  utils.ShortenDigest(req.Digest),
 	})
 	defer span.End()
-	// Detect upstream registry prefix (e.g. "zot.example.com/library/alpine" → target="zot.example.com").
-	// Only matches against configured registries — unknown prefixes are treated as local repo names.
-	//
-	// D5/D6 (prefix-preserving pullthrough): the registry prefix is intentionally NOT
-	// stripped from req.Repo. Preserving the prefix means pullthrough-populated repos
-	// live in a namespace region (<upstream-host>/<rest>) that cannot collide with
-	// client-push repos or admin-parsed aliases. Only the target registry is threaded
-	// into pullthrough discovery; the local alias stays as the full URL path.
-	var targetReg string
-	if regHost, _, found := h.mag.ResolveUpstreamRegistry(req.Repo); found {
-		targetReg = regHost
-		utils.Info(l, span, "upstream prefix detected: registry=%s (local alias preserved: %s)", targetReg, req.Repo)
-	}
+
+	targetReg := h.resolveUpstreamTarget(l, span, req.Repo)
 	up := upstream.UpstreamTriple{
 		Reg:     req.Host,
 		Repo:    req.Repo,
@@ -424,8 +464,7 @@ func (h Handlers) ManifestHandler(ctx context.Context, w http.ResponseWriter, r 
 	if err != nil {
 		msg := fmt.Sprintf("failed to check if collection exists: %v", err)
 		l.Error(msg)
-		err := errors.New(msg)
-		span.RecordError(err)
+		span.RecordError(errors.New(msg))
 		det := helper.NewDetailFromReq(req)
 		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
 		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
@@ -446,35 +485,16 @@ func (h Handlers) ManifestHandler(ctx context.Context, w http.ResponseWriter, r 
 		// upstream registries. If a targetReg was detected from the repo
 		// prefix, only that registry is tried; otherwise all are iterated.
 		if req.Tag != "" {
-			utils.Info(l, span, "manifest not found locally, attempting pullthrough for %s:%s (target=%s)", req.Repo, req.Tag, targetReg)
-			_, _, e := h.mag.Database.CollectionGetCreateByRepoTag(ctx, req.Repo, req.Tag)
-			if e != nil {
-				utils.ErrorHandler(l, span, e, "failed to CollectionGetCreateByRepoTag")
-			}
-			upGeneric := up
-			upGeneric.Profile = defaultProfile
-			_, upFound, e := h.mag.HeadManifestNotFound(ctx, req, targetReg)
-			if e == nil && upFound {
-				// Upstream found — retry the local lookup
-				mediaType, colFound, err = h.mag.Database.ManifestExists(ctx, up)
-				if err == nil && colFound {
-					goto found
-				}
+			if mt, ok := h.tryPullthroughOnMiss(ctx, l, span, req, up, targetReg); ok {
+				mediaType = mt
+				colFound = true
 			}
 		}
-		msg := fmt.Sprintf("Manifest for manifest(list) '%s@%s' not found", req.Repo, utils.ShortenDigest(req.Digest))
-		l.Error(msg)
-		span.AddEvent("log", trace.WithAttributes(
-			attribute.String("log.severity", "debug"),
-			attribute.String("log.message", msg),
-		))
-		msg = fmt.Sprintf("no manifest '%s:%s' found for profile '%s'", req.Repo, req.Tag, req.Profile)
-		det := helper.NewDetailFromReq(req)
-		e := helper.NewErrPayload("MANIFEST_UNKNOWN", msg, det)
-		helper.WriteOCIErrror(w, http.StatusNotFound, e)
-		return
+		if !colFound {
+			writeManifestNotFound(w, l, span, req)
+			return
+		}
 	}
-found:
 	msg := fmt.Sprintf("Manifest found with type '%s'", mediaType)
 	span.AddEvent("log", trace.WithAttributes(
 		attribute.String("log.severity", "debug"),
