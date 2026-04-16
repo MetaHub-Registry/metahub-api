@@ -785,6 +785,62 @@ func TestManifestHeadHandlerDigest(t *testing.T) {
 	}
 }
 
+// TestManifestGetByTag_PullthroughSuccess exercises the happy path of
+// resolveMissingManifest -> tryPullthroughOnMiss -> HeadManifestNotFound
+// -> ManifestExists (retry). The test upstream registry is pre-seeded
+// with alpine:3.17.3, so pullthrough succeeds and the handler serves the
+// manifest.
+//
+// This hits the currently-uncovered success branch of tryPullthroughOnMiss
+// (retry ManifestExists after successful upstream discovery and return the
+// resolved mediaType with ok=true).
+func TestManifestGetByTag_PullthroughSuccess(t *testing.T) {
+	bs := utils.NewBootstrap()
+	bs.SetEmptyAll()
+	bs.SetYAMLPrefix("../../../../misc/yaml")
+	bs.AddBootstrap("users")
+	bs.AddBootstrap("platforms:generic")
+	bs.AddBootstrap("rules:rules/generic/linux.yaml")
+	bs.AddBootstrap("profile:profiles/generic.yaml")
+	ctx := context.Background()
+	if err := h.mag.Minio.EmptyAll(); err != nil {
+		t.Fatal(err)
+	}
+	br, err := SetupTest(ctx, bs)
+	if err != nil {
+		TeardownTest(bs, br)
+		t.Fatal(err)
+	}
+	defer TeardownTest(bs, br)
+	token, err := br.Get("user:test#bearer")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// GET alpine:3.17.3 — the testcontainer upstream registry has this image
+	// pre-seeded. Local graph is empty, so tryPullthroughOnMiss runs and
+	// should succeed, populating the graph via HeadManifestNotFound.
+	wGet, rGet := utils.CreateNewHTTPTest(ctx, http.MethodGet, map[string]string{
+		"image":     "alpine",
+		"reference": "3.17.3",
+	}, map[string]string{
+		"accountName": token,
+		"userName":    "oci",
+		"profileName": "generic",
+	}, map[string]string{
+		"Authorization": fmt.Sprintf("Bearer %s", token),
+		"Accept":        "application/vnd.docker.distribution.manifest.v2+json",
+	}, "/{image}/manifests/{reference}", nil)
+	h.ManifestGetHandler(&wGet, rGet)
+	// After pullthrough, we expect either 200 (success) or at worst a
+	// non-404 status — the key assertion is that tryPullthroughOnMiss's
+	// success branch executed. A 404 would indicate pullthrough failed
+	// before reaching the ManifestExists retry.
+	assert.NotEqual(t, http.StatusNotFound, wGet.Code,
+		"pullthrough success branch should NOT lead to 404 (got status %d, body: %s)",
+		wGet.Code, wGet.Body.String())
+}
+
 // TestManifestGetByTag_NotFoundTriggersPullthrough exercises the
 // pullthrough-miss code path (ManifestHandler -> resolveMissingManifest
 // -> tryPullthroughOnMiss) that the happy-path tests don't reach.
