@@ -1,0 +1,142 @@
+meta {
+  name: refreshToken
+  type: http
+  seq: 0
+}
+
+get {
+  url: {{registry}}/v2/
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}
+
+script:post-response {
+  // Single-click auth for the qnib-ftest folder.
+  //
+  // Step 1: read the WWW-Authenticate Bearer challenge from /v2.
+  //   The /v2 endpoint is expected to return 401 with a header like
+  //       WWW-Authenticate: Bearer realm="...",service="..."
+  //   We parse realm + service out of it.
+  //
+  // Step 2: fire a second HTTP call to the realm (the /auth endpoint)
+  //   with Basic-auth {{username}}:{{password}} and the scope for
+  //   this folder's {{repo}}. Response body contains {"token": "..."}.
+  //   We stash that under the env var `oci_bearer` so all other
+  //   qnib-ftest requests (folder-level `auth: bearer`) can use it.
+  //
+  // This replaces the classic "run auth/get then auth/getToken" flow
+  // with a single click, but that classic path still works and is
+  // documented in the folder docs block.
+
+  const h = res.headers["www-authenticate"] || res.headers["WWW-Authenticate"];
+  if (!h) {
+    throw new Error(
+      "No WWW-Authenticate header on /v2/. Either the registry is " +
+      "anonymous (no token needed) or it's misconfigured. Body: " +
+      JSON.stringify(res.body).slice(0, 200)
+    );
+  }
+  if (!h.toLowerCase().startsWith("bearer ")) {
+    throw new Error("Not a Bearer challenge on /v2/: " + h);
+  }
+
+  const params = {};
+  h.replace(/^Bearer\s+/i, "")
+   .split(/,\s*/)
+   .forEach(kv => {
+     const m = kv.match(/^(\w+)="(.*)"$/);
+     if (m) params[m[1]] = m[2];
+   });
+  if (!params.realm || !params.service) {
+    throw new Error("WWW-Authenticate missing realm or service: " + h);
+  }
+
+  // Persist realm/service for the classic auth/ folder path too.
+  bru.setVar("oci_realm", params.realm);
+  bru.setVar("oci_service", params.service);
+
+  const repo = bru.getVar("repo");
+  const scope = "repository:" + repo + ":pull";
+  const username = bru.getEnvVar("username") || bru.getVar("username");
+  const password = bru.getEnvVar("password") || bru.getVar("password");
+  if (!username || !password) {
+    throw new Error(
+      "Missing `username` / `password` in the active environment. " +
+      "Both metahub-dev.bru and metahub-local.bru set these to oci/oci."
+    );
+  }
+
+  const tokenUrl = params.realm +
+    "?service=" + encodeURIComponent(params.service) +
+    "&scope=" + encodeURIComponent(scope);
+
+  // Basic-auth header: btoa is available in Bruno's script sandbox.
+  const basic = btoa(username + ":" + password);
+  const authHeaders = {
+    "Authorization": "Basic " + basic,
+    "Accept": "application/json"
+  };
+
+  let body = null;
+
+  // Prefer Bruno's native HTTP helper; fall back to axios which is
+  // also shipped in the script sandbox across most Bruno versions.
+  try {
+    if (typeof bru.sendRequest === "function") {
+      const tokRes = await new Promise((resolve, reject) => {
+        bru.sendRequest(
+          { method: "GET", url: tokenUrl, headers: authHeaders },
+          (err, r) => (err ? reject(err) : resolve(r))
+        );
+      });
+      body = typeof tokRes.data === "string" ? JSON.parse(tokRes.data) : tokRes.data;
+    } else if (typeof axios !== "undefined") {
+      const tokRes = await axios.get(tokenUrl, { headers: authHeaders });
+      body = tokRes.data;
+    } else {
+      throw new Error(
+        "Neither `bru.sendRequest` nor `axios` is available in this " +
+        "Bruno version. Fall back to the classic flow: run " +
+        "`auth/get` then `auth/getToken` in order."
+      );
+    }
+  } catch (e) {
+    throw new Error("Token exchange failed at " + tokenUrl + ": " + (e.message || String(e)));
+  }
+
+  const token = body && (body.token || body.access_token);
+  if (!token) {
+    throw new Error(
+      "No `token` / `access_token` in /auth response: " +
+      JSON.stringify(body).slice(0, 200)
+    );
+  }
+  bru.setEnvVar("oci_bearer", token);
+  console.log("oci_bearer refreshed (" + token.slice(0, 32) + "...) — scope=" + scope);
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
+
+docs {
+  Single-click auth for the qnib-ftest folder.
+
+  Flow:
+    1. GET /v2/ with no auth -> expects 401 with WWW-Authenticate
+    2. Parse realm + service from the header
+    3. GET <realm>?service=...&scope=repository:qnib/ftest:pull
+       with Basic {{username}}:{{password}}
+    4. Store the returned token as env var `oci_bearer`
+
+  After this request succeeds, every other request in this folder
+  sends `Authorization: Bearer {{oci_bearer}}` automatically.
+
+  Equivalent to running `auth/get` then `auth/getToken` from the
+  classic auth/ folder; both paths set the same env var.
+}
