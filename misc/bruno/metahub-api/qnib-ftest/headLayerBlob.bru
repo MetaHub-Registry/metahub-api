@@ -1,0 +1,30 @@
+meta {
+  name: headLayerBlob
+  type: http
+  seq: 8
+}
+
+head {
+  url: {{registry}}/v2/{{repo}}/blobs/{{firstLayerDigest}}
+  body: none
+  auth: inherit
+}
+
+script:post-response {
+  if (res.status !== 200) {
+    throw new Error("HEAD layer blob " + req.url + " expected 200, got " + res.status);
+  }
+  const announced = res.headers["content-length"] || res.headers["Content-Length"];
+  const expected = bru.getVar("firstLayerSize");
+  if (announced && expected && String(announced) !== String(expected)) {
+    throw new Error(
+      "Layer size mismatch: manifest descriptor says size=" + expected +
+      " but blob HEAD reports " + announced
+    );
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

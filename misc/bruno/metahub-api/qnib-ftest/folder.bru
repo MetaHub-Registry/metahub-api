@@ -1,0 +1,46 @@
+meta {
+  name: qnib-ftest
+  seq: 5
+}
+
+auth {
+  mode: inherit
+}
+
+vars:pre-request {
+  repo: qnib/ftest
+  tag: latest
+}
+
+docs {
+  Inspect the qnib/ftest artefacts populated by `metahub-admin parse
+  collections` (pullthrough-repo session).
+
+  Run order (all requests inherit Bearer auth from the `auth` folder
+  — run `auth/get` then `auth/getToken` once per session to set
+  `oci_bearer` in the active environment):
+
+    1. getTagsList         — confirm the Tag is discoverable
+    2. headIndexByTag      — the Slot's computed :Index, content-negotiated
+                             as an OCI image-index (regression guard #10)
+    3. getIndexByTag       — same, but the body; post-script extracts
+                             `indexDigest` + `childManifestDigest` into
+                             env vars used by the next requests
+    4. getIndexByDigest    — round-trip the Index by its own digest
+    5. headChildManifest   — HEAD the first per-arch manifest referenced
+                             from the Index
+    6. getChildManifest    — GET same; post-script extracts `configDigest`
+                             and `firstLayerDigest`
+    7. getConfigBlob       — GET the image config blob (from `blobs`
+                             bucket; was key=metahub-api-dev after the
+                             pipeline-repo bucket-alignment fix)
+    8. headLayerBlob       — HEAD the first layer blob
+    9. neo4jSlotChain      — out-of-band: hit Neo4j's HTTP tx endpoint
+                             to confirm `(Slot)-[:POINTS_TO]->(Index)`
+                             count — matches pipeline Verify-CE #9
+
+  The complete chain is what `manifest-tool inspect <registry>/qnib/ftest:latest`
+  performs under the hood. Having each step as a separate Bruno
+  request makes intermediate debugging (which step 404s, which digest
+  doesn't resolve) straightforward.
+}

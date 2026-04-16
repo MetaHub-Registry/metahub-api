@@ -1,0 +1,41 @@
+meta {
+  name: getIndexByTag
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{registry}}/v2/{{repo}}/manifests/{{tag}}
+  body: none
+  auth: inherit
+}
+
+headers {
+  Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json
+}
+
+script:post-response {
+  if (res.status !== 200) {
+    throw new Error("GET " + req.url + " expected 200, got " + res.status);
+  }
+  const body = res.body;
+  if (!body || !body.manifests || !body.manifests.length) {
+    throw new Error("Index body has no manifests[]: " + JSON.stringify(body).slice(0, 200));
+  }
+  const first = body.manifests[0];
+  if (!first.digest || !first.size) {
+    throw new Error("First descriptor missing digest/size: " + JSON.stringify(first));
+  }
+  bru.setVar("childManifestDigest", first.digest);
+  bru.setVar("childManifestSize", String(first.size));
+  bru.setVar("childManifestMediaType", first.mediaType || "");
+
+  // Also capture the index's own digest header for round-trip testing.
+  const idxDig = res.headers["docker-content-digest"] || res.headers["Docker-Content-Digest"];
+  if (idxDig) bru.setVar("indexDigest", idxDig);
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
