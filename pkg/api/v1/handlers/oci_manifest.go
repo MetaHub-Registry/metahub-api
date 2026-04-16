@@ -393,13 +393,18 @@ func (h Handlers) ManifestHandler(ctx context.Context, w http.ResponseWriter, r 
 		"digest":  utils.ShortenDigest(req.Digest),
 	})
 	defer span.End()
-	// Detect upstream registry prefix (e.g. "zot.example.com/library/alpine" → target="zot.example.com", repo="library/alpine").
+	// Detect upstream registry prefix (e.g. "zot.example.com/library/alpine" → target="zot.example.com").
 	// Only matches against configured registries — unknown prefixes are treated as local repo names.
+	//
+	// D5/D6 (prefix-preserving pullthrough): the registry prefix is intentionally NOT
+	// stripped from req.Repo. Preserving the prefix means pullthrough-populated repos
+	// live in a namespace region (<upstream-host>/<rest>) that cannot collide with
+	// client-push repos or admin-parsed aliases. Only the target registry is threaded
+	// into pullthrough discovery; the local alias stays as the full URL path.
 	var targetReg string
-	if regHost, strippedRepo, found := h.mag.ResolveUpstreamRegistry(req.Repo); found {
+	if regHost, _, found := h.mag.ResolveUpstreamRegistry(req.Repo); found {
 		targetReg = regHost
-		utils.Info(l, span, "upstream prefix detected: registry=%s, stripped repo=%s", targetReg, strippedRepo)
-		req.Repo = strippedRepo
+		utils.Info(l, span, "upstream prefix detected: registry=%s (local alias preserved: %s)", targetReg, req.Repo)
 	}
 	up := upstream.UpstreamTriple{
 		Reg:     req.Host,
