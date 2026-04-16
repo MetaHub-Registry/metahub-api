@@ -32,3 +32,14 @@ godmode:
     - username: oci
       password: oci
       role: admin
+
+# Upstream registries available for pullthrough.
+# A client URL metahub-host/<hostname>/<repo>:<tag> triggers pullthrough
+# to the configured upstream registry. The registry prefix is preserved
+# in the local alias (see pullthrough-repo-handler D5/D6), so these repos
+# live in their own namespace region and cannot collide with local pushes.
+registries:
+  - hostname: zot.example.com
+    allow_anon: true
+    tls: false
+
