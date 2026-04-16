@@ -9,6 +9,7 @@ import (
 	"github.com/opencontainers/go-digest"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/metahub-registry/metahub-core/pkg/types"
 	"github.com/metahub-registry/metahub-core/pkg/utils"
 )
@@ -836,6 +837,74 @@ func TestManifestGetByTag_NotFoundTriggersPullthrough(t *testing.T) {
 	}, "/{repo}/{image}/manifests/{reference}", nil)
 	h.ManifestGetHandler(&wGet, rGet)
 	assert.Equal(t, http.StatusNotFound, wGet.Code, "non-existent manifest must 404")
+}
+
+// TestManifestHead_SinglePlatform_ExercisesHandleManifest pushes a single
+// OCI image manifest (not an index) and then sends HEAD by digest. This
+// flows through dispatchByMediaType with ociManifestMediaType, which
+// dispatches to handleManifest — covering the HEAD-method branch
+// (m.WriteWWWHead) that the existing TestManifestHeadHandlerDigest does
+// not reach (its HEAD-by-digest goes through an index path).
+func TestManifestHead_SinglePlatform_ExercisesHandleManifest(t *testing.T) {
+	bs := utils.NewBootstrap()
+	bs.SetEmptyAll()
+	bs.SetYAMLPrefix("../../../../misc/yaml")
+	bs.AddBootstrap("users")
+	bs.AddBootstrap("platforms:generic")
+	bs.AddBootstrap("rules:rules/generic/linux.yaml")
+	bs.AddBootstrap("profile:profiles/generic.yaml")
+	ctx := context.Background()
+	if err := h.mag.Minio.EmptyAll(); err != nil {
+		t.Fatal(err)
+	}
+	br, err := SetupTest(ctx, bs)
+	if err != nil {
+		TeardownTest(bs, br)
+		t.Fatal(err)
+	}
+	defer TeardownTest(bs, br)
+	token, err := br.Get("user:test#bearer")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mani := types.Manifest{
+		Data: []byte(`{
+			"schemaVersion": 2,
+			"config": {
+				"mediaType": "application/vnd.oci.image.config.v1+json",
+				"digest": "sha256:22f68afca98941fc10a8c6c87f881065b075c1c2f4678b8f579d1b77bc060ef0",
+				"size": 129,
+				"data": "ewoJImF1dGhvciI6ICJUbmVLZFFYSFhJQ3NTWHdSIiwKCSJhcmNoaXRlY3R1cmUiOiAiYW1kNjQiLAoJIm9zIjogImxpbnV4IiwKCSJyb290ZnMiOiB7CgkJInR5cGUiOiAibGF5ZXJzIiwKCQkiZGlmZl9pZHMiOiBbXQoJfQp9"
+			},
+			"layers": []
+		}`),
+	}
+	expDigest := digest.FromBytes(mani.Data)
+
+	wPut, rPut := utils.CreateNewHTTPTest(ctx, http.MethodPut, map[string]string{
+		"repo": "oci", "image": "single", "reference": "v1",
+	}, map[string]string{
+		"accountName": token, "userName": "oci", "profileName": "generic",
+	}, map[string]string{
+		"Authorization": fmt.Sprintf("Bearer %s", token),
+		"Content-Type":  "application/vnd.docker.distribution.manifest.v2+json",
+	}, "/{repo}/{image}/manifests/{reference}", mani.Data)
+	h.ManifestPutHandler(&wPut, rPut)
+	require.Equal(t, http.StatusCreated, wPut.Code)
+
+	// HEAD by the manifest's own digest → dispatchByMediaType routes
+	// ociManifestMediaType to handleManifest, which writes HEAD headers.
+	wHead, rHead := utils.CreateNewHTTPTest(ctx, http.MethodHead, map[string]string{
+		"repo": "oci", "image": "single", "reference": expDigest.String(),
+	}, map[string]string{
+		"accountName": token, "userName": "oci", "profileName": "generic",
+	}, map[string]string{
+		"Authorization": fmt.Sprintf("Bearer %s", token),
+		"Accept":        "application/vnd.oci.image.manifest.v1+json",
+	}, "/{repo}/{image}/manifests/{reference}", nil)
+	h.ManifestHeadHandler(&wHead, rHead)
+	assert.Equal(t, http.StatusOK, wHead.Code, "HEAD by digest for single-platform manifest must succeed")
 }
 
 // TestManifestGetByDigest_NotFoundDoesNotTriggerPullthrough asserts that
