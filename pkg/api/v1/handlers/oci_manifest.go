@@ -421,6 +421,27 @@ func (h Handlers) tryPullthroughOnMiss(ctx context.Context, l *logrus.Entry, spa
 	return mediaType, true
 }
 
+// resolveMissingManifest attempts recovery paths when ManifestExists returned
+// found=false: direct digest lookup (Path Z), then tag-based pullthrough. It
+// writes the response and returns stop=true in any case where the caller must
+// not proceed to dispatch. When stop=false it returns the resolved mediaType
+// (pullthrough succeeded).
+func (h Handlers) resolveMissingManifest(ctx context.Context, w http.ResponseWriter, l *logrus.Entry, span trace.Span, req types.Request, up upstream.UpstreamTriple, targetReg string) (string, bool) {
+	// Path Z: direct digest lookup when ManifestExists's wrapper query missed.
+	if req.Digest != "" && h.handleManifest(ctx, w, req) {
+		return "", true
+	}
+	// Pullthrough for tag-based requests only. Digest-based requests cannot
+	// be discovered upstream (no tag to resolve against).
+	if req.Tag != "" {
+		if mt, ok := h.tryPullthroughOnMiss(ctx, l, span, req, up, targetReg); ok {
+			return mt, false
+		}
+	}
+	writeManifestNotFound(w, l, span, req)
+	return "", true
+}
+
 // writeManifestNotFound writes the 404 MANIFEST_UNKNOWN response.
 func writeManifestNotFound(w http.ResponseWriter, l *logrus.Entry, span trace.Span, req types.Request) {
 	msg := fmt.Sprintf("Manifest for manifest(list) '%s@%s' not found", req.Repo, utils.ShortenDigest(req.Digest))
@@ -433,6 +454,16 @@ func writeManifestNotFound(w http.ResponseWriter, l *logrus.Entry, span trace.Sp
 	det := helper.NewDetailFromReq(req)
 	e := helper.NewErrPayload("MANIFEST_UNKNOWN", msg, det)
 	helper.WriteOCIErrror(w, http.StatusNotFound, e)
+}
+
+// writeInternalError writes a 500 INTERNAL_ERROR response and records on span.
+func writeInternalError(w http.ResponseWriter, l *logrus.Entry, span trace.Span, req types.Request, format string, args ...any) {
+	msg := fmt.Sprintf(format, args...)
+	l.Error(msg)
+	span.RecordError(errors.New(msg))
+	det := helper.NewDetailFromReq(req)
+	e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+	helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 }
 
 func (h Handlers) ManifestHandler(ctx context.Context, w http.ResponseWriter, r *http.Request, req types.Request) {
@@ -462,38 +493,15 @@ func (h Handlers) ManifestHandler(ctx context.Context, w http.ResponseWriter, r 
 
 	mediaType, colFound, err := h.mag.Database.ManifestExists(ctx, up)
 	if err != nil {
-		msg := fmt.Sprintf("failed to check if collection exists: %v", err)
-		l.Error(msg)
-		span.RecordError(errors.New(msg))
-		det := helper.NewDetailFromReq(req)
-		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
-		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
+		writeInternalError(w, l, span, req, "failed to check if collection exists: %v", err)
 		return
 	}
 	if !colFound {
-		// Path Z: when looking up by digest, the wrapper-based ManifestExists
-		// may miss content-leaf ManifestData nodes that have no wrapper link
-		// (e.g. the first of two single-arch pushes to the same tag — the
-		// second push reuses the wrapper and only the latest gets linked).
-		// Fall back to a direct digest lookup before returning 404.
-		if req.Digest != "" {
-			if ok := h.handleManifest(ctx, w, req); ok {
-				return
-			}
-		}
-		// Pullthrough: when a tag-based request is not found locally, try
-		// upstream registries. If a targetReg was detected from the repo
-		// prefix, only that registry is tried; otherwise all are iterated.
-		if req.Tag != "" {
-			if mt, ok := h.tryPullthroughOnMiss(ctx, l, span, req, up, targetReg); ok {
-				mediaType = mt
-				colFound = true
-			}
-		}
-		if !colFound {
-			writeManifestNotFound(w, l, span, req)
+		mt, stop := h.resolveMissingManifest(ctx, w, l, span, req, up, targetReg)
+		if stop {
 			return
 		}
+		mediaType = mt
 	}
 	msg := fmt.Sprintf("Manifest found with type '%s'", mediaType)
 	span.AddEvent("log", trace.WithAttributes(
@@ -504,10 +512,7 @@ func (h Handlers) ManifestHandler(ctx context.Context, w http.ResponseWriter, r 
 	if ok := h.dispatchByMediaType(ctx, w, r, req, mediaType); ok {
 		return
 	}
-	msg = fmt.Sprintf("no manifest '%s:%s' found for profile '%s'", req.Repo, req.Tag, req.Profile)
-	det := helper.NewDetailFromReq(req)
-	e := helper.NewErrPayload("MANIFEST_UNKNOWN", msg, det)
-	helper.WriteOCIErrror(w, http.StatusNotFound, e)
+	writeManifestNotFound(w, l, span, req)
 }
 
 func (h Handlers) ManifestGetHandler(w http.ResponseWriter, r *http.Request) {
