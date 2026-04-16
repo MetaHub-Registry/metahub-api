@@ -25,9 +25,9 @@ services:
     volumes:
       - goMod:/go/pkg/mod
       - /Users/christian.kniep/src/gitlab.com/qnib-metahub/community-edition:/community-edition
-      - /Users/christian.kniep/go/src/github.com/metahub-registry/metahub-core:/Users/christian.kniep/go/src/github.com/metahub-registry/metahub-core
-      - /Users/christian.kniep/go/src/github.com/metahub-registry/metahub-admin:/Users/christian.kniep/go/src/github.com/metahub-registry/metahub-admin
-      - /Users/christian.kniep/go/src/github.com/metahub-registry/metahub-api:/Users/christian.kniep/go/src/github.com/metahub-registry/metahub-api
+      - ../metahub-core:/Users/christian.kniep/go/src/github.com/metahub-registry/metahub-core
+      - ../metahub-admin:/Users/christian.kniep/go/src/github.com/metahub-registry/metahub-admin
+      - ./:/Users/christian.kniep/go/src/github.com/metahub-registry/metahub-api
     networks:
       - api-internal
       - mh-data
