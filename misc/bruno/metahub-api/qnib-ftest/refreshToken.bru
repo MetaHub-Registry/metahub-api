@@ -162,8 +162,11 @@ docs {
   drives which :Index the /v2 handlers serve for qnib/ftest:latest.
 
   Picking a profile:
-    - Edit the active environment (e.g. metahub-local.bru) and set
-      `profile: generic` or `profile: glow#1.5.0` (etc.).
+    - The `profile` var defaults to `generic` at the collection
+      level (see collection.bru). Override at any level below it:
+        * collection.bru (change the default for everyone)
+        * environments/*.bru (per-environment override)
+        * folder.bru / this request (narrow overrides)
     - Re-run refreshToken to mint a new `oci_bearer` for that profile.
     - All subsequent qnib-ftest requests now resolve against that
       profile's :Index.
