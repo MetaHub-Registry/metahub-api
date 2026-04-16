@@ -20,7 +20,14 @@ script:post-response {
   }
   const body = res.body;
   if (!body || !body.manifests || !body.manifests.length) {
-    throw new Error("Index body has no manifests[]: " + JSON.stringify(body).slice(0, 200));
+    const profile = bru.getEnvVar("profile") || bru.getVar("profile") || "generic";
+    throw new Error(
+      "Index body has no manifests[] for profile=" + profile +
+      ". This likely means no manifest in " + bru.getVar("repo") +
+      " matches the profile's rules (not a bug — expected for profiles " +
+      "like cpu#graviton2 on a repo that has no graviton manifests). " +
+      "Body: " + JSON.stringify(body).slice(0, 200)
+    );
   }
   const first = body.manifests[0];
   if (!first.digest || !first.size) {

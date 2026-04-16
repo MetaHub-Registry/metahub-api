@@ -70,12 +70,28 @@ script:post-response {
     );
   }
 
+  // Profile selection: metahub parses the effective profile out of the
+  // Basic-auth username using the `<user>/<profile>` convention (see
+  // `userReg` in pkg/api/v1/handlers/auth.go and ParseProfile in
+  // metalib/pkg/types/request.go). So to ask for anything other than
+  // the default `generic` profile, we send Basic auth as
+  //     <username>/<profile>:<password>
+  // The JWT that comes back has `preferred_username: "<username>/<profile>"`,
+  // and the middleware splits that on `/` to set req.Profile.
+  //
+  // Example: profile=glow#1.5.0 => Basic "oci/glow#1.5.0:oci"
+  // Example: profile=generic    => Basic "oci:oci" (no suffix)
+  const profile = bru.getEnvVar("profile") || bru.getVar("profile") || "generic";
+  const basicUser = (profile && profile !== "generic")
+    ? username + "/" + profile
+    : username;
+
   const tokenUrl = params.realm +
     "?service=" + encodeURIComponent(params.service) +
     "&scope=" + encodeURIComponent(scope);
 
   // Basic-auth header: btoa is available in Bruno's script sandbox.
-  const basic = btoa(username + ":" + password);
+  const basic = btoa(basicUser + ":" + password);
   const authHeaders = {
     "Authorization": "Basic " + basic,
     "Accept": "application/json"
@@ -116,7 +132,10 @@ script:post-response {
     );
   }
   bru.setEnvVar("oci_bearer", token);
-  console.log("oci_bearer refreshed (" + token.slice(0, 32) + "...) — scope=" + scope);
+  console.log(
+    "oci_bearer refreshed (" + token.slice(0, 32) + "...) — " +
+    "basicUser=" + basicUser + " scope=" + scope + " profile=" + profile
+  );
 }
 
 settings {
@@ -131,12 +150,40 @@ docs {
     1. GET /v2/ with no auth -> expects 401 with WWW-Authenticate
     2. Parse realm + service from the header
     3. GET <realm>?service=...&scope=repository:qnib/ftest:pull
-       with Basic {{username}}:{{password}}
+       with Basic <basicUser>:{{password}}
+       where basicUser = {{username}}           if profile == "generic"
+                       = {{username}}/{{profile}} otherwise
     4. Store the returned token as env var `oci_bearer`
 
   After this request succeeds, every other request in this folder
-  sends `Authorization: Bearer {{oci_bearer}}` automatically.
+  sends `Authorization: Bearer {{oci_bearer}}` automatically. The
+  JWT carries `preferred_username=<basicUser>`; the server's auth
+  middleware splits on `/` to set req.Profile, so the same token
+  drives which :Index the /v2 handlers serve for qnib/ftest:latest.
+
+  Picking a profile:
+    - Edit the active environment (e.g. metahub-local.bru) and set
+      `profile: generic` or `profile: glow#1.5.0` (etc.).
+    - Re-run refreshToken to mint a new `oci_bearer` for that profile.
+    - All subsequent qnib-ftest requests now resolve against that
+      profile's :Index.
+
+  Currently seeded profiles in the minimal CE (run
+  `MATCH (p:Profile) RETURN p.label` in Neo4j for the full list):
+    - generic             (always; the default)
+    - glow#1.5.0          (wraps manifests with the glow layer)
+    - cpu#zen2 / cpu#zen3 / cpu#cascadelake / cpu#graviton2 / ...
+    - node/aws#g5
+
+  NOTE: profile labels use `#` as the tag separator, not `:` — the
+  Basic-auth password parsing splits on `:` so a profile containing
+  `:` would break the `<user>/<profile>:<password>` encoding.
+  Profiles that don't match any manifest in qnib/ftest will return
+  an empty Index (no children) — that's not a bug, it means no
+  manifest satisfies that profile's rule for this collection.
 
   Equivalent to running `auth/get` then `auth/getToken` from the
-  classic auth/ folder; both paths set the same env var.
+  classic auth/ folder; both paths set the same `oci_bearer` env var
+  (but the classic path does not apply the profile suffix; only this
+  request does).
 }

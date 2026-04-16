@@ -29,13 +29,41 @@ docs {
     A) Run `qnib-ftest/refreshToken` (seq 0). Single click — performs
        the /v2 WWW-Authenticate challenge AND the /auth token exchange
        inline, then stores `oci_bearer` in the active environment.
+       Also honours the `profile` env var (see below).
 
     B) Run `auth/get` then `auth/getToken` in order (the classic path).
-       Produces the same result.
+       Same outcome EXCEPT profile selection — classic flow always
+       authenticates as plain `{{username}}` which maps to profile
+       `generic`. Use `refreshToken` when you need non-generic.
 
   Both paths require `username` + `password` in the active environment
   (already set to `oci` / `oci` in `metahub-dev.bru` and
   `metahub-local.bru`).
+
+  ## Picking a profile
+
+  The active environment has a `profile` variable (default: `generic`).
+  Profile is carried inside the Basic-auth username by the
+  `<user>/<profile>` convention (see pkg/api/v1/handlers/auth.go and
+  metalib's ParseProfile). `refreshToken` reads `profile` from the
+  env and builds the Basic username as `{{username}}/{{profile}}`
+  unless profile == "generic".
+
+  To switch profile for the qnib-ftest chain:
+    1. Edit the active environment (metahub-dev.bru or
+       metahub-local.bru). Set `profile` to the label you want, e.g.
+         profile: glow#1.5.0
+         profile: cpu#zen2
+         profile: generic           (the default)
+    2. Re-run `refreshToken` to mint a new `oci_bearer` for that
+       profile.
+    3. Run the rest of the chain. The server resolves a DIFFERENT
+       `:Index` per profile, so the Index body / child manifests /
+       layer digests will differ.
+
+  Example: for `profile: generic` the Index has 1 child (arm64,
+  size 735). For `profile: glow#1.5.0` the Index has 2 children
+  (arm64 + amd64 with the glow layer applied, each size 1056).
 
   ## Request sequence
 
