@@ -170,3 +170,71 @@ func TestResolveMissingManifest_NoDigestNoTag_WritesNotFound(t *testing.T) {
 	assert.Equal(t, "", mt, "no mediaType resolved")
 	assert.Equal(t, 404, w.Code)
 }
+
+// TestClientAcceptsIndex_NoHeader asserts that a request with no Accept
+// header does NOT count as "accepts index" — the client expects a single
+// manifest by default. This is the content-negotiation default for
+// simple OCI clients.
+func TestClientAcceptsIndex_NoHeader(t *testing.T) {
+	r := httptest.NewRequest("GET", "/v2/foo/manifests/latest", nil)
+	assert.False(t, clientAcceptsIndex(r))
+}
+
+// TestClientAcceptsIndex_WithIndexMediaType asserts that an explicit index
+// media type in Accept makes the helper return true. Tests each of the
+// three "yes" cases.
+func TestClientAcceptsIndex_WithIndexMediaType(t *testing.T) {
+	cases := []string{
+		"application/vnd.oci.image.index.v1+json",
+		"application/vnd.docker.distribution.manifest.list.v2+json",
+		"*/*",
+	}
+	for _, accept := range cases {
+		t.Run(accept, func(t *testing.T) {
+			r := httptest.NewRequest("GET", "/v2/foo/manifests/latest", nil)
+			r.Header.Set("Accept", accept)
+			assert.True(t, clientAcceptsIndex(r), "Accept=%q must match", accept)
+		})
+	}
+}
+
+// TestClientAcceptsIndex_WithQualityParameter asserts that an Accept value
+// with a ";q=..." quality parameter is correctly matched (the parameter is
+// stripped before comparison).
+func TestClientAcceptsIndex_WithQualityParameter(t *testing.T) {
+	r := httptest.NewRequest("GET", "/v2/foo/manifests/latest", nil)
+	r.Header.Set("Accept", "application/vnd.oci.image.index.v1+json;q=0.9")
+	assert.True(t, clientAcceptsIndex(r))
+}
+
+// TestClientAcceptsIndex_SingleManifestOnly asserts that when the client
+// explicitly requests only single-manifest media types (no index, no */*),
+// the helper returns false — triggering the content-negotiation unwrap
+// in dispatchByMediaType.
+func TestClientAcceptsIndex_SingleManifestOnly(t *testing.T) {
+	r := httptest.NewRequest("GET", "/v2/foo/manifests/latest", nil)
+	r.Header.Set("Accept", "application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json")
+	assert.False(t, clientAcceptsIndex(r))
+}
+
+// TestDispatchByMediaType_UnknownMediaTypeWrites500 exercises the default
+// branch of dispatchByMediaType (not covered by integration tests, which
+// only push the two known manifest media types).
+func TestDispatchByMediaType_UnknownMediaTypeWrites500(t *testing.T) {
+	h := newPrefixTestHandlers()
+	req := types.Request{Repo: "qnib/ftest", Tag: "latest", Profile: "generic"}
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/v2/qnib/ftest/manifests/latest", nil)
+
+	ok := h.dispatchByMediaType(context.Background(), w, r, req, "application/xml")
+
+	assert.True(t, ok, "default branch must signal response-written")
+	assert.Equal(t, 500, w.Code)
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	errs := body["errors"].([]any)
+	first := errs[0].(map[string]any)
+	assert.Equal(t, "INTERNAL_ERROR", first["code"])
+	assert.Contains(t, first["message"], "application/xml")
+}
