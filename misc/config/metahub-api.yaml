@@ -15,7 +15,7 @@ minio:
 neo4j:
   dbname: neo4j
   user: neo4j
-  password: test
+  password: neo4j123
   url: bolt://neo4j:7687
 frontend:
   redirect: http://localhost:8081

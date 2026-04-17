@@ -46,20 +46,19 @@ services:
   #    - ${PWD}/misc/backup:/backup
   #  command: ["sleep", "inf"]
   neo4j:
-    image: registry.gitlab.com/qnib-container/database/neo4j:v0-0-5
+    image: neo4j:2026.03.1
     ports:
       - 7474:7474
       - 7687:7687
     networks:
       - mh-data
     environment:
-      QNIB_NEO4J_PASSWORD: test
-      QNIB_NEO4J_BACKUP_DIR: /backup
+      NEO4J_AUTH: neo4j/neo4j123
+      NEO4J_PLUGINS: '["graph-data-science","apoc"]'
     volumes:
      - neo4j:/var/lib/neo4j/data
-     - ${PWD}/misc/backup:/backup
     healthcheck:
-      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "test", "RETURN 1"]
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "neo4j123", "RETURN 1"]
       interval: 5s
       timeout: 10s
       retries: 12
