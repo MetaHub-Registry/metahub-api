@@ -10,7 +10,9 @@ vars:
   DC_DATA: docker compose -f docker-compose-data.yaml
   DC_ALL: docker compose -f docker-compose-data.yaml -f docker-compose.yaml
   DC_MON: docker compose -f docker-compose-monitoring.yaml
-  ADMIN_EXEC: '{{.DC_ALL}} exec -T -w /etc/metahub-admin admin'
+  ADMIN_DIR: /Users/christian.kniep/go/src/github.com/metahub-registry/metahub-admin
+  ADMIN_EXEC: '{{.DC_ALL}} exec -T -w {{.ADMIN_DIR}} dev'
+  ADMIN_CMD: go run main.go
   DIND_EXEC: '{{.DC_ALL}} exec -T dind'
   NEO4J_PASS: neo4j123
   CYPHER: '{{.DC_ALL}} exec -T neo4j cypher-shell -u neo4j -p {{.NEO4J_PASS}}'
@@ -112,14 +114,11 @@ tasks:
     desc: Seed rules, manipulations, and profiles into the compose Neo4j
     cmds:
       - echo "=== Seeding rules ==="
-      - '{{.ADMIN_EXEC}} metahub-admin --config ./misc/config/compose-config.yaml parse rules /community-edition/rules'
-      - echo "=== Copying patched glow manipulation YAML into admin ==="
-      - '{{.DC_ALL}} exec -T admin mkdir -p /tmp/seed/manipulations/layer/glow'
-      - '{{.DC_ALL}} cp misc/fixtures/manipulations/layer/glow/1.5.0.yaml admin:/tmp/seed/manipulations/layer/glow/1.5.0.yaml'
+      - '{{.ADMIN_EXEC}} {{.ADMIN_CMD}} --config ./misc/config/compose-config.yaml parse rules /community-edition/rules'
       - echo "=== Seeding manipulations (local mirror at registry:5050) ==="
-      - '{{.ADMIN_EXEC}} metahub-admin --config ./misc/config/compose-config.yaml parse manipulations /tmp/seed/manipulations/layer/glow/1.5.0.yaml'
+      - '{{.ADMIN_EXEC}} {{.ADMIN_CMD}} --config ./misc/config/compose-config.yaml parse manipulations /Users/christian.kniep/go/src/github.com/metahub-registry/metahub-api/misc/fixtures/manipulations/layer/glow/1.5.0.yaml'
       - echo "=== Seeding profiles ==="
-      - '{{.ADMIN_EXEC}} metahub-admin --config ./misc/config/compose-config.yaml parse profiles /community-edition/profiles/generic.yaml /community-edition/profiles/glow/1.5.0.yaml'
+      - '{{.ADMIN_EXEC}} {{.ADMIN_CMD}} --config ./misc/config/compose-config.yaml parse profiles /community-edition/profiles/generic.yaml /community-edition/profiles/glow/1.5.0.yaml'
       - echo "=== Graph seeded ==="
 
   seed:admin:
@@ -143,12 +142,12 @@ tasks:
   compute:manifests:
     desc: Compute manifests
     cmds:
-      - '{{.ADMIN_EXEC}} metahub-admin --config ./misc/config/compose-config.yaml compute manifests'
+      - '{{.ADMIN_EXEC}} {{.ADMIN_CMD}} --config ./misc/config/compose-config.yaml compute manifests'
 
   compute:manifestlists:
     desc: Compute manifestlists (indexes) for all profiles
     cmds:
-      - '{{.ADMIN_EXEC}} metahub-admin --config ./misc/config/compose-config.yaml compute manifestlists'
+      - '{{.ADMIN_EXEC}} {{.ADMIN_CMD}} --config ./misc/config/compose-config.yaml compute manifestlists'
 
   # ===== dind operations =====
 
