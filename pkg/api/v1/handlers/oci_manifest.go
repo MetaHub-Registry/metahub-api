@@ -259,8 +259,21 @@ func (h Handlers) tryPullthroughOnMiss(ctx context.Context, l *logrus.Entry, spa
 // (pullthrough succeeded).
 func (h Handlers) resolveMissingManifest(ctx context.Context, w http.ResponseWriter, l *logrus.Entry, span trace.Span, req types.Request, up upstream.UpstreamTriple, targetReg string) (string, bool) {
 	// Path Z: direct digest lookup when ManifestExists's wrapper query missed.
-	if req.Digest != "" && h.handleManifest(ctx, w, req) {
-		return "", true
+	// Digests are content-addressable: if the content exists, serve it
+	// regardless of the requesting profile. This handles the common case
+	// where Docker re-pulls a cached digest after switching profiles (e.g.
+	// generic → glow).
+	if req.Digest != "" {
+		// Try :Manifest node in Neo4j first
+		if h.handleManifest(ctx, w, req) {
+			return "", true
+		}
+		// Try serving a persisted manipulated Index from MinIO. This covers
+		// the case where handleIndex stored a lazily-manipulated Index on a
+		// prior HEAD, and Docker now does GET-by-digest for that Index.
+		if h.serveManifestFromMinIO(ctx, w, l, span, req) {
+			return "", true
+		}
 	}
 	// Pullthrough for tag-based requests only. Digest-based requests cannot
 	// be discovered upstream (no tag to resolve against).
@@ -274,6 +287,36 @@ func (h Handlers) resolveMissingManifest(ctx context.Context, w http.ResponseWri
 }
 
 // writeManifestNotFound writes the 404 MANIFEST_UNKNOWN response.
+// serveManifestFromMinIO attempts to serve a manifest/index directly from
+// MinIO by digest, bypassing Neo4j. This is used as a last-resort fallback
+// for content that was persisted in MinIO (e.g. lazily-computed manipulated
+// Indexes) but not stored as a graph node. Returns true if the content was
+// found and written to the response.
+func (h Handlers) serveManifestFromMinIO(ctx context.Context, w http.ResponseWriter, l *logrus.Entry, span trace.Span, req types.Request) bool {
+	data, err := h.mag.Minio.ManifestsGetRawBytes(ctx, req.Digest)
+	if err != nil || len(data) == 0 {
+		return false
+	}
+	utils.Debug(l, span, "serving manifest %s directly from MinIO (%d bytes)", utils.ShortenDigest(req.Digest), len(data))
+	// Detect media type from the JSON content
+	mt := http.DetectContentType(data)
+	if len(data) > 2 && data[0] == '{' {
+		// JSON content — try to determine OCI media type from schemaVersion/mediaType fields
+		mt = "application/vnd.oci.image.index.v1+json"
+	}
+	w.Header().Set("Content-Type", mt)
+	w.Header().Set("Content-Length", fmt.Sprint(len(data)))
+	w.Header().Set("Docker-Content-Digest", req.Digest)
+	w.Header().Set("Etag", req.Digest)
+	switch req.Method {
+	case http.MethodGet:
+		w.Write(data)
+	case http.MethodHead:
+		// Headers already set
+	}
+	return true
+}
+
 func writeManifestNotFound(w http.ResponseWriter, l *logrus.Entry, span trace.Span, req types.Request) {
 	msg := fmt.Sprintf("Manifest for manifest(list) '%s@%s' not found", req.Repo, utils.ShortenDigest(req.Digest))
 	l.Error(msg)
