@@ -13,7 +13,7 @@ minio:
 neo4j:
   dbname: neo4j
   user: neo4j
-  password: test
+  password: neo4j123
   url: bolt://neo4j:7687
 frontend:
   redirect: http://localhost:8082
@@ -39,7 +39,12 @@ godmode:
 # in the local alias (see pullthrough-repo-handler D5/D6), so these repos
 # live in their own namespace region and cannot collide with local pushes.
 registries:
-  - hostname: zot.example.com
+  - name: zot.example.com
     allow_anon: true
     tls: false
+  - name: local-reg
+    url: registry:5050
+    allow_anon: true
+    tls: false
+    
 

@@ -219,15 +219,16 @@ func (h Handlers) handleIndexAsManifest(ctx context.Context, w http.ResponseWrit
 // against configured registries — unknown prefixes return "" and are treated
 // as local repo names.
 //
-// D5/D6 (prefix-preserving pullthrough): the registry prefix is intentionally
-// NOT stripped from req.Repo. Preserving the prefix means pullthrough-populated
-// repos live in a namespace region (<upstream-host>/<rest>) that cannot collide
-// with client-push repos or admin-parsed aliases. Only the target registry is
+// D5/D6 (prefix-preserving pullthrough): the registry prefix (slug alias) is
+// intentionally NOT stripped from req.Repo. Preserving the prefix means
+// pullthrough-populated repos live in a namespace region (<slug>/<rest>) that
+// cannot collide with client-push repos or admin-parsed aliases. The returned
+// target is the registry's EffectiveURL (actual network endpoint) which is
 // threaded into pullthrough discovery; the local alias stays as the full URL path.
 func (h Handlers) resolveUpstreamTarget(l *logrus.Entry, span trace.Span, repo string) string {
-	if regHost, _, found := h.mag.ResolveUpstreamRegistry(repo); found {
-		utils.Info(l, span, "upstream prefix detected: registry=%s (local alias preserved: %s)", regHost, repo)
-		return regHost
+	if regURL, _, found := h.mag.ResolveUpstreamRegistry(repo); found {
+		utils.Info(l, span, "upstream prefix detected: registry=%s (local alias preserved: %s)", regURL, repo)
+		return regURL
 	}
 	return ""
 }

@@ -43,19 +43,19 @@ func newPrefixTestHandlers(registries ...magazine.RegistryConfig) Handlers {
 }
 
 func TestResolveUpstreamTarget_MatchesConfiguredRegistry(t *testing.T) {
-	h := newPrefixTestHandlers(magazine.RegistryConfig{Hostname: "zot.example.com", AllowAnon: true})
+	h := newPrefixTestHandlers(magazine.RegistryConfig{Name: "zot.example.com", Hostname: "zot.example.com", AllowAnon: true})
 	l, _, span := utils.InitLogging(context.Background(), tracer, map[string]any{"func": "TestResolveUpstreamTarget_Match"})
 	defer span.End()
 
 	input := "zot.example.com/library/alpine"
 	got := h.resolveUpstreamTarget(l, span, input)
 
-	assert.Equal(t, "zot.example.com", got, "configured registry hostname should be returned as target")
+	assert.Equal(t, "zot.example.com", got, "configured registry URL should be returned as target")
 	assert.Equal(t, "zot.example.com/library/alpine", input, "input repo must NOT be mutated (prefix preserved by caller)")
 }
 
 func TestResolveUpstreamTarget_MatchesConfiguredRegistryWithPort(t *testing.T) {
-	h := newPrefixTestHandlers(magazine.RegistryConfig{Hostname: "registry.internal:5000", AllowAnon: true})
+	h := newPrefixTestHandlers(magazine.RegistryConfig{Name: "registry.internal:5000", Hostname: "registry.internal:5000", AllowAnon: true})
 	l, _, span := utils.InitLogging(context.Background(), tracer, map[string]any{"func": "TestResolveUpstreamTarget_Port"})
 	defer span.End()
 
@@ -66,7 +66,7 @@ func TestResolveUpstreamTarget_MatchesConfiguredRegistryWithPort(t *testing.T) {
 }
 
 func TestResolveUpstreamTarget_NoMatchReturnsEmpty(t *testing.T) {
-	h := newPrefixTestHandlers(magazine.RegistryConfig{Hostname: "zot.example.com", AllowAnon: true})
+	h := newPrefixTestHandlers(magazine.RegistryConfig{Name: "zot.example.com", Hostname: "zot.example.com", AllowAnon: true})
 	l, _, span := utils.InitLogging(context.Background(), tracer, map[string]any{"func": "TestResolveUpstreamTarget_NoMatch"})
 	defer span.End()
 
@@ -91,7 +91,7 @@ func TestResolveUpstreamTarget_PreservesCallerRepoAcrossCalls(t *testing.T) {
 	// the same string must never mutate the string. This is what guarantees
 	// "namespace isolation from client-push repos by construction" — if the
 	// helper ever starts mutating, the contract breaks silently.
-	h := newPrefixTestHandlers(magazine.RegistryConfig{Hostname: "zot.example.com", AllowAnon: true})
+	h := newPrefixTestHandlers(magazine.RegistryConfig{Name: "zot.example.com", Hostname: "zot.example.com", AllowAnon: true})
 	l, _, span := utils.InitLogging(context.Background(), tracer, map[string]any{"func": "TestResolveUpstreamTarget_NoMutate"})
 	defer span.End()
 
@@ -100,6 +100,20 @@ func TestResolveUpstreamTarget_PreservesCallerRepoAcrossCalls(t *testing.T) {
 		_ = h.resolveUpstreamTarget(l, span, input)
 		assert.Equal(t, "zot.example.com/library/alpine", input, "iteration %d: input must be unchanged", i)
 	}
+}
+
+func TestResolveUpstreamTarget_NameURLSplit(t *testing.T) {
+	// When a registry has a separate name (slug) and url (endpoint),
+	// resolveUpstreamTarget should return the URL, not the name.
+	h := newPrefixTestHandlers(magazine.RegistryConfig{Name: "local-reg", URL: "registry:5050", AllowAnon: true})
+	l, _, span := utils.InitLogging(context.Background(), tracer, map[string]any{"func": "TestResolveUpstreamTarget_NameURL"})
+	defer span.End()
+
+	input := "local-reg/os/alpine"
+	got := h.resolveUpstreamTarget(l, span, input)
+
+	assert.Equal(t, "registry:5050", got, "should return the EffectiveURL, not the slug name")
+	assert.Equal(t, "local-reg/os/alpine", input, "input repo must NOT be mutated")
 }
 
 // TestWriteManifestNotFound asserts the shape of the 404 MANIFEST_UNKNOWN
