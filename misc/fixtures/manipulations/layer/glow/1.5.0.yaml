@@ -1,0 +1,6 @@
+label: layer/glow#1.5.0
+layers:
+  - image: registry:5050/cqnib/metahub-layers/hpc3/glow:1.5.0-arm64
+    rule: arch:arm64=true
+  - image: registry:5050/cqnib/metahub-layers/hpc3/glow:1.5.0-amd64
+    rule: arch:amd64=true

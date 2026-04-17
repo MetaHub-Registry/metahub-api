@@ -1,15 +1,5 @@
 
 services:
-  admin:
-    image: registry.github.com/metahub-registry/metahub-admin:v1.4.3
-    networks:
-      - api-internal
-      - mh-data
-    command: ["sleep", "inf"]
-    working_dir: /etc/metahub-admin/
-    volumes:
-      - /Users/christian.kniep/src/gitlab.com/qnib-metahub/community-edition:/community-edition
-      - /Users/christian.kniep/go/src/github.com/metahub-registry/metahub-admin/misc:/etc/metahub-admin/misc
   dev:
     build: 
       context: .
@@ -25,9 +15,9 @@ services:
     volumes:
       - goMod:/go/pkg/mod
       - /Users/christian.kniep/src/gitlab.com/qnib-metahub/community-edition:/community-edition
-      - /Users/christian.kniep/go/src/github.com/metahub-registry/metahub-core:/Users/christian.kniep/go/src/github.com/metahub-registry/metahub-core
-      - /Users/christian.kniep/go/src/github.com/metahub-registry/metahub-admin:/Users/christian.kniep/go/src/github.com/metahub-registry/metahub-admin
-      - /Users/christian.kniep/go/src/github.com/metahub-registry/metahub-api:/Users/christian.kniep/go/src/github.com/metahub-registry/metahub-api
+      - ../metahub-core:/Users/christian.kniep/go/src/github.com/metahub-registry/metahub-core
+      - ../metahub-admin:/Users/christian.kniep/go/src/github.com/metahub-registry/metahub-admin
+      - ./:/Users/christian.kniep/go/src/github.com/metahub-registry/metahub-api
     networks:
       - api-internal
       - mh-data

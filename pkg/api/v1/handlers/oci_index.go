@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/opencontainers/go-digest"
 	"github.com/metahub-registry/metahub-core/pkg/types"
 	"github.com/metahub-registry/metahub-core/pkg/utils"
 )
@@ -48,6 +49,17 @@ func (h Handlers) handleIndex(ctx context.Context, w http.ResponseWriter, req ty
 					utils.Warn(l, span, "lazy manipulation failed for profile '%s' (serving original): %v", req.Profile, manipErr)
 				} else {
 					ml.Manifests = manipulated
+					// Persist the manipulated Index in MinIO so that
+					// Docker's follow-up GET-by-digest can find it.
+					// Without this, the on-the-fly Index digest returned
+					// in HEAD is transient and the GET returns 404.
+					indexBytes := ml.ToOCIBytes()
+					indexDigest := digest.FromBytes(indexBytes).String()
+					if storeErr := h.mag.Minio.ManifestsPutObj(ctx, indexDigest, indexBytes); storeErr != nil {
+						utils.Warn(l, span, "failed to persist manipulated index in MinIO: %v", storeErr)
+					} else {
+						utils.Debug(l, span, "persisted manipulated index %s in MinIO (%d bytes)", utils.ShortenDigest(indexDigest), len(indexBytes))
+					}
 				}
 			}
 		}

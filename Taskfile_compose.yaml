@@ -1,0 +1,358 @@
+version: '3'
+
+# ---------------------------------------------------------------------------
+# Compose stack tasks — lifecycle, admin seeding, dind, graph, e2e
+# ---------------------------------------------------------------------------
+# Usage: task compose:<task>
+# ---------------------------------------------------------------------------
+
+vars:
+  DC_DATA: docker compose -f docker-compose-data.yaml
+  DC_ALL: docker compose -f docker-compose-data.yaml -f docker-compose.yaml
+  DC_MON: docker compose -f docker-compose-monitoring.yaml
+  ADMIN_DIR: /Users/christian.kniep/go/src/github.com/metahub-registry/metahub-admin
+  ADMIN_EXEC: '{{.DC_ALL}} exec -T -w {{.ADMIN_DIR}} dev'
+  ADMIN_CMD: go run main.go
+  DIND_EXEC: '{{.DC_ALL}} exec -T dind'
+  NEO4J_PASS: neo4j123
+  CYPHER: '{{.DC_ALL}} exec -T neo4j cypher-shell -u neo4j -p {{.NEO4J_PASS}}'
+
+tasks:
+  # ===== Lifecycle =====
+
+  up:
+    desc: Start the full compose stack (data + monitoring + api)
+    cmds:
+      - docker network create mh-data || true
+      - docker volume create ce-registry || true
+      - '{{.DC_DATA}} up -d --wait'
+      - task: mh-ui:build
+      - docker compose -f docker-compose.yaml up -d --wait
+
+  up:data:
+    desc: Start data services only (neo4j, minio, registry)
+    cmds:
+      - docker network create mh-data || true
+      - docker volume create ce-registry || true
+      - '{{.DC_DATA}} up -d --wait'
+
+  up:monitoring:
+    desc: Start monitoring services
+    cmds:
+      - '{{.DC_MON}} up -d --wait'
+
+  down:
+    desc: Stop and remove all compose services
+    cmds:
+      - docker compose stop
+      - '{{.DC_MON}} down -v'
+      - '{{.DC_DATA}} down -v'
+
+  # ===== API control =====
+
+  log:
+    desc: Tail metahub API log (pass args via CLI_ARGS)
+    cmds:
+      - '{{.DC_ALL}} exec -ti dev supervisorctl tail {{.CLI_ARGS}} metahub'
+
+  restart:
+    desc: Restart the metahub API process (rebuilds from source)
+    cmds:
+      - '{{.DC_ALL}} exec dev supervisorctl restart metahub'
+
+  # ===== Admin seeding =====
+
+  seed:
+    desc: Full compose seed — glow images + graph (rules, manipulations, profiles) + compute
+    cmds:
+      - task: seed:glow-images
+      - task: seed:clean-orphans
+      - task: seed:graph
+      - task: seed:migrate-labels
+      - task: compute
+
+  seed:glow-images:
+    desc: Pull glow layer images from quay.io and push to local registry:5050
+    vars:
+      UPSTREAM: quay.io/cqnib/metahub-layers/hpc3/glow
+      TARGET: localhost:5050/cqnib/metahub-layers/hpc3/glow
+      TAGS: 1.5.0-amd64 1.5.0-arm64
+    preconditions:
+      - sh: 'curl -sf http://localhost:5050/v2/ > /dev/null'
+        msg: "registry:5050 not reachable on localhost:5050. Is the compose stack running?"
+    cmds:
+      - |
+        for tag in {{.TAGS}}; do
+          echo "=== Pulling {{.UPSTREAM}}:${tag} ==="
+          docker pull "{{.UPSTREAM}}:${tag}"
+          docker tag "{{.UPSTREAM}}:${tag}" "{{.TARGET}}:${tag}"
+          echo "=== Pushing {{.TARGET}}:${tag} ==="
+          docker push "{{.TARGET}}:${tag}"
+        done
+        echo "=== Glow images seeded ==="
+
+  seed:clean-orphans:
+    desc: Remove orphan ManipuLayer/Upstream/Manipulation nodes from prior failed parses
+    cmds:
+      - echo "=== Cleaning orphan manipulation-chain nodes ==="
+      - '{{.CYPHER}} "MATCH (mpl:ManipuLayer) WHERE NOT (mpl)-->(:Manifest) DETACH DELETE mpl"'
+      - '{{.CYPHER}} "MATCH (m:Manipulation) WHERE NOT (m)-[:HAS]->(:ManipuLayer) DETACH DELETE m"'
+      - echo "=== Orphan cleanup complete ==="
+
+  seed:migrate-labels:
+    desc: Bridge schema gap between admin v1.4.3 (ManifestData/Layer) and current metalib (Manifest/Blob)
+    cmds:
+      - echo "=== Migrating node labels and properties ==="
+      - '{{.CYPHER}} "MATCH (md:ManifestData) WHERE NOT md:Manifest SET md:Manifest RETURN count(md) AS manifestsUpdated"'
+      - '{{.CYPHER}} "MATCH (l:Layer) WHERE NOT l:Blob SET l:Blob RETURN count(l) AS blobsUpdated"'
+      - '{{.CYPHER}} "MATCH (l:Layer) WHERE l.type IS NULL SET l.type = ''layer'' RETURN count(l) AS typesSet"'
+      - |
+        {{.CYPHER}} "MATCH (l:Layer)<-[r]-(m:Manifest) WHERE l.mediaType IS NULL AND type(r) <> 'ORIGINAL' SET l.mediaType = REPLACE(REPLACE(type(r), 'docker_image_rootfs_diff_tar_', 'application/vnd.docker.image.rootfs.diff.tar.'), 'oci_image_layer_v1_tar_', 'application/vnd.oci.image.layer.v1.tar+') RETURN count(l) AS mediaTypesSet"
+      - echo "=== Label migration complete ==="
+
+  seed:graph:
+    desc: Seed rules, manipulations, and profiles into the compose Neo4j
+    cmds:
+      - echo "=== Seeding rules ==="
+      - '{{.ADMIN_EXEC}} {{.ADMIN_CMD}} --config ./misc/config/compose-config.yaml parse rules /community-edition/rules'
+      - echo "=== Seeding manipulations (local mirror at registry:5050) ==="
+      - '{{.ADMIN_EXEC}} {{.ADMIN_CMD}} --config ./misc/config/compose-config.yaml parse manipulations /Users/christian.kniep/go/src/github.com/metahub-registry/metahub-api/misc/fixtures/manipulations/layer/glow/1.5.0.yaml'
+      - echo "=== Seeding profiles ==="
+      - '{{.ADMIN_EXEC}} {{.ADMIN_CMD}} --config ./misc/config/compose-config.yaml parse profiles /community-edition/profiles/generic.yaml /community-edition/profiles/glow/1.5.0.yaml'
+      - echo "=== Graph seeded ==="
+
+  seed:admin:
+    desc: Run the full admin parse sequence (profiles + rules + collections)
+    cmds:
+      - '{{.ADMIN_EXEC}} ./misc/bin/run-local.sh /community-edition/collections/qnib/ftest'
+
+  seed:minimal:
+    desc: Seed minimal profiles and rules only
+    cmds:
+      - '{{.ADMIN_EXEC}} ./misc/bin/parse-profiles-rules.sh {{.CLI_ARGS}}'
+
+  # ===== Compute =====
+
+  compute:
+    desc: Run compute for manifests and manifestlists
+    cmds:
+      - task: compute:manifests
+      - task: compute:manifestlists
+
+  compute:manifests:
+    desc: Compute manifests
+    cmds:
+      - '{{.ADMIN_EXEC}} {{.ADMIN_CMD}} --config ./misc/config/compose-config.yaml compute manifests'
+
+  compute:manifestlists:
+    desc: Compute manifestlists (indexes) for all profiles
+    cmds:
+      - '{{.ADMIN_EXEC}} {{.ADMIN_CMD}} --config ./misc/config/compose-config.yaml compute manifestlists'
+
+  # ===== dind operations =====
+
+  login:
+    desc: Login to metahub via dind (generic profile)
+    cmds:
+      - '{{.DIND_EXEC}} sh -c "echo oci | docker login dev:80 -u ${GODMODE_USER} --password-stdin"'
+
+  login:*:
+    desc: Login to metahub via dind with a specific profile (e.g. compose:login:glow#1.5.0)
+    vars:
+      PROF: '{{index .MATCH 0}}'
+    cmds:
+      - '{{.DIND_EXEC}} sh -c "echo oci | docker login dev:80 -u ${GODMODE_USER}/{{.PROF}} --password-stdin"'
+
+  push-alpine:*:
+    desc: Push single-arch alpine via dind (e.g. compose:push-alpine:arm64)
+    vars:
+      ARCH: '{{index .MATCH 0}}'
+    cmds:
+      - '{{.DIND_EXEC}} sh -c "docker pull --platform=linux/{{.ARCH}} alpine:latest"'
+      - '{{.DIND_EXEC}} sh -c "docker tag alpine:latest dev:80/qnib/alpine:latest"'
+      - '{{.DIND_EXEC}} sh -c "docker push dev:80/qnib/alpine:latest"'
+
+  multi-alpine:
+    desc: Build and push multi-arch alpine via buildx
+    cmds:
+      - '{{.DIND_EXEC}} sh -c "docker buildx create --use --name multiarchbuilder"'
+      - '{{.DIND_EXEC}} sh -c "docker buildx build --platform linux/amd64,linux/arm64 --push -t dev:80/qnib/alpine:multiarchlatest --build-arg BASE_IMAGE=alpine:latest ./misc/dockerfiles/alpine/"'
+
+  pull-test:
+    desc: Pull and run qnib/ftest from metahub via dind
+    cmds:
+      - '{{.DIND_EXEC}} sh -c "docker pull dev:80/qnib/ftest:latest"'
+      - '{{.DIND_EXEC}} sh -c "docker run -ti --rm dev:80/qnib/ftest:latest"'
+
+  exec:dind:
+    desc: Open a shell in the dind container
+    cmds:
+      - '{{.DC_ALL}} exec -ti dind bash'
+
+  exec:*:
+    desc: Open a shell in a compose service (e.g. compose:exec:dev)
+    vars:
+      SERVICE: '{{index .MATCH 0}}'
+    cmds:
+      - '{{.DC_ALL}} exec -ti {{.SERVICE}} bash'
+
+  # ===== Graph =====
+
+  graph:delete:
+    desc: Delete all graph data except profiles and rules
+    cmds:
+      - '{{.CYPHER}} "MATCH (n) WHERE (NOT n:Profile) AND (NOT n:Rule) DETACH DELETE n"'
+
+  graph:show:
+    desc: Show first 25 nodes in the graph
+    cmds:
+      - '{{.CYPHER}} "MATCH (n) RETURN n LIMIT 25"'
+
+  # ===== MinIO =====
+
+  minio:setup:
+    desc: Set up mc alias for local MinIO
+    cmds:
+      - mc alias set dev http://localhost:9000 minio miniominio
+
+  minio:clean:
+    desc: Remove all blobs and manifests from MinIO
+    cmds:
+      - mc rm --recursive --force dev/blobs
+      - mc rm --recursive --force dev/manifests
+
+  # ===== OCI conformance =====
+
+  oci:build:
+    desc: Build OCI conformance test binary
+    cmds:
+      - '{{.DC_ALL}} exec -w /opt/results/distribution-spec/conformance oci go test -c'
+
+  oci:conformance:
+    desc: Run full OCI conformance suite (push+pull+discovery+management)
+    cmds:
+      - '{{.DC_ALL}} exec -e OCI_TEST_PUSH=1 -e OCI_TEST_PULL=1 -e OCI_TEST_CONTENT_DISCOVERY=1 -e OCI_TEST_CONTENT_MANAGEMENT=1 oci /usr/local/src/distribution-spec/conformance/conformance.test'
+
+  oci:test:*:*:*:*:
+    vars:
+      PUSH: '{{index .MATCH 0}}'
+      PULL: '{{index .MATCH 1}}'
+      DISCOVER: '{{index .MATCH 2}}'
+      MANAGEMENT: '{{index .MATCH 3}}'
+    cmds:
+      - '{{.DC_ALL}} exec -e OCI_TEST_PUSH={{.PUSH}} -e OCI_TEST_PULL={{.PULL}} -e OCI_TEST_CONTENT_DISCOVERY={{.DISCOVER}} -e OCI_TEST_CONTENT_MANAGEMENT={{.MANAGEMENT}} oci /usr/local/src/distribution-spec/conformance/conformance.test'
+
+  oci:test-dev:*:*:*:*:
+    vars:
+      PUSH: '{{index .MATCH 0}}'
+      PULL: '{{index .MATCH 1}}'
+      DISCOVER: '{{index .MATCH 2}}'
+      MANAGEMENT: '{{index .MATCH 3}}'
+    cmds:
+      - '{{.DC_ALL}} exec -e OCI_TEST_PUSH={{.PUSH}} -e OCI_TEST_PULL={{.PULL}} -e OCI_TEST_CONTENT_DISCOVERY={{.DISCOVER}} -e OCI_TEST_CONTENT_MANAGEMENT={{.MANAGEMENT}} -e OCI_USERNAME=qnib -e OCI_PASSWORD=qnib oci /opt/results/distribution-spec/conformance/conformance.test'
+
+  # ===== E2E (local compose) =====
+
+  e2e:clean:
+    desc: Wipe graph (keep profiles/rules) and MinIO buckets
+    cmds:
+      - '{{.CYPHER}} "MATCH (n) WHERE (NOT n:Profile) AND (NOT n:Rule) DETACH DELETE n"'
+      - mc rm --recursive --force dev/blobs 2>/dev/null || true
+      - mc rm --recursive --force dev/manifests 2>/dev/null || true
+
+  e2e:seed:
+    desc: Seed minimal profiles and rules for E2E
+    cmds:
+      - '{{.ADMIN_EXEC}} ./misc/bin/parse-profiles-rules.sh'
+
+  e2e:push:
+    desc: Push single-arch alpine images (amd64 + arm64) for E2E
+    cmds:
+      - task: login
+      - echo "=== Pushing amd64 ==="
+      - '{{.DIND_EXEC}} sh -c "docker pull --platform=linux/amd64 alpine:latest && docker tag alpine:latest dev:80/qnib/alpine:latest && docker push dev:80/qnib/alpine:latest"'
+      - echo "=== Pushing arm64 ==="
+      - '{{.DIND_EXEC}} sh -c "docker pull --platform=linux/arm64 alpine:latest && docker tag alpine:latest dev:80/qnib/alpine:latest && docker push dev:80/qnib/alpine:latest"'
+
+  e2e:inspect:
+    desc: Inspect the computed multi-arch index via regctl and curl
+    cmds:
+      - echo "=== regctl manifest get ==="
+      - '{{.DIND_EXEC}} sh -c "regctl registry set dev:80 --tls disabled 2>/dev/null; regctl manifest get dev:80/qnib/alpine:latest"'
+      - echo ""
+      - echo "=== Raw OCI Index JSON ==="
+      - |
+        {{.DIND_EXEC}} sh -c '
+          TOKEN=$(curl -s "http://dev:80/auth?service=dev&scope=repository:qnib/alpine:pull" \
+            -u "oci:oci" | jq -r ".token")
+          curl -s -H "Authorization: Bearer ${TOKEN}" \
+               http://dev:80/v2/qnib/alpine/manifests/latest | jq .
+        '
+
+  e2e:verify:
+    desc: Verify the index has exactly 2 descriptors (amd64 + arm64)
+    cmds:
+      - |
+        {{.DIND_EXEC}} sh -c '
+          TOKEN=$(curl -s "http://dev:80/auth?service=dev&scope=repository:qnib/alpine:pull" \
+            -u "oci:oci" | jq -r ".token")
+          RESP=$(curl -s -H "Authorization: Bearer ${TOKEN}" \
+                      http://dev:80/v2/qnib/alpine/manifests/latest)
+          COUNT=$(echo "$RESP" | jq ".manifests | length")
+          ARCHS=$(echo "$RESP" | jq -r "[.manifests[].platform.architecture] | sort | join(\",\")")
+          MT=$(echo "$RESP" | jq -r ".mediaType")
+          echo "mediaType:    $MT"
+          echo "descriptors:  $COUNT"
+          echo "architectures: $ARCHS"
+          echo ""
+          if [ "$COUNT" = "2" ] && [ "$ARCHS" = "amd64,arm64" ]; then
+            echo "PASS: Index has 2 descriptors (amd64, arm64)"
+          else
+            echo "FAIL: Expected 2 descriptors (amd64,arm64), got $COUNT ($ARCHS)"
+            exit 1
+          fi
+        '
+
+  e2e:pull:
+    desc: Verify docker pull resolves the correct manifest
+    cmds:
+      - echo "=== Pulling from multi-arch index ==="
+      - '{{.DIND_EXEC}} sh -c "docker pull dev:80/qnib/alpine:latest"'
+      - echo "=== Verifying pulled image ==="
+      - '{{.DIND_EXEC}} sh -c "docker inspect dev:80/qnib/alpine:latest | jq ''.[0].Architecture''"'
+
+  e2e:graph:
+    desc: Show the Slot/Index/Manifest graph structure
+    cmds:
+      - echo "=== Slots ==="
+      - '{{.CYPHER}} "MATCH (s:Slot) RETURN s.repo AS repo, s.tag AS tag, s.profile AS profile, id(s) AS id"'
+      - echo "=== Slot->Index (POINTS_TO) ==="
+      - '{{.CYPHER}} "MATCH (s:Slot)-[:POINTS_TO]->(i:Index) RETURN s.repo AS repo, s.tag AS tag, s.profile AS profile, i.digest AS indexDigest"'
+      - echo "=== Index->Manifest (REFERENCES) ==="
+      - '{{.CYPHER}} "MATCH (i:Index)-[r:REFERENCES]->(md:Manifest)-[:HAS_PLATFORM]->(p:Platform) RETURN i.digest AS indexDigest, md.digest AS manifestDigest, p.arch AS arch, p.os AS os ORDER BY r.order"'
+
+  e2e:multiarch:
+    desc: Full multi-arch E2E flow (clean, seed, push, verify, pull)
+    cmds:
+      - task: e2e:clean
+      - task: e2e:seed
+      - task: restart
+      - echo "=== Waiting for API to be ready ==="
+      - sleep 5
+      - task: e2e:push
+      - task: e2e:verify
+      - task: e2e:graph
+      - task: e2e:pull
+      - echo ""
+      - echo "=== E2E Multi-Arch Validation Complete ==="
+
+  # ===== Reset =====
+
+  reset:
+    desc: Wipe graph + MinIO, re-seed profiles/rules, restart API
+    cmds:
+      - task: graph:delete
+      - task: e2e:clean
+      - task: seed:minimal
+      - task: restart
+      - echo "=== Environment reset complete ==="

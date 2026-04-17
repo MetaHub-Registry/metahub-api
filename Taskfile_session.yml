@@ -696,12 +696,11 @@ tasks:
 
         cd "${WT_PATH}"
 
-        # Bump to clean release version
-        bump2version --allow-dirty --no-commit --no-tag --new-version "${TARGET}" "${LEVEL}"
-        echo "[${REPO_NAME}] Version set to ${TARGET}"
-        git add -A
-        git commit -m "Release ${TARGET}"
+        # Bump to clean release version — let bump2version create the commit and tag
+        bump2version --allow-dirty --new-version "${TARGET}" "${LEVEL}"
+        echo "[${REPO_NAME}] Version set to ${TARGET} (committed + tagged v${TARGET})"
         git push
+        git push origin "v${TARGET}"
 
         # Mark MR as ready
         echo "[${REPO_NAME}] Marking MR as ready..."

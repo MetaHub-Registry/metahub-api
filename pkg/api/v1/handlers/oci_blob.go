@@ -490,7 +490,7 @@ func (h Handlers) tryBlobGetRedirect(ctx context.Context, w http.ResponseWriter,
 		return true
 	} else if found && h.mag.AllowsUnauthorizedPull(lyrUp) {
 		utils.Debug(l, span, "upstream redirect found: %s (reqDig: %s / upstreamDig: %s)", lyrUp.GetLabel(), utils.ShortenDigest(req.Digest), utils.ShortenDigest(lyrUp.Digest.String()))
-		redUrl := lyrUp.GetBlobUrl(req.Digest)
+		redUrl := h.mag.GetBlobRedirectURL(lyrUp, req.Digest)
 		utils.Debug(l, span, "redirecting to upstream: %s", redUrl)
 		w.Header().Set("Docker-Content-Digest", req.Digest)
 		w.Header().Set(Location, redUrl)

@@ -1,0 +1,29 @@
+meta {
+  name: getTagsList
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{registry}}/v2/{{repo}}/tags/list
+  body: none
+  auth: inherit
+}
+
+headers {
+  Accept: application/json
+}
+
+script:post-response {
+  // Sanity: `latest` must be in the tags list.
+  if (res.status !== 200) throw new Error("tags/list returned " + res.status);
+  const tags = (res.body && res.body.tags) || [];
+  if (!tags.includes("latest")) {
+    throw new Error("tag 'latest' not in tags/list: " + JSON.stringify(tags));
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
