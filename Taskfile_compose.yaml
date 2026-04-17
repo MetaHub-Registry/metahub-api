@@ -12,6 +12,8 @@ vars:
   DC_MON: docker compose -f docker-compose-monitoring.yaml
   ADMIN_EXEC: '{{.DC_ALL}} exec -T -w /etc/metahub-admin admin'
   DIND_EXEC: '{{.DC_ALL}} exec -T dind'
+  NEO4J_PASS: neo4j123
+  CYPHER: '{{.DC_ALL}} exec -T neo4j cypher-shell -u neo4j -p {{.NEO4J_PASS}}'
 
 tasks:
   # ===== Lifecycle =====
@@ -62,7 +64,9 @@ tasks:
     desc: Full compose seed — glow images + graph (rules, manipulations, profiles) + compute
     cmds:
       - task: seed:glow-images
+      - task: seed:clean-orphans
       - task: seed:graph
+      - task: seed:migrate-labels
       - task: compute
 
   seed:glow-images:
@@ -85,13 +89,35 @@ tasks:
         done
         echo "=== Glow images seeded ==="
 
+  seed:clean-orphans:
+    desc: Remove orphan ManipuLayer/Upstream/Manipulation nodes from prior failed parses
+    cmds:
+      - echo "=== Cleaning orphan manipulation-chain nodes ==="
+      - '{{.CYPHER}} "MATCH (mpl:ManipuLayer) WHERE NOT (mpl)-->(:Manifest) DETACH DELETE mpl"'
+      - '{{.CYPHER}} "MATCH (m:Manipulation) WHERE NOT (m)-[:HAS]->(:ManipuLayer) DETACH DELETE m"'
+      - echo "=== Orphan cleanup complete ==="
+
+  seed:migrate-labels:
+    desc: Bridge schema gap between admin v1.4.3 (ManifestData/Layer) and current metalib (Manifest/Blob)
+    cmds:
+      - echo "=== Migrating node labels and properties ==="
+      - '{{.CYPHER}} "MATCH (md:ManifestData) WHERE NOT md:Manifest SET md:Manifest RETURN count(md) AS manifestsUpdated"'
+      - '{{.CYPHER}} "MATCH (l:Layer) WHERE NOT l:Blob SET l:Blob RETURN count(l) AS blobsUpdated"'
+      - '{{.CYPHER}} "MATCH (l:Layer) WHERE l.type IS NULL SET l.type = ''layer'' RETURN count(l) AS typesSet"'
+      - |
+        {{.CYPHER}} "MATCH (l:Layer)<-[r]-(m:Manifest) WHERE l.mediaType IS NULL AND type(r) <> 'ORIGINAL' SET l.mediaType = REPLACE(REPLACE(type(r), 'docker_image_rootfs_diff_tar_', 'application/vnd.docker.image.rootfs.diff.tar.'), 'oci_image_layer_v1_tar_', 'application/vnd.oci.image.layer.v1.tar+') RETURN count(l) AS mediaTypesSet"
+      - echo "=== Label migration complete ==="
+
   seed:graph:
     desc: Seed rules, manipulations, and profiles into the compose Neo4j
     cmds:
       - echo "=== Seeding rules ==="
       - '{{.ADMIN_EXEC}} metahub-admin --config ./misc/config/compose-config.yaml parse rules /community-edition/rules'
-      - echo "=== Seeding manipulations ==="
-      - '{{.ADMIN_EXEC}} metahub-admin --config ./misc/config/compose-config.yaml parse manipulations /community-edition/manipulations/layer/glow/1.5.0.yaml'
+      - echo "=== Copying patched glow manipulation YAML into admin ==="
+      - '{{.DC_ALL}} exec -T admin mkdir -p /tmp/seed/manipulations/layer/glow'
+      - '{{.DC_ALL}} cp misc/fixtures/manipulations/layer/glow/1.5.0.yaml admin:/tmp/seed/manipulations/layer/glow/1.5.0.yaml'
+      - echo "=== Seeding manipulations (local mirror at registry:5050) ==="
+      - '{{.ADMIN_EXEC}} metahub-admin --config ./misc/config/compose-config.yaml parse manipulations /tmp/seed/manipulations/layer/glow/1.5.0.yaml'
       - echo "=== Seeding profiles ==="
       - '{{.ADMIN_EXEC}} metahub-admin --config ./misc/config/compose-config.yaml parse profiles /community-edition/profiles/generic.yaml /community-edition/profiles/glow/1.5.0.yaml'
       - echo "=== Graph seeded ==="
@@ -176,12 +202,12 @@ tasks:
   graph:delete:
     desc: Delete all graph data except profiles and rules
     cmds:
-      - '{{.DC_ALL}} exec neo4j cypher-shell -u neo4j -p test "MATCH (n) WHERE (NOT n:Profile) AND (NOT n:Rule) DETACH DELETE n"'
+      - '{{.CYPHER}} "MATCH (n) WHERE (NOT n:Profile) AND (NOT n:Rule) DETACH DELETE n"'
 
   graph:show:
     desc: Show first 25 nodes in the graph
     cmds:
-      - '{{.DC_ALL}} exec neo4j cypher-shell -u neo4j -p test "MATCH (n) RETURN n LIMIT 25"'
+      - '{{.CYPHER}} "MATCH (n) RETURN n LIMIT 25"'
 
   # ===== MinIO =====
 
@@ -231,7 +257,7 @@ tasks:
   e2e:clean:
     desc: Wipe graph (keep profiles/rules) and MinIO buckets
     cmds:
-      - '{{.DC_ALL}} exec neo4j cypher-shell -u neo4j -p test "MATCH (n) WHERE (NOT n:Profile) AND (NOT n:Rule) DETACH DELETE n"'
+      - '{{.CYPHER}} "MATCH (n) WHERE (NOT n:Profile) AND (NOT n:Rule) DETACH DELETE n"'
       - mc rm --recursive --force dev/blobs 2>/dev/null || true
       - mc rm --recursive --force dev/manifests 2>/dev/null || true
 
@@ -300,11 +326,11 @@ tasks:
     desc: Show the Slot/Index/Manifest graph structure
     cmds:
       - echo "=== Slots ==="
-      - '{{.DC_ALL}} exec neo4j cypher-shell -u neo4j -p test "MATCH (s:Slot) RETURN s.repo AS repo, s.tag AS tag, s.profile AS profile, id(s) AS id"'
+      - '{{.CYPHER}} "MATCH (s:Slot) RETURN s.repo AS repo, s.tag AS tag, s.profile AS profile, id(s) AS id"'
       - echo "=== Slot->Index (POINTS_TO) ==="
-      - '{{.DC_ALL}} exec neo4j cypher-shell -u neo4j -p test "MATCH (s:Slot)-[:POINTS_TO]->(i:Index) RETURN s.repo AS repo, s.tag AS tag, s.profile AS profile, i.digest AS indexDigest"'
+      - '{{.CYPHER}} "MATCH (s:Slot)-[:POINTS_TO]->(i:Index) RETURN s.repo AS repo, s.tag AS tag, s.profile AS profile, i.digest AS indexDigest"'
       - echo "=== Index->Manifest (REFERENCES) ==="
-      - '{{.DC_ALL}} exec neo4j cypher-shell -u neo4j -p test "MATCH (i:Index)-[r:REFERENCES]->(md:Manifest)-[:HAS_PLATFORM]->(p:Platform) RETURN i.digest AS indexDigest, md.digest AS manifestDigest, p.arch AS arch, p.os AS os ORDER BY r.order"'
+      - '{{.CYPHER}} "MATCH (i:Index)-[r:REFERENCES]->(md:Manifest)-[:HAS_PLATFORM]->(p:Platform) RETURN i.digest AS indexDigest, md.digest AS manifestDigest, p.arch AS arch, p.os AS os ORDER BY r.order"'
 
   e2e:multiarch:
     desc: Full multi-arch E2E flow (clean, seed, push, verify, pull)
