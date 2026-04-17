@@ -1,0 +1,72 @@
+meta {
+  name: neo4jSlotChain
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{neo4j_url}}/db/neo4j/tx/commit
+  body: json
+  auth: basic
+}
+
+auth:basic {
+  username: {{neo4j_user}}
+  password: {{neo4j_password}}
+}
+
+headers {
+  Content-Type: application/json
+  Accept: application/json
+}
+
+body:json {
+  {
+    "statements": [
+      {
+        "statement": "MATCH (s:Slot {repo:$repo, tag:$tag, profile:'generic'}) OPTIONAL MATCH (s)-[:HAS_PUSHED]->(m:Manifest) OPTIONAL MATCH (s)-[:POINTS_TO]->(idx:Index) RETURN count(DISTINCT s) AS slots, count(DISTINCT m) AS pushed, count(DISTINCT idx) AS indexes, collect(DISTINCT idx.digest)[0] AS index_digest",
+        "parameters": {"repo": "{{repo}}", "tag": "{{tag}}"}
+      }
+    ]
+  }
+}
+
+script:post-response {
+  // Same assertion as run-verify-ce.sh #9: the qnib/ftest:latest#generic
+  // Slot must have both HAS_PUSHED manifests AND a computed Index.
+  if (res.status !== 200) {
+    throw new Error("Neo4j tx/commit returned " + res.status + ": " + JSON.stringify(res.body));
+  }
+  const row = res.body.results[0].data[0].row;
+  const slots = row[0], pushed = row[1], indexes = row[2], indexDigest = row[3];
+  console.log("slots=" + slots + " pushed=" + pushed + " indexes=" + indexes + " index_digest=" + indexDigest);
+  if (slots < 1) throw new Error("no :Slot for qnib/ftest:latest#generic (parse-collections slot-wiring did not run?)");
+  if (pushed < 1) throw new Error("Slot has no :HAS_PUSHED manifest");
+  if (indexes < 1) throw new Error("Slot has no :POINTS_TO->Index (compute-manifestlists skipped the :generic CTTP)");
+  bru.setVar("neo4jIndexDigest", indexDigest || "");
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
+
+docs {
+  Out-of-band sanity check that talks directly to Neo4j's HTTP Cypher
+  endpoint (NOT the metahub-api). Useful to disambiguate between
+  "metahub-api bug" and "graph-state missing" when the /v2 endpoints
+  return unexpected results.
+
+  Set `neo4j_url`, `neo4j_user`, `neo4j_password` in the active
+  environment before running. For the metahub-dev stack that's:
+
+      neo4j_url      = http://neo4j.dev.example.com
+      neo4j_user     = neo4j
+      neo4j_password = neo4j123
+
+  For the local compose stack (if neo4j is exposed) it's usually:
+
+      neo4j_url      = http://localhost:7474
+      neo4j_user     = neo4j
+      neo4j_password = test
+}

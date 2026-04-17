@@ -22,6 +22,16 @@ sessions/add-oauth/
   - **Deferred changes** — future work discovered during the session but not acted on now. These can be carried into a later session.
 - **Version levels are decided at session end**, per-repo, based on actual changes. During the session, versions use `-devN` on the current base version (e.g. `3.0.0-dev1`, not `3.0.1-dev1`).
 
+### Tools
+
+Use the MCP servers to do inspection instead of trying it with bash
+
+- neo4j-main: metahub-dev instance which is tied to the GoCD livecycle
+- neo4j-local: compose neo4j instance for fast local iterations
+- jeager-local: copose jaeger instance to check traces of metahub-api interactions.
+
+Please use the MCP
+
 ### Session Lifecycle
 
 1. **Create** — `task session:new -- <description>`. Sets up worktrees, branches, draft MRs, bumps to `-dev1`.

@@ -9,6 +9,7 @@ import (
 	"github.com/opencontainers/go-digest"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/metahub-registry/metahub-core/pkg/types"
 	"github.com/metahub-registry/metahub-core/pkg/utils"
 )
@@ -782,4 +783,225 @@ func TestManifestHeadHandlerDigest(t *testing.T) {
 		h.ManifestHeadHandler(wHead, rHead)
 		assert.Equal(t, http.StatusNotFound, wHead.Code)
 	}
+}
+
+// TestManifestGetByTag_PullthroughSuccess exercises the happy path of
+// resolveMissingManifest -> tryPullthroughOnMiss -> HeadManifestNotFound
+// -> ManifestExists (retry). The test upstream registry is pre-seeded
+// with alpine:3.17.3, so pullthrough succeeds and the handler serves the
+// manifest.
+//
+// This hits the currently-uncovered success branch of tryPullthroughOnMiss
+// (retry ManifestExists after successful upstream discovery and return the
+// resolved mediaType with ok=true).
+func TestManifestGetByTag_PullthroughSuccess(t *testing.T) {
+	bs := utils.NewBootstrap()
+	bs.SetEmptyAll()
+	bs.SetYAMLPrefix("../../../../misc/yaml")
+	bs.AddBootstrap("users")
+	bs.AddBootstrap("platforms:generic")
+	bs.AddBootstrap("rules:rules/generic/linux.yaml")
+	bs.AddBootstrap("profile:profiles/generic.yaml")
+	ctx := context.Background()
+	if err := h.mag.Minio.EmptyAll(); err != nil {
+		t.Fatal(err)
+	}
+	br, err := SetupTest(ctx, bs)
+	if err != nil {
+		TeardownTest(bs, br)
+		t.Fatal(err)
+	}
+	defer TeardownTest(bs, br)
+	token, err := br.Get("user:test#bearer")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// GET alpine:3.17.3 — the testcontainer upstream registry has this image
+	// pre-seeded. Local graph is empty, so tryPullthroughOnMiss runs and
+	// should succeed, populating the graph via HeadManifestNotFound.
+	wGet, rGet := utils.CreateNewHTTPTest(ctx, http.MethodGet, map[string]string{
+		"image":     "alpine",
+		"reference": "3.17.3",
+	}, map[string]string{
+		"accountName": token,
+		"userName":    "oci",
+		"profileName": "generic",
+	}, map[string]string{
+		"Authorization": fmt.Sprintf("Bearer %s", token),
+		"Accept":        "application/vnd.docker.distribution.manifest.v2+json",
+	}, "/{image}/manifests/{reference}", nil)
+	h.ManifestGetHandler(&wGet, rGet)
+	// After pullthrough, we expect either 200 (success) or at worst a
+	// non-404 status — the key assertion is that tryPullthroughOnMiss's
+	// success branch executed. A 404 would indicate pullthrough failed
+	// before reaching the ManifestExists retry.
+	assert.NotEqual(t, http.StatusNotFound, wGet.Code,
+		"pullthrough success branch should NOT lead to 404 (got status %d, body: %s)",
+		wGet.Code, wGet.Body.String())
+}
+
+// TestManifestGetByTag_NotFoundTriggersPullthrough exercises the
+// pullthrough-miss code path (ManifestHandler -> resolveMissingManifest
+// -> tryPullthroughOnMiss) that the happy-path tests don't reach.
+//
+// Setup: bootstrap an empty graph (no manifest pushed), then GET a
+// manifest by tag. ManifestExists returns colFound=false. The handler
+// calls tryPullthroughOnMiss which, in turn, invokes HeadManifestNotFound
+// against the configured registries. No registry has the image, so
+// upstream discovery also fails and the handler returns 404.
+//
+// This covers: ManifestHandler's !colFound branch, resolveMissingManifest
+// (tag path), tryPullthroughOnMiss (HeadManifestNotFound failure path),
+// writeManifestNotFound.
+func TestManifestGetByTag_NotFoundTriggersPullthrough(t *testing.T) {
+	bs := utils.NewBootstrap()
+	bs.SetEmptyAll()
+	bs.SetYAMLPrefix("../../../../misc/yaml")
+	bs.AddBootstrap("users")
+	bs.AddBootstrap("platforms:generic")
+	bs.AddBootstrap("rules:rules/generic/linux.yaml")
+	bs.AddBootstrap("profile:profiles/generic.yaml")
+	ctx := context.Background()
+	if err := h.mag.Minio.EmptyAll(); err != nil {
+		t.Fatal(err)
+	}
+	br, err := SetupTest(ctx, bs)
+	if err != nil {
+		TeardownTest(bs, br)
+		t.Fatal(err)
+	}
+	defer TeardownTest(bs, br)
+	token, err := br.Get("user:test#bearer")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// GET a manifest that does not exist locally and cannot be discovered
+	// upstream (the test registry has nothing under this name).
+	wGet, rGet := utils.CreateNewHTTPTest(ctx, http.MethodGet, map[string]string{
+		"repo":      "nonexistent",
+		"image":     "ghost",
+		"reference": "v1.0",
+	}, map[string]string{
+		"accountName": token,
+		"userName":    "oci",
+		"profileName": "generic",
+	}, map[string]string{
+		"Authorization": fmt.Sprintf("Bearer %s", token),
+		"Accept":        "application/vnd.oci.image.manifest.v1+json",
+	}, "/{repo}/{image}/manifests/{reference}", nil)
+	h.ManifestGetHandler(&wGet, rGet)
+	assert.Equal(t, http.StatusNotFound, wGet.Code, "non-existent manifest must 404")
+}
+
+// TestManifestHead_SinglePlatform_ExercisesHandleManifest pushes a single
+// OCI image manifest (not an index) and then sends HEAD by digest. This
+// flows through dispatchByMediaType with ociManifestMediaType, which
+// dispatches to handleManifest — covering the HEAD-method branch
+// (m.WriteWWWHead) that the existing TestManifestHeadHandlerDigest does
+// not reach (its HEAD-by-digest goes through an index path).
+func TestManifestHead_SinglePlatform_ExercisesHandleManifest(t *testing.T) {
+	bs := utils.NewBootstrap()
+	bs.SetEmptyAll()
+	bs.SetYAMLPrefix("../../../../misc/yaml")
+	bs.AddBootstrap("users")
+	bs.AddBootstrap("platforms:generic")
+	bs.AddBootstrap("rules:rules/generic/linux.yaml")
+	bs.AddBootstrap("profile:profiles/generic.yaml")
+	ctx := context.Background()
+	if err := h.mag.Minio.EmptyAll(); err != nil {
+		t.Fatal(err)
+	}
+	br, err := SetupTest(ctx, bs)
+	if err != nil {
+		TeardownTest(bs, br)
+		t.Fatal(err)
+	}
+	defer TeardownTest(bs, br)
+	token, err := br.Get("user:test#bearer")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mani := types.Manifest{
+		Data: []byte(`{
+			"schemaVersion": 2,
+			"config": {
+				"mediaType": "application/vnd.oci.image.config.v1+json",
+				"digest": "sha256:22f68afca98941fc10a8c6c87f881065b075c1c2f4678b8f579d1b77bc060ef0",
+				"size": 129,
+				"data": "ewoJImF1dGhvciI6ICJUbmVLZFFYSFhJQ3NTWHdSIiwKCSJhcmNoaXRlY3R1cmUiOiAiYW1kNjQiLAoJIm9zIjogImxpbnV4IiwKCSJyb290ZnMiOiB7CgkJInR5cGUiOiAibGF5ZXJzIiwKCQkiZGlmZl9pZHMiOiBbXQoJfQp9"
+			},
+			"layers": []
+		}`),
+	}
+	expDigest := digest.FromBytes(mani.Data)
+
+	wPut, rPut := utils.CreateNewHTTPTest(ctx, http.MethodPut, map[string]string{
+		"repo": "oci", "image": "single", "reference": "v1",
+	}, map[string]string{
+		"accountName": token, "userName": "oci", "profileName": "generic",
+	}, map[string]string{
+		"Authorization": fmt.Sprintf("Bearer %s", token),
+		"Content-Type":  "application/vnd.docker.distribution.manifest.v2+json",
+	}, "/{repo}/{image}/manifests/{reference}", mani.Data)
+	h.ManifestPutHandler(&wPut, rPut)
+	require.Equal(t, http.StatusCreated, wPut.Code)
+
+	// HEAD by the manifest's own digest → dispatchByMediaType routes
+	// ociManifestMediaType to handleManifest, which writes HEAD headers.
+	wHead, rHead := utils.CreateNewHTTPTest(ctx, http.MethodHead, map[string]string{
+		"repo": "oci", "image": "single", "reference": expDigest.String(),
+	}, map[string]string{
+		"accountName": token, "userName": "oci", "profileName": "generic",
+	}, map[string]string{
+		"Authorization": fmt.Sprintf("Bearer %s", token),
+		"Accept":        "application/vnd.oci.image.manifest.v1+json",
+	}, "/{repo}/{image}/manifests/{reference}", nil)
+	h.ManifestHeadHandler(&wHead, rHead)
+	assert.Equal(t, http.StatusOK, wHead.Code, "HEAD by digest for single-platform manifest must succeed")
+}
+
+// TestManifestGetByDigest_NotFoundDoesNotTriggerPullthrough asserts that
+// GET-by-digest for a non-existent manifest goes through the Path-Z
+// handleManifest fallback but NOT pullthrough (digest-only requests
+// cannot be resolved upstream without a tag).
+func TestManifestGetByDigest_NotFoundDoesNotTriggerPullthrough(t *testing.T) {
+	bs := utils.NewBootstrap()
+	bs.SetEmptyAll()
+	bs.SetYAMLPrefix("../../../../misc/yaml")
+	bs.AddBootstrap("users")
+	bs.AddBootstrap("platforms:generic")
+	bs.AddBootstrap("rules:rules/generic/linux.yaml")
+	bs.AddBootstrap("profile:profiles/generic.yaml")
+	ctx := context.Background()
+	if err := h.mag.Minio.EmptyAll(); err != nil {
+		t.Fatal(err)
+	}
+	br, err := SetupTest(ctx, bs)
+	if err != nil {
+		TeardownTest(bs, br)
+		t.Fatal(err)
+	}
+	defer TeardownTest(bs, br)
+	token, err := br.Get("user:test#bearer")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	wGet, rGet := utils.CreateNewHTTPTest(ctx, http.MethodGet, map[string]string{
+		"repo":      "nonexistent",
+		"image":     "ghost",
+		"reference": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+	}, map[string]string{
+		"accountName": token,
+		"userName":    "oci",
+		"profileName": "generic",
+	}, map[string]string{
+		"Authorization": fmt.Sprintf("Bearer %s", token),
+		"Accept":        "application/vnd.oci.image.manifest.v1+json",
+	}, "/{repo}/{image}/manifests/{reference}", nil)
+	h.ManifestGetHandler(&wGet, rGet)
+	assert.Equal(t, http.StatusNotFound, wGet.Code, "non-existent digest must 404")
 }

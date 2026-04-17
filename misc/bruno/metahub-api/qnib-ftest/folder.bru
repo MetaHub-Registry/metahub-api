@@ -1,0 +1,113 @@
+meta {
+  name: qnib-ftest
+  seq: 5
+}
+
+auth {
+  mode: bearer
+}
+
+auth:bearer {
+  token: {{oci_bearer}}
+}
+
+vars:pre-request {
+  repo: qnib/ftest
+  tag: latest
+}
+
+docs {
+  # qnib-ftest — inspect the qnib/ftest artefacts populated by
+  # `metahub-admin parse collections` (pullthrough-repo session).
+
+  ## Auth prerequisite (one-time per session)
+
+  Every request in this folder sends `Authorization: Bearer {{oci_bearer}}`
+  (inherited via folder-level `auth:bearer`). To populate `oci_bearer`,
+  do ONE of:
+
+    A) Run `qnib-ftest/refreshToken` (seq 0). Single click — performs
+       the /v2 WWW-Authenticate challenge AND the /auth token exchange
+       inline, then stores `oci_bearer` in the active environment.
+       Also honours the `profile` env var (see below).
+
+    B) Run `auth/get` then `auth/getToken` in order (the classic path).
+       Same outcome EXCEPT profile selection — classic flow always
+       authenticates as plain `{{username}}` which maps to profile
+       `generic`. Use `refreshToken` when you need non-generic.
+
+  Both paths require `username` + `password` in the active environment
+  (already set to `oci` / `oci` in `metahub-dev.bru` and
+  `metahub-local.bru`).
+
+  ## Picking a profile
+
+  The collection defines `profile: generic` at the top level
+  (see `collection.bru`). Profile is carried inside the Basic-auth
+  username by the `<user>/<profile>` convention (see
+  pkg/api/v1/handlers/auth.go and metalib's ParseProfile).
+  `refreshToken` reads `profile` and builds the Basic username as
+  `{{username}}/{{profile}}` unless profile == "generic".
+
+  Precedence (lowest -> highest, Bruno standard):
+    1. collection.bru (vars:pre-request { profile: generic })
+    2. environments/*.bru vars
+    3. folder.bru vars:pre-request
+    4. per-request vars:pre-request
+
+  To switch profile for the qnib-ftest chain, pick ONE override level:
+    A) Collection-wide: edit collection.bru and change
+         vars:pre-request { profile: glow#1.5.0 }
+    B) Per-environment: add `profile: glow#1.5.0` to the active
+       environment file (metahub-dev.bru / metahub-local.bru).
+    C) Folder-wide: add `profile: glow#1.5.0` to this folder's
+       vars:pre-request block below.
+    D) Per-request: add `vars:pre-request { profile: glow#1.5.0 }`
+       to a single .bru file.
+
+  Common labels:
+    profile: generic             (the default, always works)
+    profile: glow#1.5.0          (wraps manifests with the glow layer)
+    profile: cpu#zen2            (microarch variant)
+
+  Then re-run `refreshToken` to mint a new `oci_bearer` for that
+  profile, and run the rest of the chain. The server resolves a
+  DIFFERENT `:Index` per profile, so the Index body / child
+  manifests / layer digests will differ.
+
+  Example: for `profile: generic` the Index has 1 child (arm64,
+  size 735). For `profile: glow#1.5.0` the Index has 2 children
+  (arm64 + amd64 with the glow layer applied, each size 1056).
+
+  ## Request sequence
+
+  After `refreshToken` (seq 0) runs, execute the inspection chain in
+  order — each post-response script extracts the variable the next
+  step needs:
+
+    0. refreshToken        — mint oci_bearer (single-click auth)
+    1. getTagsList         — confirm the Tag is discoverable
+    2. headIndexByTag      — HEAD the Slot's computed :Index,
+                             content-negotiated as an OCI image-index
+                             (regression guard #10)
+    3. getIndexByTag       — GET body; post-script extracts
+                             `indexDigest` + `childManifestDigest` +
+                             `childManifestSize`
+    4. getIndexByDigest    — round-trip Index by its own digest
+    5. headChildManifest   — HEAD first per-arch manifest; cross-checks
+                             Index-descriptor-size vs manifest-body-size
+                             (regression guard for metalib aefa27f)
+    6. getChildManifest    — GET same; extracts `configDigest` +
+                             `firstLayerDigest`
+    7. getConfigBlob       — GET image config blob (regression guard
+                             for pipeline-repo cab4cf7 bucket alignment)
+    8. headLayerBlob       — HEAD first layer blob
+    9. neo4jSlotChain      — out-of-band Neo4j Cypher: Slot->HAS_PUSHED
+                             ->Manifest + Slot->POINTS_TO->Index counts
+                             (mirrors Verify-CE #9)
+
+  The chain mirrors what `manifest-tool inspect <registry>/qnib/ftest:latest`
+  performs under the hood. Each step's post-response script raises a
+  contextual error if it fails, so "step 4 returned 404" isolates the
+  problem immediately.
+}

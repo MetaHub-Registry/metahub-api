@@ -65,6 +65,8 @@ func Initialize(mag magazine.Magazine, oidcProvider *handlers.OIDCProvider, godm
 		// Profiles (public)
 		r.Get("/profiles/{label}", h.ProfileGetOne)
 		r.Get("/profiles", h.ProfilesGetAll)
+		// Upstream registries (public)
+		r.Get("/registries", h.RegistriesGetAll)
 		// OIDC login / callback (public)
 		r.Get("/login", h.OIDCLogin)
 		r.Get("/callback", h.OIDCCallback)

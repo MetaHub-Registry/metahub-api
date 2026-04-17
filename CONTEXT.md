@@ -89,3 +89,27 @@ SonarQube project key is in `.env`.
 - The `sessions/` directory is gitignored — worktrees live there
 - `docker-compose.yaml` uses namespace `conformance` (was typo `confirmance`)
 - Version parsing in `internal/cmd/version.go` handles `-devN` suffix
+
+## 2026-04-17 Continuation
+
+### What changed
+- **Name/URL registry config split**: `RegistryConfig.Hostname` -> `Name` (slug alias in image paths) + `URL` (actual network endpoint). Config uses `name: local-reg, url: registry:5050` format. Backward compatible with legacy `hostname:` field.
+- **TLS-aware blob redirects**: Replaced `lyrUp.GetBlobUrl()` (hardcoded https) with `h.mag.GetBlobRedirectURL()` that derives scheme from `RegistryConfig.TLS`. Fixes "server gave HTTP response to HTTPS client" for plain-HTTP upstreams.
+- **GET /api/v1/registries endpoint**: New public handler `RegistriesGetAll` + route + 3 tests in `ui_registries_test.go`.
+- **Compose task refactor**: All compose tasks moved to `Taskfile_compose.yaml` under `compose:*` namespace. New seed tasks: `compose:seed`, `compose:seed:glow-images`, `compose:seed:graph`, `compose:seed:clean-orphans`, `compose:seed:migrate-labels`.
+- **Admin service removed**: `docker-compose.yaml` no longer has an `admin` service. Admin commands run via `go run main.go` inside the `dev` container which has metahub-admin source mounted.
+- **Glow manipulation fixture**: `misc/fixtures/manipulations/layer/glow/1.5.0.yaml` pointing at `registry:5050` mirror (overrides community-edition's quay.io-pointing YAML).
+
+### Key files
+- `Taskfile.yml` — slimmed to just includes + localConfig
+- `Taskfile_compose.yaml` — all compose tasks with shared vars
+- `pkg/api/v1/handlers/ui_registries.go` — registries endpoint
+- `pkg/api/v1/handlers/oci_blob.go` — uses `GetBlobRedirectURL`
+- `pkg/api/v1/handlers/oci_manifest.go` — `resolveUpstreamTarget` returns URL
+- `misc/config/compose-config.yaml` — name/url registries + blobs bucket
+- `misc/fixtures/manipulations/layer/glow/1.5.0.yaml` — local glow fixture
+
+### Gotchas
+- Old `task seedAdmin` etc. no longer work — use `task compose:seed:admin` (namespace changed)
+- `compose-config.yaml` uses `name`/`url` (not `hostname`) for registries with ports — clients like manifest-tool reject colons in image path segments
+- The `dev` container must have both metalib and metahub-admin source mounted for `compose:seed` to work

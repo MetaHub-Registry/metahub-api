@@ -1,0 +1,38 @@
+meta {
+  name: getChildManifest
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{registry}}/v2/{{repo}}/manifests/{{childManifestDigest}}
+  body: none
+  auth: inherit
+}
+
+headers {
+  Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json
+}
+
+script:post-response {
+  if (res.status !== 200) {
+    throw new Error("GET " + req.url + " expected 200, got " + res.status);
+  }
+  const body = res.body;
+  if (!body || !body.config || !body.config.digest) {
+    throw new Error("Manifest body missing config.digest: " + JSON.stringify(body).slice(0, 200));
+  }
+  bru.setVar("configDigest", body.config.digest);
+  bru.setVar("configSize", String(body.config.size || ""));
+
+  const layers = body.layers || [];
+  if (layers.length > 0 && layers[0].digest) {
+    bru.setVar("firstLayerDigest", layers[0].digest);
+    bru.setVar("firstLayerSize", String(layers[0].size || ""));
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
