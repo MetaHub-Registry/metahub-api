@@ -5,7 +5,10 @@ version: '3'
 # ---------------------------------------------------------------------------
 # Usage: task compose:<task>
 # ---------------------------------------------------------------------------
-
+includes:
+  mh-ui:
+    taskfile: ~/src/gitlab.com/qnib-frontend/metahub-ui/Taskfile.yaml
+    dir: ~/src/gitlab.com/qnib-frontend/metahub-ui/
 vars:
   DC_DATA: docker compose -f docker-compose-data.yaml
   DC_ALL: docker compose -f docker-compose-data.yaml -f docker-compose.yaml
