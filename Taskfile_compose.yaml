@@ -120,8 +120,9 @@ tasks:
       - '{{.ADMIN_EXEC}} {{.ADMIN_CMD}} --config ./misc/config/compose-config.yaml parse rules /community-edition/rules'
       - echo "=== Seeding manipulations (local mirror at registry:5050) ==="
       - '{{.ADMIN_EXEC}} {{.ADMIN_CMD}} --config ./misc/config/compose-config.yaml parse manipulations /Users/christian.kniep/go/src/github.com/metahub-registry/metahub-api/misc/fixtures/manipulations/layer/glow/1.5.0.yaml'
+      - '{{.ADMIN_EXEC}} {{.ADMIN_CMD}} --config ./misc/config/compose-config.yaml parse manipulations /community-edition/manipulations/layer/glow-extended/1.5.0.yaml'
       - echo "=== Seeding profiles ==="
-      - '{{.ADMIN_EXEC}} {{.ADMIN_CMD}} --config ./misc/config/compose-config.yaml parse profiles /community-edition/profiles/generic.yaml /community-edition/profiles/glow/1.5.0.yaml'
+      - '{{.ADMIN_EXEC}} {{.ADMIN_CMD}} --config ./misc/config/compose-config.yaml parse profiles /community-edition/profiles/generic.yaml /community-edition/profiles/glow/1.5.0.yaml /community-edition/profiles/glow-extended/1.5.0.yaml'
       - echo "=== Graph seeded ==="
 
   seed:admin:
