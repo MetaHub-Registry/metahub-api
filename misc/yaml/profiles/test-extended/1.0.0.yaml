@@ -1,0 +1,3 @@
+rule: generic:linux=true
+manipulations:
+  - label: "layer/test-extended#1.0.0"

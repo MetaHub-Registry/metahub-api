@@ -1,0 +1,156 @@
+12:11:59.765 INFO  Scanner configuration file: /opt/homebrew/Cellar/sonar-scanner/8.0.1.6346/libexec/conf/sonar-scanner.properties
+12:11:59.768 INFO  Project root configuration file: /Users/christian.kniep/go/src/github.com/metahub-registry/metahub-api/sessions/ui-and-manipulation/metahub-api/sonar-project.properties
+12:11:59.780 INFO  SonarScanner CLI 8.0.1.6346
+12:11:59.781 INFO  Mac OS X 26.4.1 aarch64
+12:12:00.314 INFO  Communicating with SonarQube Community Build 26.1.0.118079
+12:12:00.314 INFO  JRE provisioning: os[macos], arch[arm64]
+12:12:00.598 INFO  Starting SonarScanner Engine...
+12:12:00.599 INFO  Java 21.0.9 Eclipse Adoptium (64-bit)
+12:12:01.219 INFO  Load global settings
+12:12:01.342 WARN  The token used for this analysis will expire on: April 23, 2026
+12:12:01.342 WARN  Analysis executed with this token will fail after the expiration date.
+12:12:01.357 INFO  Load global settings (done) | time=137ms
+12:12:01.358 INFO  Server id: ABF1ED95-AZz2aKfXYK8-39UuSp45
+12:12:01.363 INFO  Loading required plugins
+12:12:01.363 INFO  Load plugins index
+12:12:01.385 INFO  Load plugins index (done) | time=22ms
+12:12:01.386 INFO  Load/download plugins
+12:12:01.403 INFO  Load/download plugins (done) | time=18ms
+12:12:01.529 INFO  Process project properties
+12:12:01.536 INFO  Process project properties (done) | time=7ms
+12:12:01.544 INFO  Project key: metahub-api
+12:12:01.544 INFO  Base dir: /Users/christian.kniep/go/src/github.com/metahub-registry/metahub-api/sessions/ui-and-manipulation/metahub-api
+12:12:01.544 INFO  Working dir: /Users/christian.kniep/go/src/github.com/metahub-registry/metahub-api/sessions/ui-and-manipulation/metahub-api/.scannerwork
+12:12:01.548 INFO  Load project settings for component key: 'metahub-api'
+12:12:01.567 INFO  Load project settings for component key: 'metahub-api' (done) | time=18ms
+12:12:01.584 INFO  Load project branches
+12:12:01.601 INFO  Load project branches (done) | time=17ms
+12:12:01.601 INFO  Load branch configuration
+12:12:01.601 INFO  Load branch configuration (done) | time=0ms
+12:12:01.612 INFO  Load quality profiles
+12:12:01.648 INFO  Load quality profiles (done) | time=36ms
+12:12:01.669 INFO  Load active rules
+12:12:01.812 INFO  Load active rules (done) | time=143ms
+12:12:01.815 INFO  Load analysis cache
+12:12:01.826 INFO  Load analysis cache (404) | time=11ms
+12:12:01.867 INFO  Branch name: 102-ui-and-manipulation
+12:12:01.882 INFO  Preprocessing files...
+12:12:02.321 INFO  6 languages detected in 419 preprocessed files (done) | time=438ms
+12:12:02.321 INFO  3 files ignored because of scm ignore settings
+12:12:02.322 INFO  Loading plugins for detected languages
+12:12:02.323 INFO  Load/download plugins
+12:12:02.333 INFO  Load/download plugins (done) | time=10ms
+12:12:02.460 INFO  Load project repositories
+12:12:02.516 INFO  Load project repositories (done) | time=55ms
+12:12:02.529 INFO  Indexing files...
+12:12:02.530 INFO  Project configuration:
+12:12:02.570 INFO  383 files indexed (done) | time=40ms
+12:12:02.572 INFO  Quality profile for docker: Sonar way
+12:12:02.572 INFO  Quality profile for go: Sonar way
+12:12:02.572 INFO  Quality profile for json: Sonar way
+12:12:02.572 INFO  Quality profile for py: Sonar way
+12:12:02.572 INFO  Quality profile for web: Sonar way
+12:12:02.572 INFO  Quality profile for yaml: Sonar way
+12:12:02.572 INFO  ------------- Run sensors on module metahub-api
+12:12:02.606 INFO  Load metrics repository
+12:12:02.625 INFO  Load metrics repository (done) | time=18ms
+12:12:02.780 INFO  Reflections took 25 ms to scan 1 urls, producing 24 keys and 257 values
+12:12:02.983 INFO  Sensor Python Dependency Sensor [python]
+12:12:02.985 INFO  Sensor Python Dependency Sensor [python] (done) | time=2ms
+12:12:02.985 INFO  Sensor HTML [web]
+12:12:02.986 INFO  Sensor HTML [web] (done) | time=0ms
+12:12:02.986 INFO  Sensor Code Quality and Security for Go [go]
+12:12:03.009 INFO  7 folders (42 files) to be analyzed
+12:12:03.870 INFO  7/7 folders (42 files) have been analyzed
+12:12:03.870 INFO  Sensor Code Quality and Security for Go [go] (done) | time=883ms
+12:12:03.870 INFO  Sensor Go Unit Test Report [go]
+12:12:03.870 WARN  Test report can't be loaded, file not found: '/Users/christian.kniep/go/src/github.com/metahub-registry/metahub-api/sessions/ui-and-manipulation/metahub-api/report.json', ignoring this file.
+12:12:03.870 INFO  Sensor Go Unit Test Report [go] (done) | time=1ms
+12:12:03.870 INFO  Sensor Go Cover sensor for Go coverage [go]
+12:12:03.870 INFO  Load coverage report from '/Users/christian.kniep/go/src/github.com/metahub-registry/metahub-api/sessions/ui-and-manipulation/metahub-api/coverage.txt'
+12:12:03.893 WARN  File 'github.com/metahub-registry/metahub-api/pkg/api/v1/handlers/test_manifest.go' is not included in the project, ignoring coverage
+12:12:03.894 WARN  File 'github.com/metahub-registry/metahub-api/pkg/api/v1/handlers/test_layers.go' is not included in the project, ignoring coverage
+12:12:03.897 INFO  Sensor Go Cover sensor for Go coverage [go] (done) | time=27ms
+12:12:03.897 INFO  Sensor IaC CloudFormation Sensor [iac]
+12:12:03.919 INFO  There are no files to be analyzed for the CloudFormation language
+12:12:03.919 INFO  Sensor IaC CloudFormation Sensor [iac] (done) | time=21ms
+12:12:03.919 INFO  Sensor IaC cfn-lint report Sensor [iac]
+12:12:03.919 INFO  Sensor IaC cfn-lint report Sensor [iac] (done) | time=1ms
+12:12:03.919 INFO  Sensor IaC Kubernetes Sensor [iac]
+12:12:03.967 INFO  There are no files to be analyzed for the Kubernetes language
+12:12:03.967 INFO  Sensor IaC Kubernetes Sensor [iac] (done) | time=47ms
+12:12:03.967 INFO  Sensor IaC hadolint report Sensor [iac]
+12:12:03.967 INFO  Sensor IaC hadolint report Sensor [iac] (done) | time=0ms
+12:12:03.967 INFO  Sensor IaC Azure Resource Manager Sensor [iac]
+12:12:03.967 INFO  There are no files to be analyzed for the Azure Resource Manager language
+12:12:03.968 INFO  Sensor IaC Azure Resource Manager Sensor [iac] (done) | time=0ms
+12:12:03.968 INFO  Sensor Java Config Sensor [iac]
+12:12:03.970 INFO  There are no files to be analyzed for the Java language
+12:12:03.970 INFO  Sensor Java Config Sensor [iac] (done) | time=3ms
+12:12:03.970 INFO  Sensor IaC Docker Sensor [iac]
+12:12:03.996 INFO  9 source files to be analyzed
+12:12:04.243 INFO  9/9 source files have been analyzed
+12:12:04.243 INFO  Sensor IaC Docker Sensor [iac] (done) | time=273ms
+12:12:04.243 INFO  Sensor com.github.mc1arke.sonarqube.plugin.scanner.ScannerPullRequestPropertySensor
+12:12:04.243 INFO  Sensor com.github.mc1arke.sonarqube.plugin.scanner.ScannerPullRequestPropertySensor (done) | time=0ms
+12:12:04.243 INFO  Sensor JavaScript inside YAML analysis [javascript]
+12:12:04.254 INFO  No input files found for analysis
+12:12:04.254 INFO  Hit the cache for 0 out of 0
+12:12:04.254 INFO  Miss the cache for 0 out of 0
+12:12:04.254 INFO  Sensor JavaScript inside YAML analysis [javascript] (done) | time=11ms
+12:12:04.254 INFO  Sensor CSS Rules [javascript]
+12:12:04.254 INFO  No CSS, PHP, HTML or VueJS files are found in the project. CSS analysis is skipped.
+12:12:04.255 INFO  Sensor CSS Rules [javascript] (done) | time=0ms
+12:12:04.255 INFO  Sensor Ansible Lint Sensor [ansible]
+12:12:04.255 INFO  No active rules found for this plugin, skipping.
+12:12:04.255 INFO  Sensor Ansible Lint Sensor [ansible] (done) | time=0ms
+12:12:04.255 INFO  Sensor TextAndSecretsSensor [text]
+12:12:04.256 INFO  Available processors: 8
+12:12:04.256 INFO  Using 8 threads for analysis.
+12:12:04.377 INFO  The property "sonar.tests" is not set. To improve the analysis accuracy, we categorize a file as a test file if any of the following is true:
+  * The filename starts with "test"
+  * The filename contains "test." or "tests."
+  * Any directory in the file path is named: "doc", "docs", "test", "tests", "mock" or "mocks"
+  * Any directory in the file path has a name ending in "test" or "tests"
+
+12:12:04.386 INFO  Start fetching files for the text and secrets analysis
+12:12:04.395 INFO  Using Git CLI to retrieve untracked files
+12:12:04.412 INFO  Retrieving language associated files and files included via "sonar.text.inclusions" that are tracked by git
+12:12:04.416 INFO  Starting the text and secrets analysis
+12:12:04.417 INFO  190 source files to be analyzed for the text and secrets analysis
+12:12:04.571 INFO  190/190 source files have been analyzed for the text and secrets analysis
+12:12:04.573 INFO  1 file is ignored because it is untracked by git
+12:12:04.573 INFO  Sensor TextAndSecretsSensor [text] (done) | time=319ms
+12:12:04.575 INFO  ------------- Run sensors on project
+12:12:04.642 INFO  Sensor Zero Coverage Sensor
+12:12:04.644 INFO  Sensor Zero Coverage Sensor (done) | time=2ms
+12:12:04.644 INFO  ------------- Gather SCA dependencies on project
+12:12:04.645 INFO  Dependency analysis skipped
+12:12:04.651 INFO  SCM Publisher SCM provider for this project is: git
+12:12:04.652 INFO  SCM Publisher 15 source files to be analyzed
+12:12:04.934 INFO  SCM Publisher 11/15 source files have been analyzed (done) | time=282ms
+12:12:04.934 WARN  Missing blame information for the following files:
+12:12:04.934 WARN    * pkg/api/v1/handlers/ui_types.go
+12:12:04.934 WARN    * pkg/api/v1/handlers/ui_manipulations.go
+12:12:04.934 WARN    * pkg/api/v1/handlers/repos.go
+12:12:04.934 WARN    * pkg/api/v1/handlers/profiles.go
+12:12:04.934 WARN  This may lead to missing/broken features in SonarQube
+12:12:04.938 INFO  CPD Executor 4 files had no CPD blocks
+12:12:04.940 INFO  CPD Executor Calculating CPD for 38 files
+12:12:04.949 INFO  CPD Executor CPD calculation finished (done) | time=11ms
+12:12:04.953 INFO  SCM revision ID '968e9b8b9f33b94b42a51407cedd750f9ecd721c'
+12:12:04.992 INFO  Load New Code definition
+12:12:05.002 INFO  Load New Code definition (done) | time=10ms
+12:12:05.002 INFO  SCM writing changed lines
+12:12:05.007 INFO  Merge base sha1: 28a29a0a61b5b17340926956d2582921a901b56d
+12:12:05.076 INFO  SCM writing changed lines (done) | time=74ms
+12:12:05.082 INFO  Analysis report generated in 127ms, dir size=786.3 kB
+12:12:05.174 INFO  Analysis report compressed in 92ms, zip size=403.2 kB
+12:12:05.240 INFO  Analysis report uploaded in 66ms
+12:12:05.241 INFO  ------------- Check Quality Gate status
+12:12:05.241 INFO  Waiting for the analysis report to be processed (max 300s)
+12:12:10.282 INFO  QUALITY GATE STATUS: PASSED - View details on https://sonar.example.com/dashboard?id=metahub-api&branch=102-ui-and-manipulation
+12:12:10.315 INFO  Analysis total time: 8.888 s
+12:12:10.315 INFO  SonarScanner Engine completed successfully
+12:12:10.776 INFO  EXECUTION SUCCESS
+12:12:10.777 INFO  Total time: 11.014s

@@ -1,0 +1,30 @@
+label: layer/test-extended#1.0.0
+# A manipulation fixture used by metahub-api handler tests. Deliberately
+# has no image layers so the bootstrap does not need upstream/manifest
+# linkage — the test just verifies the defaults + variants shape surfaces
+# through the API.
+env:
+  TEST_VAR: "1"
+workdir: /opt/test
+user: "1000:1000"
+volumes:
+  - /tmp/test
+entrypoint:
+  op: replace
+  value:
+    - /opt/test/bin/entry
+cmd:
+  op: append
+  value:
+    - "--verbose"
+variants:
+  "arch:arm64=true":
+    env:
+      ARCH: arm64
+  "arch:amd64=true":
+    env:
+      ARCH: amd64
+    cmd:
+      op: append
+      value:
+        - "--avx"

@@ -61,6 +61,13 @@ func (h Handlers) ProfileGetOne(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Hydrate linked manipulations. Non-fatal: a failure here logs but
+	// does not block the rest of the response.
+	mps, mpErr := h.mag.Database.ManipulationsWithConfigByProfileID(ctx, ps.ID)
+	if mpErr != nil {
+		l.Warnf("ManipulationsWithConfigByProfileID failed (non-fatal): %v", mpErr)
+	}
+
 	rules := toProfileRuleResps(ps.Rules)
 	resp := ProfileDetailResponse{
 		ID:              ps.ID,
@@ -70,6 +77,7 @@ func (h Handlers) ProfileGetOne(w http.ResponseWriter, r *http.Request) {
 		Rules:           rules,
 		CollectionCount: ps.CollectionCount,
 		ManifestCount:   ps.ManifestCount,
+		Manipulations:   toUIManipulations(mps),
 	}
 	_ = h.writeJSON(w, http.StatusOK, resp)
 }
