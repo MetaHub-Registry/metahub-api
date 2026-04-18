@@ -44,7 +44,10 @@ func composeBaseURL() string {
 func composeIsReachable(t *testing.T) bool {
 	t.Helper()
 	client := http.Client{Timeout: 2 * time.Second}
-	url := composeBaseURL() + "/api/v1/heartbeat"
+	// `/health` is wired up by the chi middleware; `/api/v1/profiles`
+	// is the actual UI surface. We probe `/health` which is cheap and
+	// authentication-free.
+	url := composeBaseURL() + "/health"
 	resp, err := client.Get(url)
 	if err != nil {
 		t.Logf("compose heartbeat probe failed (%s): %v", url, err)
