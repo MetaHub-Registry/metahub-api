@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -110,6 +111,30 @@ func TestToUIManipulation_JSONShape(t *testing.T) {
 	// Omit empty.
 	assert.NotContains(t, s, `"variants":null`)
 	assert.NotContains(t, s, `"layers":null`)
+}
+
+// TestToUIManipuLayers_PropagatesSelect guards that the apply-time
+// slice expression (see metalib add-manipulayer-select) surfaces to
+// the UI DTO verbatim so the ManipulationCard can render a chip.
+// Layers without a select must serialise with the field absent (the
+// `omitempty` JSON tag), not as `"select":""`.
+func TestToUIManipuLayers_PropagatesSelect(t *testing.T) {
+	in := []types.ManipuLayer{
+		{Rule: "arch:arm64=true", Select: "[1:]"},
+		{Rule: "arch:amd64=true"}, // no select
+	}
+	out := toUIManipuLayers(in)
+	require.Len(t, out, 2)
+	assert.Equal(t, "[1:]", out[0].Select, "select must round-trip")
+	assert.Empty(t, out[1].Select, "absent select remains empty")
+
+	b, err := json.Marshal(out)
+	require.NoError(t, err)
+	s := string(b)
+	assert.Contains(t, s, `"select":"[1:]"`, "select present in JSON when set")
+	// The second entry should omit the `select` key entirely — check
+	// by asserting the substring `"select"` appears exactly once.
+	assert.Equal(t, 1, strings.Count(s, `"select"`), "omitempty drops empty select")
 }
 
 // TestUIManifest_JSONIncludesConfigLayersWhenPresent asserts the

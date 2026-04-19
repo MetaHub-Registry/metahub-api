@@ -80,7 +80,8 @@ func toUIManipuLayers(layers []types.ManipuLayer) []UIManipuLayer {
 	out := make([]UIManipuLayer, 0, len(layers))
 	for _, lyr := range layers {
 		entry := UIManipuLayer{
-			Rule: lyr.Rule,
+			Rule:   lyr.Rule,
+			Select: lyr.Select,
 		}
 		if up := lyr.Image.Upstream; up.Repo != "" {
 			entry.Upstream = up.String()

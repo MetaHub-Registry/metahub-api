@@ -42,10 +42,15 @@ type UIManipuCommand struct {
 // UIManipuLayer is a single layer referenced by a manipulation's default
 // or variant block. The image URL is best-effort: populated from the
 // upstream when known, otherwise empty.
+//
+// `Select` carries the optional Python-style slice expression (e.g.
+// "[1:]") that trims which layers from the source image actually get
+// appended at apply time. Empty means "all layers".
 type UIManipuLayer struct {
 	Image    string `json:"image,omitempty"`
 	Rule     string `json:"rule,omitempty"`
 	Upstream string `json:"upstream,omitempty"`
+	Select   string `json:"select,omitempty"`
 }
 
 // UIManipuConfig mirrors metalib's extended manipulation block.
