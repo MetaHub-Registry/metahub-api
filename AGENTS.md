@@ -10,7 +10,8 @@ sessions/add-oauth/
 ├── metahub-api/           # git worktree on branch 99-add-oauth
 ├── metalib/               # git worktree on branch 123-add-oauth
 ├── metahub-admin/         # git worktree on branch 45-add-oauth
-└── metahub-ui/            # git worktree on branch 4-add-oauth
+├── metahub-ui/            # git worktree on branch 4-add-oauth
+└── community-edition/     # git worktree on branch 12-add-oauth
 ```
 
 ### Rules
