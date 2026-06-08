@@ -22,6 +22,7 @@ sessions/add-oauth/
   - **Sub-changes** — when a feature or migration within the session blows the scope of the main change.
   - **Deferred changes** — future work discovered during the session but not acted on now. These can be carried into a later session.
 - **Version levels are decided at session end**, per-repo, based on actual changes. During the session, versions use `-devN` on the current base version (e.g. `3.0.0-dev1`, not `3.0.1-dev1`).
+- Each worktree ships its own **codebase knowledge graph** at `.understand-anything/knowledge-graph.json` (see "Codebase Knowledge Graph" below). Because worktrees branch off `main`, the graph is inherited at session start; treat it as the first stop for orientation and keep it fresh as code changes.
 
 ### Tools
 
@@ -67,7 +68,7 @@ hash differs from `HEAD`.
 ### Session Lifecycle
 
 1. **Create** — `task session:new -- <description>`. Sets up worktrees, branches, draft MRs, bumps to `-dev1`.
-2. **Work** — use OpenSpec propose/apply/explore within each worktree as needed.
+2. **Work** — use OpenSpec propose/apply/explore within each worktree as needed. **Before broad code exploration, consult that worktree's knowledge graph** (`.understand-anything/knowledge-graph.json`) or the `understand-*` skills — see "Codebase Knowledge Graph". Note the graph's commit hash against `HEAD`; if it is stale, it is still a useful map.
 3. **Iterate** — `task session:dev -- <description>` (optional). Bumps all repos to next `-devN`.
 4. **Finish** — `task session:finish -- <description>`. Archives OpenSpec changes, runs tests + sonar, pushes all branches, adds summary comments to MRs.
 5. **Version** — per modified repo: `task session:version:<repo>:<level> -- <description>`. Sets the release version, marks MR as ready.
@@ -109,6 +110,20 @@ Make sure the current branch within the SonarQube project is accepted.
 Use the SonarQube MCP server to verify quality gate status.
 
 All three steps must pass before a change is considered complete.
+
+### 4. Refresh the knowledge graph (if code changed)
+
+If the change touched in-scope source (see `.understand-anything/.understandignore`),
+keep the worktree's graph in sync so the next task/agent inherits an accurate map:
+
+- Run the `understand-diff` skill to review changed + affected components and risks
+  against the existing graph.
+- If the changes are material, regenerate with the global `/understand` tool — it
+  re-analyzes only changed files using the fingerprints baseline in
+  `.understand-anything/meta.json`.
+- Commit the updated `.understand-anything/` artifacts alongside the code so the
+  graph's commit hash tracks `HEAD`. Doc-only, Bruno, or yaml-only changes can
+  skip this step.
 
 ## Partial Test Runs
 
