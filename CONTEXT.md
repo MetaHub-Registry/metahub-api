@@ -90,6 +90,60 @@ SonarQube project key is in `.env`.
 - `docker-compose.yaml` uses namespace `conformance` (was typo `confirmance`)
 - Version parsing in `internal/cmd/version.go` handles `-devN` suffix
 
+## 2026-04-18 (ui-and-manipulation session)
+
+### What changed
+- **`manifest-expand-and-manipulations-api`**:
+  - `UIManifest` gains `Config *UIDescriptor` + `Layers []UIDescriptor`.
+  - `ProfileDetailResponse` gains `Manipulations []UIManipulation`.
+  - `RepoGetOne` hydrates layers per manifest via the new metalib
+    `GetLayersForManifestID` loop inside `hydrateManifestLayers`.
+  - `ProfileGetOne` calls `ManipulationsWithConfigByProfileID` and
+    serializes through `toUIManipulation(s)` in
+    `pkg/api/v1/handlers/ui_manipulations.go`.
+- **New fixtures**:
+  - `misc/yaml/manipulations/layer/test-extended/1.0.0.yaml` uses the
+    new defaults + variants schema without image references so it
+    doesn't require upstream/manifest bootstrapping.
+  - `misc/yaml/profiles/test-extended/1.0.0.yaml` links to that
+    manipulation for tests.
+- **`misc/fixtures/manipulations/layer/glow/1.5.0.yaml`** migrated to
+  the new variants form (local `registry:5050` mirror).
+- **E2E test** (build tag `e2e`):
+  `pkg/api/v1/handlers/manipulations_compose_e2e_test.go` probes the
+  compose stack and verifies the glow profile's manipulation tree.
+- **`go.mod`** replace is now relative (`../metahub-core`) so both the host
+  test runs and the compose dev container resolve the session metalib
+  worktree correctly.
+- **`docker-compose.yaml`** community-edition volume points at the
+  session CE worktree (`../community-edition`) so parses inside the
+  dev container see the new schema.
+- **Drive-by**: `pkg/api/v1/handlers/profiles_test.go` relaxed the
+  `resp.Rules[0]` indexing to avoid a pre-existing panic that took the
+  whole test suite down.
+
+### Key files
+- `pkg/api/v1/handlers/ui_types.go` — DTOs
+- `pkg/api/v1/handlers/ui_manipulations.go` — `toUIManipulation(s)`
+- `pkg/api/v1/handlers/profiles.go`,
+  `pkg/api/v1/handlers/repos.go` — handler hydration
+- Tests: `ui_manipulations_test.go`,
+  `profiles_manipulations_test.go`, `repos_expand_test.go`,
+  `manipulations_compose_e2e_test.go`
+
+### Gotchas
+- Pre-existing failing tests still fail on the branch:
+  `TestProfileGetOne_URLEncodedLabel`,
+  `TestProfileGetOne_SlashInLabel` (both rely on legacy
+  action-based profile YAMLs that no longer parse under the current
+  profile schema), and `TestIndexPullAfterTwoArchPushes`. None of
+  them are caused by this change.
+- The dev container takes a long time to come up after a rebuild —
+  allow 30+ seconds before probing `/api/v1/heartbeat`.
+- Profile linking requires `rule: <expr>` on the profile YAML;
+  otherwise `ProfileGetInsert` returns early and manipulation links
+  are skipped silently.
+
 ## 2026-04-17 Continuation
 
 ### What changed

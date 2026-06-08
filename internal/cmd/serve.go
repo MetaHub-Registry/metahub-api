@@ -15,6 +15,7 @@ import (
 	"github.com/metahub-registry/metahub-api/pkg/api/v1/router"
 	"github.com/metahub-registry/metahub-api/pkg/config"
 	"github.com/metahub-registry/metahub-core/pkg/backends/magazine"
+	mlver "github.com/metahub-registry/metahub-core/pkg/version"
 )
 
 // serveCmd represents the parse command
@@ -32,6 +33,17 @@ func init() {
 }
 
 func sCmd(cmd *cobra.Command, args []string) {
+	// Banner — logged at WARN level so it stands out in aggregated
+	// logs and is easy to grep in `kubectl logs` / Kibana. Answers the
+	// frequent "is this pod running the metalib/metahub-api version I
+	// expect after a deploy?" question without needing to exec into
+	// the container and run `metahub-api version`.
+	logrus.Warnf("METAHUB STARTUP  api=v%s  metalib=v%s", version, mlver.Version)
+	// Inject into the handler layer so `GET /api/v1/version` can
+	// report the api version. metalib is read directly by the handler
+	// from its own version package; the api version only lives in the
+	// cmd package so has to be passed in.
+	handlers.SetAPIVersion(version)
 	config.SetCommandValues(cmd)
 	port, _ := cmd.Flags().GetInt("port")
 	mag, _, err := magazine.NewMagazine(cmd, "")

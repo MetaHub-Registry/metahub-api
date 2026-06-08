@@ -67,6 +67,11 @@ func Initialize(mag magazine.Magazine, oidcProvider *handlers.OIDCProvider, godm
 		r.Get("/profiles", h.ProfilesGetAll)
 		// Upstream registries (public)
 		r.Get("/registries", h.RegistriesGetAll)
+		// Build-info (public) — reports the metahub-api + metalib
+		// versions baked into the running binary. Used by the GoCD
+		// e2e-dev verify-ce guard to confirm a fresh deploy landed
+		// before running behaviour-dependent tests.
+		r.Get("/version", h.VersionGetOne)
 		// OIDC login / callback (public)
 		r.Get("/login", h.OIDCLogin)
 		r.Get("/callback", h.OIDCCallback)

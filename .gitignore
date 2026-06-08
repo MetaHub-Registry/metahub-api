@@ -22,3 +22,5 @@ metahub
 sessions/*
 test.log
 junit.xml
+sonar.log
+test.log

@@ -6,6 +6,15 @@ import (
 	"github.com/metahub-registry/metahub-core/pkg/types"
 )
 
+// UIDescriptor is the shared shape for config and layer blob descriptors
+// returned to the UI. It mirrors the OCI descriptor but uses snake_case
+// JSON.
+type UIDescriptor struct {
+	Digest    string `json:"digest"`
+	MediaType string `json:"media_type"`
+	Size      int64  `json:"size"`
+}
+
 // UIManifest is the response DTO for a single manifest, matching the frontend's Manifest interface.
 // Field names use snake_case to align with the React UI expectations.
 type UIManifest struct {
@@ -18,6 +27,59 @@ type UIManifest struct {
 	Upstream    string            `json:"upstream,omitempty"`
 	Annotations map[string]string `json:"annotations,omitempty"`
 	Profiles    []string          `json:"profiles"`
+	// Config is the image config blob descriptor when known.
+	Config *UIDescriptor `json:"config,omitempty"`
+	// Layers lists the layer blob descriptors in layer order.
+	Layers []UIDescriptor `json:"layers,omitempty"`
+}
+
+// UIManipuCommand represents a CMD or ENTRYPOINT mutation.
+type UIManipuCommand struct {
+	Op    string   `json:"op"`
+	Value []string `json:"value"`
+}
+
+// UIManipuLayer is a single layer referenced by a manipulation's default
+// or variant block. The image URL is best-effort: populated from the
+// upstream when known, otherwise empty.
+//
+// `Select` carries the optional Python-style slice expression (e.g.
+// "[1:]") that trims which layers from the source image actually get
+// appended at apply time. Empty means "all layers".
+type UIManipuLayer struct {
+	Image    string `json:"image,omitempty"`
+	Rule     string `json:"rule,omitempty"`
+	Upstream string `json:"upstream,omitempty"`
+	Select   string `json:"select,omitempty"`
+}
+
+// UIManipuConfig mirrors metalib's extended manipulation block.
+type UIManipuConfig struct {
+	Env        map[string]string `json:"env,omitempty"`
+	Workdir    string            `json:"workdir,omitempty"`
+	User       string            `json:"user,omitempty"`
+	Volumes    []string          `json:"volumes,omitempty"`
+	Entrypoint *UIManipuCommand  `json:"entrypoint,omitempty"`
+	Cmd        *UIManipuCommand  `json:"cmd,omitempty"`
+	Layers     []UIManipuLayer   `json:"layers,omitempty"`
+}
+
+// UIManipuVariant binds a rule-expression string to a config block.
+type UIManipuVariant struct {
+	Rule   string         `json:"rule"`
+	Config UIManipuConfig `json:"config"`
+}
+
+// UIManipulation is the response DTO for a single manipulation linked to
+// a profile. `Default` and `Variants` carry the new extended schema;
+// `Layers` is populated for legacy-form manipulations that predate the
+// extended schema.
+type UIManipulation struct {
+	ID       int64             `json:"id"`
+	Label    string            `json:"label"`
+	Default  *UIManipuConfig   `json:"default,omitempty"`
+	Variants []UIManipuVariant `json:"variants,omitempty"`
+	Layers   []UIManipuLayer   `json:"layers,omitempty"`
 }
 
 // ProfileDetailResponse is the response DTO for GET /api/v1/profiles/{label}.
@@ -29,6 +91,7 @@ type ProfileDetailResponse struct {
 	Rules           []ProfileRuleResp `json:"rules"`
 	CollectionCount int64             `json:"collection_count"`
 	ManifestCount   int64             `json:"manifest_count"`
+	Manipulations   []UIManipulation  `json:"manipulations"`
 }
 
 // ProfileRuleResp is the response DTO for a single profile rule.
@@ -72,7 +135,7 @@ func toUIManifest(md types.Manifest) UIManifest {
 		}
 	}
 
-	return UIManifest{
+	out := UIManifest{
 		Digest:    md.Digest,
 		MediaType: md.MediaType,
 		Platform: UIPlatform{
@@ -87,6 +150,24 @@ func toUIManifest(md types.Manifest) UIManifest {
 		Upstream:    upstream,
 		Annotations: annotations,
 	}
+	if md.Config.Digest != "" {
+		out.Config = &UIDescriptor{
+			Digest:    md.Config.Digest,
+			MediaType: md.Config.MediaType,
+			Size:      md.Config.Size,
+		}
+	}
+	if len(md.Layers) > 0 {
+		out.Layers = make([]UIDescriptor, 0, len(md.Layers))
+		for _, lyr := range md.Layers {
+			out.Layers = append(out.Layers, UIDescriptor{
+				Digest:    lyr.Digest,
+				MediaType: lyr.MediaType,
+				Size:      lyr.Size,
+			})
+		}
+	}
+	return out
 }
 
 // extractFeatures scans annotations for keys prefixed with "cpu:" and returns

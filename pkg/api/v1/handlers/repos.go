@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -133,6 +134,9 @@ func (h Handlers) RepoGetOne(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	// Hydrate layer descriptors per manifest. Non-fatal: per-manifest
+	// failures leave that manifest's layers empty and continue.
+	h.hydrateManifestLayers(ctx, col, uiDetail.Manifests)
 	// Ensure all manifests have a non-nil Profiles slice for JSON serialization.
 	for i := range uiDetail.Manifests {
 		if uiDetail.Manifests[i].Profiles == nil {
@@ -145,6 +149,46 @@ func (h Handlers) RepoGetOne(w http.ResponseWriter, r *http.Request) {
 		"collection":   uiDetail,
 	}
 	_ = h.writeJSON(w, http.StatusOK, payload)
+}
+
+// hydrateManifestLayers populates each `UIManifest.Layers` slice with the
+// layer blob descriptors for the corresponding metalib `Manifest`. The
+// lookup is by digest so the UI slice order is preserved. Failures log
+// debug-level and continue; no manifest is dropped.
+func (h Handlers) hydrateManifestLayers(ctx context.Context, col types.CollectionListing, uiManis []UIManifest) {
+	l := logrus.WithFields(logrus.Fields{
+		"package": pkgNameCol,
+		"func":    "hydrateManifestLayers",
+	})
+	// Build digest -> metalib Manifest.ID map for a single pass lookup.
+	byDigest := make(map[string]int64, len(col.Manifests))
+	for _, m := range col.Manifests {
+		if m.Digest != "" {
+			byDigest[m.Digest] = m.ID
+		}
+	}
+	for i := range uiManis {
+		id, ok := byDigest[uiManis[i].Digest]
+		if !ok || id == 0 {
+			continue
+		}
+		layers, err := h.mag.Database.GetLayersForManifestID(ctx, id)
+		if err != nil {
+			l.Debugf("GetLayersForManifestID(%d) failed (non-fatal): %v", id, err)
+			continue
+		}
+		if len(layers) == 0 {
+			continue
+		}
+		uiManis[i].Layers = make([]UIDescriptor, 0, len(layers))
+		for _, lyr := range layers {
+			uiManis[i].Layers = append(uiManis[i].Layers, UIDescriptor{
+				Digest:    lyr.Digest,
+				MediaType: lyr.MediaType,
+				Size:      lyr.Size,
+			})
+		}
+	}
 }
 
 // accumulateCollectionNext builds the next-navigation map and breadcrumbs from a list of collections.
