@@ -33,6 +33,37 @@ Use the MCP servers to do inspection instead of trying it with bash
 
 Please use the MCP
 
+## Codebase Knowledge Graph
+
+This repo ships a pre-built knowledge graph of its own source at
+`.understand-anything/knowledge-graph.json` (nodes, edges, architectural
+layers, and a guided tour). **Consult it before doing broad code exploration** —
+it is faster and cheaper than blind file/grep search for "where does X live",
+"what depends on Y", or "how is the registry wired together".
+
+### How to use it
+
+- **First stop for orientation.** Grep the graph for relevant `name`/`summary`/`tags`
+  to find nodes, then follow `imports`/`calls`/`contains` edges for the 1-hop
+  subgraph. Don't dump the whole file into context — search the sections you need.
+- **Graph skills** (in `.opencode/skills/`, available as project skills):
+  - `understand-chat` — ask questions about the codebase using the graph.
+  - `understand-explain` — deep-dive a specific file/function/module.
+  - `understand-diff` — analyze the current git diff against the graph (changed
+    + affected components, risks); writes a dashboard overlay.
+  - `understand-onboard` — generate an onboarding guide for the project.
+- **Scope.** The graph is scoped to code + key infra (see
+  `.understand-anything/.understandignore`); OpenSpec docs, Bruno collections,
+  and misc yaml are intentionally excluded.
+
+### Keeping it fresh
+
+The graph is tied to a git commit (`.understand-anything/meta.json`) with a
+fingerprints baseline for fast incremental updates. After material code changes,
+regenerate it with the global `/understand` tool (re-analyzes only changed files).
+A stale-but-present graph is still a useful map; note staleness if the commit
+hash differs from `HEAD`.
+
 ### Session Lifecycle
 
 1. **Create** — `task session:new -- <description>`. Sets up worktrees, branches, draft MRs, bumps to `-dev1`.
