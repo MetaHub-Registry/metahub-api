@@ -203,6 +203,15 @@ safehouse opencode
 EOF
 chmod +x "${S}/opencode.sh"
 
+# --- Read branch mapping for render line (also used by AGENTS.md below) ---
+API_BRANCH=$(grep "^metahub-api=" "${BRANCHES_FILE}" | cut -d= -f2)
+LIB_BRANCH=$(grep "^metalib=" "${BRANCHES_FILE}" | cut -d= -f2)
+ADMIN_BRANCH=$(grep "^metahub-admin=" "${BRANCHES_FILE}" | cut -d= -f2)
+UI_BRANCH=$(grep "^metahub-ui=" "${BRANCHES_FILE}" | cut -d= -f2)
+CE_BRANCH=$(grep "^community-edition=" "${BRANCHES_FILE}" | cut -d= -f2)
+# Default unused dev-stack slots to main
+CE_BRANCH="${CE_BRANCH:-main}"
+
 # --- Taskfile.yml — forwarding tasks using relative path ---
 cat > "${S}/Taskfile.yml" <<EOF
 version: '3'
@@ -212,6 +221,11 @@ tasks:
     desc: "Iterate dev version in all repos"
     cmds:
       - task -d "${REL_API_ROOT}" session:dev -- ${DESC}
+  render:
+    desc: "Print the 'task render:*' line for the flux dev-stack (slots: API:LIB:ADMIN:CE:OCI:UI)"
+    silent: true
+    cmds:
+      - echo "task render:${API_BRANCH}:${LIB_BRANCH}:${ADMIN_BRANCH}:${CE_BRANCH}:dev:${UI_BRANCH}"
   finish:
     desc: "Finalize session: test, sonar, archive, push, comment MRs"
     cmds:
@@ -240,11 +254,7 @@ tasks:
 EOF
 
 # --- AGENTS.md — auto-generated with session context ---
-API_BRANCH=$(grep "^metahub-api=" "${BRANCHES_FILE}" | cut -d= -f2)
-LIB_BRANCH=$(grep "^metalib=" "${BRANCHES_FILE}" | cut -d= -f2)
-ADMIN_BRANCH=$(grep "^metahub-admin=" "${BRANCHES_FILE}" | cut -d= -f2)
-UI_BRANCH=$(grep "^metahub-ui=" "${BRANCHES_FILE}" | cut -d= -f2)
-
+# (branch vars already read above for the render task)
 cat > "${S}/AGENTS.md" <<EOF
 # Session: ${DESC}
 
@@ -276,6 +286,7 @@ All tasks run from this session directory:
 | Task | Command |
 |------|---------|
 | Iterate dev version | \`task dev\` |
+| Print flux render line | \`task render\` |
 | Finalize session | \`task finish\` |
 | Set release version | \`task version:REPO:LEVEL\` |
 | Close unchanged repo | \`task close:REPO\` |

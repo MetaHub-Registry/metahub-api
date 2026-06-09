@@ -23,7 +23,6 @@ fi
 set -x
 
 sonar-scanner ${TAG_ARG} \
-  -Dsonar.projectKey=${SONAR_QUBE_PROJECT} \
   -Dsonar.sources=. \
   -Dsonar.go.exclusions="**/*_test.go,**/test_*.go,**/vendor/**,**/test.go,**/testcases.go,**/*swagger*.go,**/coverage.*" \
   -Dsonar.go.coverage.reportPaths=coverage.txt \
