@@ -512,20 +512,14 @@ func (h Handlers) handleDockerManifestPut(ctx context.Context, w http.ResponseWr
 		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", err, "INTERNAL_ERROR", "failed to unwind profile '%s' for manifest '%s'", req.Profile, m.Label)
 		return
 	}
-	// Phase C3 compatibility: the wrapper :Manifest node is still created
-	// as a shim (metalib storeManifestUploadOCIManifest) until cypher
-	// queries are fully rewritten to Slot-based walks. ComputeManifest
-	// runs the wrapper-era Docker v2→OCI v1 reshaping.
-	mani, found, err := h.mag.Database.ManifestWrapperGetByLabel(ctx, m.Label)
-	if err != nil {
-		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", err, "DENIED", "while executing ManifestWrapperGetByLabel")
+	// Slot/leaf-based Docker v2→OCI v1 reshaping. The content-leaf returned by
+	// StoreManifestUpload is passed straight to ComputeManifestForLeaf, which
+	// resolves profiles internally — no :ManifestWrapper fetch is needed. The
+	// entrypoint is a no-op when the leaf has no reshape target, preserving the
+	// prior `found`-guard semantics.
+	if err = h.mag.ComputeManifestForLeaf(ctx, m); err != nil {
+		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", err, "INTERNAL_ERROR", "while executing ComputeManifestForLeaf")
 		return
-	}
-	if found {
-		if err = h.mag.ComputeManifest(ctx, mani); err != nil {
-			utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", err, "INTERNAL_ERROR", "while executing ComputeManifest")
-			return
-		}
 	}
 	// Push-time scoped index rebuild via the new
 	// ComputeManifestlistsForRepoTag helper. This replaces the previous

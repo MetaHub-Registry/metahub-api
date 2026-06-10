@@ -145,6 +145,10 @@ func TestProfileGetOne_URLEncodedLabel(t *testing.T) {
 	bs.SetEmptyAll()
 	bs.SetYAMLPrefix("../../../../misc/yaml")
 	bs.AddBootstrap("users")
+	// Bootstrap a Platform node before the profile so the profile is not the
+	// first node in a freshly-emptied graph (neo4j assigns id 0 to the first
+	// node, which would defeat the NotZero(resp.ID) assertion below).
+	bs.AddBootstrap("platforms:generic")
 	bs.AddBootstrap("profile:profiles/arch/zen4/latest.yaml")
 
 	br, err := SetupTest(ctx, bs)
@@ -177,6 +181,10 @@ func TestProfileGetOne_SlashInLabel(t *testing.T) {
 	bs.SetEmptyAll()
 	bs.SetYAMLPrefix("../../../../misc/yaml")
 	bs.AddBootstrap("users")
+	// Bootstrap a Platform node before the profile so the profile is not the
+	// first node in a freshly-emptied graph (neo4j assigns id 0 to the first
+	// node, which would defeat the NotZero(resp.ID) assertion below).
+	bs.AddBootstrap("platforms:generic")
 	bs.AddBootstrap("profile:profiles/aws/zen3/latest.yaml")
 
 	br, err := SetupTest(ctx, bs)
@@ -197,4 +205,32 @@ func TestProfileGetOne_SlashInLabel(t *testing.T) {
 
 	assert.NotZero(t, resp.ID)
 	assert.Equal(t, "aws#zen3#latest", resp.Label)
+}
+
+// TestPublicProfileLabel is a pure-function unit test (no graph) for the
+// stored→public label mapping used by ProfileGetOne. Stored profile labels are
+// "name#tag" where the name may contain slashes; the public form maps every
+// slash to "#" so the label is a single URL-path-safe segment.
+func TestPublicProfileLabel(t *testing.T) {
+	cases := []struct {
+		name   string
+		stored string
+		public string
+	}{
+		{"no slash", "cpu#zen3", "cpu#zen3"},
+		{"single slash in name", "aws/zen3#latest", "aws#zen3#latest"},
+		{"nested slashes in name", "arch/zen4#latest", "arch#zen4#latest"},
+		{"deep name", "a/b/c#tag", "a#b#c#tag"},
+		{"tag only", "generic", "generic"},
+		{"empty", "", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := publicProfileLabel(tc.stored)
+			assert.Equal(t, tc.public, got, "publicProfileLabel(%q)", tc.stored)
+			// A label already in public form must be a fixed point of the mapping.
+			assert.Equal(t, tc.public, publicProfileLabel(tc.public),
+				"publicProfileLabel must be idempotent on the public form")
+		})
+	}
 }

@@ -167,3 +167,45 @@ SonarQube project key is in `.env`.
 - Old `task seedAdmin` etc. no longer work — use `task compose:seed:admin` (namespace changed)
 - `compose-config.yaml` uses `name`/`url` (not `hostname`) for registries with ports — clients like manifest-tool reject colons in image path segments
 - The `dev` container must have both metalib and metahub-admin source mounted for `compose:seed` to work
+
+## 2026-06-08 deprecate-manifest-wrapper + fix-profile-label-lookup
+
+### What changed
+- **Push handler migrated off `:ManifestWrapper`** (`oci_manifest.go`,
+  `handleDockerManifestPut`): replaced the `ManifestWrapperGetByLabel` fetch +
+  `ComputeManifest(wrapper)` with a single `ComputeManifestForLeaf(ctx, m)` call,
+  passing the content-leaf `types.Manifest` from `StoreManifestUpload`. The
+  entrypoint is a no-op when the leaf has no reshape target (preserves the prior
+  `found` guard) and keeps identical error semantics. **metahub-api now has zero
+  functional `ManifestWrapper` references.** Consumed via the in-session
+  `replace => ../metahub-core` directive (no go.mod version bump in-session).
+- **Profile label lookup fixed** (`profiles.go`): `GET /api/v1/profiles/{label}`
+  returned 404 for `#`-delimited labels. Profiles are stored as `name#tag` where
+  the name keeps slashes (e.g. `aws/zen3#latest`); the public/URL form maps every
+  `/` → `#` (`aws#zen3#latest`). Added `publicProfileLabel(stored)` (the one
+  mapping) and `resolveProfileWithStats` (direct lookup → fallback matching the
+  public form against stored labels). `ProfilesGetAll` now also emits the public
+  label so listing + single-GET agree.
+
+### Key files
+- `pkg/api/v1/handlers/oci_manifest.go` — reshape via `ComputeManifestForLeaf`
+- `pkg/api/v1/handlers/profiles.go` — `publicProfileLabel`, `resolveProfileWithStats`, listing projection
+- `pkg/api/v1/handlers/profiles_test.go` — fixed tests + `TestPublicProfileLabel` unit test
+
+### Gotchas
+- The reshape path is exercised by existing handler tests, notably
+  `TestManifestOCITest` which asserts the exact reshaped `Docker-Content-Digest`
+  (byte-stable OCI output) — good regression guard for the migration.
+- Profile single-GET tests bootstrap a `platforms:generic` node before the
+  profile so it isn't neo4j node id 0 (otherwise `assert.NotZero(resp.ID)` fails;
+  neo ids legitimately start at 0).
+- `TestIndexPullAfterTwoArchPushes` flakes under the shared-container
+  `-parallel=1` full run (unrelated multi-arch index test); passes in isolation
+  and on re-run.
+- sonar (`sonar.example.com`) unreachable off-network — quality gate not yet submitted.
+
+### Open / deferred
+- The deeper `:ManifestWrapper` read-Cypher migration is metalib-side
+  (`migrate-wrapper-read-cypher`); no further metahub-api work expected for it.
+- `fix-profile-label-lookup` is a separate OpenSpec change (pre-existing bug,
+  orthogonal to the wrapper work).
