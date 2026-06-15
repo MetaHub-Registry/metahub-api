@@ -38,8 +38,9 @@ func (rr ReqRepo) ToByte() []byte {
 }
 
 type ReqPayload struct {
-	ColID int64 `json:"collection_id"`
-	TagID int64 `json:"tag_id"`
+	ColID   int64  `json:"collection_id"`
+	TagID   int64  `json:"tag_id"`
+	Profile string `json:"profile,omitempty"`
 }
 
 func (rpl ReqPayload) ToByte() []byte {
