@@ -220,6 +220,49 @@ func filterManifestsByProfile(uiManis []UIManifest, profile string) []UIManifest
 	return kept
 }
 
+// profileFilteredManifestCount returns how many of a collection's
+// manifests are served under the given profile. It resolves each
+// manifest's profile labels (via ManifestGetProfileLabels, the same
+// source RepoGetOne decorates with) and counts those whose label set
+// includes `profile`. On a resolution error it falls back to the
+// unfiltered count so the listing degrades gracefully rather than
+// showing zero. `profile` is assumed already normalised (non-empty).
+func (h Handlers) profileFilteredManifestCount(ctx context.Context, l *logrus.Entry, span trace.Span, col types.CollectionListing, profile string) int64 {
+	if len(col.Manifests) == 0 {
+		return 0
+	}
+	digests := make([]string, 0, len(col.Manifests))
+	for _, m := range col.Manifests {
+		if m.Digest != "" {
+			digests = append(digests, m.Digest)
+		}
+	}
+	if len(digests) == 0 {
+		return col.ManifestCount
+	}
+	profileMap, err := h.mag.Database.ManifestGetProfileLabels(ctx, digests)
+	if err != nil {
+		mlibUtils.Debug(l, span, "profileFilteredManifestCount: ManifestGetProfileLabels failed (non-fatal): %v", err)
+		return col.ManifestCount
+	}
+	return countDigestsWithProfile(digests, profileMap, profile)
+}
+
+// countDigestsWithProfile counts how many digests have `profile` in their
+// resolved label set. Pure helper, unit-tested independently of Neo4j.
+func countDigestsWithProfile(digests []string, profileMap map[string][]string, profile string) int64 {
+	var count int64
+	for _, dig := range digests {
+		for _, label := range profileMap[dig] {
+			if label == profile {
+				count++
+				break
+			}
+		}
+	}
+	return count
+}
+
 // hydrateManifestLayers populates each `UIManifest.Layers` slice with the
 // layer blob descriptors for the corresponding metalib `Manifest`. The
 // lookup is by digest so the UI slice order is preserved. Failures log
@@ -342,6 +385,18 @@ func (h Handlers) RepoGetAll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	l.Warnf("RepoGetAll: '%s' -> %d", pl.Repo, len(cols))
+	// When a profile is selected, the per-collection ManifestCount must
+	// reflect only the manifests served under that profile (otherwise the
+	// listing badge shows the unfiltered total even though the detail view
+	// filters). CollectionListingGetByRepoLikeForProfile narrows WHICH
+	// collections appear but still loads every manifest of the tag, so we
+	// recompute the count here using the same profile-membership check the
+	// detail handler uses.
+	if pl.Profile != "" {
+		for i := range cols {
+			cols[i].ManifestCount = h.profileFilteredManifestCount(ctx, l, span, cols[i], pl.Profile)
+		}
+	}
 	next, reps, breadCrumbs, slugEnd := accumulateCollectionNext(cols, repoSlug, pl.Repo)
 	if len(breadCrumbs) > 0 {
 		breadCrumbs[len(breadCrumbs)-1].Active = 0

@@ -8,8 +8,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/metahub-registry/metahub-core/pkg/types"
 	"github.com/metahub-registry/metahub-core/pkg/utils"
 )
 
@@ -181,4 +183,69 @@ func TestRepoGetOne_ProfileFilter_NoMatchReturnsEmptyArray(t *testing.T) {
 	// JSON wire shape: manifests must be `[]`, not `null`.
 	assert.Contains(t, w.Body.String(), `"manifests":[]`,
 		"empty manifests must serialise as [] not null")
+}
+
+// TestRepoGetAll_UnfilteredManifestCount documents the baseline: with
+// no profile, each leaf's ManifestCount is the full tag count. The
+// profile-narrowing path (profileFilteredManifestCount) only runs when
+// a collection IS returned for the profile, which requires a
+// Slot→OF_PROFILE→Profile binding the bootstrap fixture does not
+// create — so the per-profile narrowing is covered by the pure unit
+// test TestCountDigestsWithProfile and verified live on dev. Here we
+// only assert the unfiltered counts are intact (regression guard that
+// the override is gated behind a non-empty profile).
+func TestRepoGetAll_UnfilteredManifestCount(t *testing.T) {
+	ctx := context.Background()
+	_, _, teardown := bootstrapProfileFilterFixture(t, ctx)
+	defer teardown()
+
+	raw, _ := json.Marshal(map[string]string{"repo": "qnib/featuretest"})
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/collections",
+		bytes.NewBuffer(raw))
+	req.Header.Set("Content-Type", "application/json")
+	h.RepoGetAll(w, req)
+	require.Equal(t, http.StatusOK, w.Code, "body: %s", w.Body.String())
+
+	var resp CollectionsResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.NotEmpty(t, resp.Next, "expected tag leaves for qnib/featuretest")
+
+	// The generic tag binds both manifests; without a profile filter its
+	// count must be the full total (2), proving the override is skipped.
+	gen, ok := resp.Next["generic"]
+	require.True(t, ok, "expected a 'generic' tag leaf")
+	assert.Equal(t, int64(2), gen.ManiCount,
+		"unfiltered ManifestCount must be the full tag total")
+}
+
+// TestProfileFilteredManifestCount_Direct exercises the
+// profileFilteredManifestCount wrapper directly against the bootstrapped
+// graph. The fixture binds manifests to a collection but does not create
+// the Slot→OF_PROFILE→Profile path ManifestGetProfileLabels traverses,
+// so the resolved label set is empty and the count is 0 for any profile.
+// This still covers the wrapper's digest-collection + DB-call + delegate
+// path (the per-profile matching arithmetic is covered exhaustively by
+// the pure TestCountDigestsWithProfile).
+func TestProfileFilteredManifestCount_Direct(t *testing.T) {
+	ctx := context.Background()
+	colID, tagID, teardown := bootstrapProfileFilterFixture(t, ctx)
+	defer teardown()
+
+	col, err := h.mag.Database.CollectionListingGetByID(ctx, colID, tagID)
+	require.NoError(t, err)
+	require.NotEmpty(t, col.Manifests, "fixture must have manifests")
+
+	l := logrus.WithField("test", "profileFilteredManifestCount")
+	_, span := tracer.Start(ctx, "TestProfileFilteredManifestCount_Direct")
+	defer span.End()
+
+	got := h.profileFilteredManifestCount(ctx, l, span, col, "cpu#zen2")
+	assert.Equal(t, int64(0), got,
+		"fixture manifests resolve to no profile labels -> count 0")
+
+	// Empty collection short-circuits to 0 without a DB call.
+	empty := types.CollectionListing{Manifests: map[string]types.Manifest{}}
+	assert.Equal(t, int64(0),
+		h.profileFilteredManifestCount(ctx, l, span, empty, "cpu#zen2"))
 }

@@ -126,3 +126,30 @@ func TestFilterManifestsByProfile_EmptyInput(t *testing.T) {
 	assert.NotNil(t, out)
 	assert.Empty(t, out)
 }
+
+// countDigestsWithProfile backs the profile-aware listing badge
+// (RepoGetAll's per-collection ManifestCount). Pure helper.
+func TestCountDigestsWithProfile(t *testing.T) {
+	digests := []string{"sha256:a", "sha256:b", "sha256:c", "sha256:d"}
+	profileMap := map[string][]string{
+		"sha256:a": {"generic"},
+		"sha256:b": {"cpu#zen2", "generic"},
+		"sha256:c": {"cpu#zen3"},
+		"sha256:d": {"cpu#zen2", "glow#1.5.0"},
+		// "sha256:e" deliberately absent from the map.
+	}
+
+	assert.Equal(t, int64(2), countDigestsWithProfile(digests, profileMap, "cpu#zen2"),
+		"two manifests carry cpu#zen2")
+	assert.Equal(t, int64(1), countDigestsWithProfile(digests, profileMap, "cpu#zen3"))
+	assert.Equal(t, int64(2), countDigestsWithProfile(digests, profileMap, "generic"))
+	assert.Equal(t, int64(0), countDigestsWithProfile(digests, profileMap, "cpu#none"),
+		"unknown profile counts zero")
+}
+
+func TestCountDigestsWithProfile_EmptyInputs(t *testing.T) {
+	assert.Equal(t, int64(0), countDigestsWithProfile(nil, nil, "cpu#zen2"))
+	assert.Equal(t, int64(0),
+		countDigestsWithProfile([]string{"sha256:a"}, map[string][]string{}, "cpu#zen2"),
+		"digest with no resolved labels counts zero")
+}
