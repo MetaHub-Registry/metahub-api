@@ -55,9 +55,8 @@ else
    echo "No ZOT_REGISTRY_URL defined"
    exit 1
 fi
-REGISTRY=${HARBOR_REG}
 
-NEW_IMAGE_NAME=${HARBOR_REG}/metahub/api
+NEW_IMAGE_NAME=${REGISTRY}/metahub/api
 GIT_TAG=$(git describe --tags --exact-match 2>/dev/null || true)
 if [ -n "$GIT_TAG" ]; then
    TAG="$(echo ${GIT_TAG}-${GO_PIPELINE_GROUP_NAME}|tr '[:upper:]' '[:lower:]')"
@@ -65,15 +64,17 @@ else
    TAG="$(echo ${GO_PIPELINE_LABEL}|tr '[:upper:]' '[:lower:]')"
    NEW_IMAGE_NAME=$(echo ${NEW_IMAGE_NAME}/${GO_PIPELINE_GROUP_NAME}/${GO_PIPELINE_NAME}|tr '[:upper:]' '[:lower:]')
 fi
-if [[ ! -z "${ZOT_REGISTRY_URL}" ]];then
-   REGISTRY=${ZOT_REGISTRY_URL}
-fi
+echo "> REGISTRY: ${REGISTRY}"
 echo "> NEW_IMAGE_NAME: ${NEW_IMAGE_NAME}"
-echo "> Login to ${HARBOR_REG} as 'robot$good'"
-echo "HARBOR_TOKEN length: $(echo ${HARBOR_TOKEN}|wc -c)"
-docker login ${HARBOR_REG} \
-   -u 'robot$good' \
-   -p "${HARBOR_TOKEN}"
+
+# Harbor login is only needed when building against Harbor; skip for Zot (insecure registry, no auth)
+if [[ ! -z "${HARBOR_REG}" && "${REGISTRY}" == "${HARBOR_REG}" ]];then
+   echo "> Login to ${HARBOR_REG} as 'robot$good'"
+   echo "HARBOR_TOKEN length: $(echo ${HARBOR_TOKEN}|wc -c)"
+   docker login ${HARBOR_REG} \
+      -u 'robot$good' \
+      -p "${HARBOR_TOKEN}"
+fi
 
 docker login registry.gitlab.com \
    -u qnib \
@@ -89,7 +90,7 @@ fi
 docker push ${NEW_IMAGE}
 docker rmi ${NEW_IMAGE}
 gdh patch -f result.yaml \
-   --add=metahub.image.reg=${HARBOR_REG} \
+   --add=metahub.image.reg=${REGISTRY} \
    --add=metahub.image.name=${NEW_IMAGE_NAME} \
    --add=metahub.image.tag=${TAG} \
    --add=metahub.image.full=${NEW_IMAGE}
