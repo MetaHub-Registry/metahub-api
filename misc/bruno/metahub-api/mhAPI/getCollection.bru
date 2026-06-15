@@ -1,0 +1,92 @@
+meta {
+  name: getCollection
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{registry}}/api/v1/collection
+  body: json
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "repo_name": "{{mhapi_repo_name}}",
+    "tag_name": "{{mhapi_tag_name}}"
+  }
+}
+
+docs {
+  # getCollection — POST /api/v1/collection
+
+  Returns the leaf collection detail (manifests with config, layers,
+  annotations, profiles[], cpu_target).
+
+  ## Profile filter (server-side)
+
+  Add an optional `profile` field to narrow the returned manifests to
+  those served under that profile — the server filters, the UI no
+  longer post-filters (add-collection-detail-profile-filter):
+
+      {
+        "repo_name": "{{mhapi_repo_name}}",
+        "tag_name": "{{mhapi_tag_name}}",
+        "profile": "cpu#zen2"
+      }
+
+  - `"profile": "cpu#zen2"`  -> only the zen2 manifest.
+  - `"profile": "generic"`   -> only the plain images.
+  - `"profile": "cpu#none"`  -> 200 with `collection.manifests: []`
+                                (NOT 404).
+  - field absent             -> every manifest pinned to the tag.
+}
+
+script:post-response {
+  // Powers the CollectionDetail page. Returns:
+  //   { collection: { name, tag, manifests: [...] },
+  //     repos[], bread_crumbs[] }
+  //
+  // Each manifest carries digest, media_type, platform, size,
+  // content_size, registry, upstream, annotations, profiles[],
+  // config, layers[], and (post-surface-cpu-target-ui) cpu_target.
+  //
+  // Profile filter: when the request body carries a non-empty
+  // `profile` field, the server returns only the manifests whose
+  // resolved profiles[] includes it (handlers/repos.go::RepoGetOne,
+  // change add-collection-detail-profile-filter). This is now
+  // symmetric with /api/v1/collections (RepoGetAll). The UI passes
+  // its selected profile straight through; no client-side filtering.
+  //
+  // Alternate body shape (numeric graph IDs):
+  //   { "collection_id": 123, "tag_id": 456 }
+  // — but those IDs change when the graph is re-imported, so the
+  // name-based shape is preferred.
+  if (res.status !== 200) {
+    throw new Error("collection expected 200, got " + res.status +
+      " for " + bru.getVar("mhapi_repo_name") + ":" +
+      bru.getVar("mhapi_tag_name"));
+  }
+  const coll = (res.body && res.body.collection) || {};
+  const manifests = coll.manifests || [];
+  if (!Array.isArray(manifests)) {
+    throw new Error("collection.manifests not an array: " +
+      JSON.stringify(coll).slice(0, 200));
+  }
+  // Soft check: at least one manifest should expose a digest.
+  const first = manifests[0];
+  if (first && !first.digest) {
+    throw new Error("first manifest missing digest: " +
+      JSON.stringify(first).slice(0, 200));
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

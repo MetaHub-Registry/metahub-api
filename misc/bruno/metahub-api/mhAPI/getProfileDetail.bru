@@ -1,0 +1,42 @@
+meta {
+  name: getProfileDetail
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{registry}}/api/v1/profiles/{{mhapi_profile_label}}
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}
+
+script:post-response {
+  // Drives the Profile detail page. Adds collection_count,
+  // manifest_count, and manipulations[] on top of the list shape.
+  // Each manipulation has either {default,variants} or the legacy
+  // flat `layers[]` shape — the UI's <ManipulationCard> renders
+  // both.
+  if (res.status !== 200) {
+    throw new Error("profiles/" + bru.getVar("mhapi_profile_label") +
+      " expected 200, got " + res.status);
+  }
+  const b = res.body || {};
+  if (!b.label) {
+    throw new Error("profile detail missing label: " +
+      JSON.stringify(b).slice(0, 200));
+  }
+  if (typeof b.collection_count !== "number" ||
+      typeof b.manifest_count !== "number") {
+    throw new Error("profile detail missing counts: " +
+      JSON.stringify(b).slice(0, 200));
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

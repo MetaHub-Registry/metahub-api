@@ -1,0 +1,35 @@
+meta {
+  name: listOras
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{registry}}/api/v1/oras?repo={{oras_repo}}
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}
+
+script:post-response {
+  // Powers the OrasArtifacts page. Response shape (OrasListResponse):
+  //   { next: { <slug>: { repo, artifact_type, artifact_count } },
+  //     bread_crumbs: [...], slug_end }
+  // Empty `next` is legitimate when the ORAS seed hasn't been pushed.
+  if (res.status !== 200) {
+    throw new Error("oras expected 200, got " + res.status);
+  }
+  const b = res.body || {};
+  if (b.next === undefined || typeof b.next !== "object") {
+    throw new Error("oras response missing next{}: " +
+      JSON.stringify(b).slice(0, 200));
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
