@@ -17,28 +17,9 @@ headers {
 
 body:json {
   {
-    "repo": "{{repo}}"
+    "repo": "{{repo}}",
+    "profile": "{{mhapi_profile}}"
   }
-}
-
-script:pre-request {
-  // Profile filter (optional). Reads the `mhapi_profile` variable;
-  // when set (non-empty) it adds a `profile` field to the request
-  // body so the server narrows the listing to collections served
-  // under that profile (RepoGetAll's CollectionListingGetByRepoLike-
-  // ForProfile). When empty/unset, the `profile` field is omitted
-  // entirely and the server returns ALL collections (unfiltered).
-  //
-  // `mhapi_profile` deliberately defaults to "" (NOT "generic"), so
-  // the no-op case is truly unfiltered rather than generic-only. Set
-  // it at the collection / environment / folder / request level, e.g.
-  //   mhapi_profile: cpu#zen2
-  const profile = bru.getEnvVar("mhapi_profile") || bru.getVar("mhapi_profile") || "";
-  const body = { repo: bru.getVar("repo") || "" };
-  if (profile) {
-    body.profile = profile;
-  }
-  req.setBody(body);
 }
 
 script:post-response {
@@ -53,11 +34,12 @@ script:post-response {
   // `tag != ""` is a LEAF (collection-with-tag); `tag == ""` means
   // it's an intermediate folder requiring further drill-down.
   //
-  // Profile filter: set the `mhapi_profile` var to narrow the listing
-  // to a profile (see the pre-request script). Empty/unset = all
-  // collections. With a profile, only collections that have a Slot for
-  // that profile appear; an empty `next` for a real profile just means
-  // no collection under this repo serves it.
+  // Profile filter: the body sends `"profile": "{{mhapi_profile}}"`.
+  // Set the `mhapi_profile` var to narrow the listing to a profile;
+  // an EMPTY string is ignored by the API (returns all collections).
+  // With a profile, only collections that have a Slot for that profile
+  // appear; an empty `next` for a real profile just means no
+  // collection under this repo serves it.
   if (res.status !== 200) {
     throw new Error("collections expected 200, got " + res.status);
   }

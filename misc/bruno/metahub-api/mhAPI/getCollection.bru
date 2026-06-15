@@ -18,31 +18,9 @@ headers {
 body:json {
   {
     "repo_name": "{{mhapi_repo_name}}",
-    "tag_name": "{{mhapi_tag_name}}"
+    "tag_name": "{{mhapi_tag_name}}",
+    "profile": "{{mhapi_profile}}"
   }
-}
-
-script:pre-request {
-  // Profile filter (optional). Reads the `mhapi_profile` variable;
-  // when set (non-empty) it adds a `profile` field to the request
-  // body so the server returns only the manifests served under that
-  // profile (RepoGetOne's filterManifestsByProfile). When empty/unset
-  // the field is omitted and EVERY manifest pinned to the tag is
-  // returned.
-  //
-  // `mhapi_profile` defaults to "" (NOT "generic") so the no-op case
-  // is truly unfiltered. This is the SAME variable listCollections
-  // reads, so setting it once at the collection/environment level
-  // filters the whole list -> detail chain consistently.
-  const profile = bru.getEnvVar("mhapi_profile") || bru.getVar("mhapi_profile") || "";
-  const body = {
-    repo_name: bru.getVar("mhapi_repo_name") || "",
-    tag_name: bru.getVar("mhapi_tag_name") || ""
-  };
-  if (profile) {
-    body.profile = profile;
-  }
-  req.setBody(body);
 }
 
 docs {
@@ -53,25 +31,20 @@ docs {
 
   ## Profile filter (server-side)
 
-  Set the `mhapi_profile` variable to narrow the returned manifests to
-  those served under that profile — the server filters (RepoGetOne,
+  The body sends `"profile": "{{mhapi_profile}}"`. Set the
+  `mhapi_profile` variable to narrow the returned manifests to those
+  served under that profile — the server filters (RepoGetOne,
   add-collection-detail-profile-filter), the UI no longer post-filters.
-  The pre-request script injects it as the `profile` body field:
-
-      {
-        "repo_name": "{{mhapi_repo_name}}",
-        "tag_name": "{{mhapi_tag_name}}",
-        "profile": "cpu#zen2"
-      }
+  An EMPTY string is ignored by the API, so the default returns all.
 
   - `mhapi_profile = cpu#zen2`  -> only the zen2 manifest.
   - `mhapi_profile = generic`   -> only the plain images.
   - `mhapi_profile = cpu#none`  -> 200 with `collection.manifests: []`
                                    (NOT 404).
-  - `mhapi_profile` empty/unset -> every manifest pinned to the tag.
+  - `mhapi_profile = ""` (default) -> every manifest pinned to the tag.
 
   `mhapi_profile` is shared with listCollections, so setting it once
-  (collection.bru / environment / folder) filters the whole
+  (folder vars / environment / request) filters the whole
   list -> detail chain.
 }
 
