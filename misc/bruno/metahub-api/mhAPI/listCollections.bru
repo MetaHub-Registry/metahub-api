@@ -36,7 +36,8 @@ script:post-response {
   //
   // Profile filter: the body sends `"profile": "{{mhapi_profile}}"`.
   // Set the `mhapi_profile` var to narrow the listing to a profile;
-  // an EMPTY string is ignored by the API (returns all collections).
+  // an empty/whitespace string is treated by the API as no profile
+  // given (normalizeProfile) -> returns all collections.
   // With a profile, only collections that have a Slot for that profile
   // appear; an empty `next` for a real profile just means no
   // collection under this repo serves it.

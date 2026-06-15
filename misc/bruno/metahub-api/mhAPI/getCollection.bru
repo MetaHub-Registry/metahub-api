@@ -23,31 +23,6 @@ body:json {
   }
 }
 
-docs {
-  # getCollection — POST /api/v1/collection
-
-  Returns the leaf collection detail (manifests with config, layers,
-  annotations, profiles[], cpu_target).
-
-  ## Profile filter (server-side)
-
-  The body sends `"profile": "{{mhapi_profile}}"`. Set the
-  `mhapi_profile` variable to narrow the returned manifests to those
-  served under that profile — the server filters (RepoGetOne,
-  add-collection-detail-profile-filter), the UI no longer post-filters.
-  An EMPTY string is ignored by the API, so the default returns all.
-
-  - `mhapi_profile = cpu#zen2`  -> only the zen2 manifest.
-  - `mhapi_profile = generic`   -> only the plain images.
-  - `mhapi_profile = cpu#none`  -> 200 with `collection.manifests: []`
-                                   (NOT 404).
-  - `mhapi_profile = ""` (default) -> every manifest pinned to the tag.
-
-  `mhapi_profile` is shared with listCollections, so setting it once
-  (folder vars / environment / request) filters the whole
-  list -> detail chain.
-}
-
 script:post-response {
   // Powers the CollectionDetail page. Returns:
   //   { collection: { name, tag, manifests: [...] },
@@ -90,4 +65,31 @@ script:post-response {
 settings {
   encodeUrl: true
   timeout: 0
+}
+
+docs {
+  # getCollection — POST /api/v1/collection
+  
+  Returns the leaf collection detail (manifests with config, layers,
+  annotations, profiles[], cpu_target).
+  
+  ## Profile filter (server-side)
+  
+  The body sends `"profile": "{{mhapi_profile}}"`. Set the
+  `mhapi_profile` variable to narrow the returned manifests to those
+  served under that profile — the server filters (RepoGetOne,
+  add-collection-detail-profile-filter), the UI no longer post-filters.
+  An empty or whitespace-only string is treated by the API as no
+  profile given (normalizeProfile), so the default returns all; a
+  padded label like " cpu#zen2 " is trimmed before matching.
+  
+  - `mhapi_profile = cpu#zen2`  -> only the zen2 manifest.
+  - `mhapi_profile = generic`   -> only the plain images.
+  - `mhapi_profile = cpu#none`  -> 200 with `collection.manifests: []`
+                                   (NOT 404).
+  - `mhapi_profile = ""` (default) -> every manifest pinned to the tag.
+  
+  `mhapi_profile` is shared with listCollections, so setting it once
+  (folder vars / environment / request) filters the whole
+  list -> detail chain.
 }
