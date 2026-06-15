@@ -280,6 +280,7 @@ cat >> "${S}/Taskfile.yml" <<'EOF'
         printf "%-18s %-30s %-6s %-12s %s\n" "----" "------" "-----" "--------" "----"
         while IFS='=' read -r REPO BRANCH; do
           [ -z "${REPO}" ] && continue
+          case "${REPO}" in *.status) continue;; esac
           WT="${SESSION_DIR}/${REPO}"
           if [ ! -d "${WT}/.git" ] && [ ! -f "${WT}/.git" ]; then
             printf "%-18s %-30s %-6s %-12s %s\n" "${REPO}" "${BRANCH}" "-" "MISSING" "(suspended?)"
@@ -322,6 +323,7 @@ cat >> "${S}/Taskfile.yml" <<'EOF'
         DIRTY=0
         while IFS='=' read -r REPO BRANCH; do
           [ -z "${REPO}" ] && continue
+          case "${REPO}" in *.status) continue;; esac
           WT="${SESSION_DIR}/${REPO}"
           if [ ! -d "${WT}/.git" ] && [ ! -f "${WT}/.git" ]; then
             echo "[${REPO}] worktree missing (suspended?) — skipping"
@@ -347,6 +349,7 @@ cat >> "${S}/Taskfile.yml" <<'EOF'
         FAILED=0
         while IFS='=' read -r REPO BRANCH; do
           [ -z "${REPO}" ] && continue
+          case "${REPO}" in *.status) continue;; esac
           WT="${SESSION_DIR}/${REPO}"
           if [ ! -d "${WT}/.git" ] && [ ! -f "${WT}/.git" ]; then
             continue
