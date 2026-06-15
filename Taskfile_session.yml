@@ -102,27 +102,40 @@ tasks:
   # session:dev — iterate the dev version in all repos
   # ===========================================================================
   dev:
-    desc: "Iterate dev version: task session:dev -- <description>"
+    desc: "Iterate dev version: task session:dev -- <description> [repo ...]"
     requires:
       vars: [CLI_ARGS]
     vars:
-      DESC: "{{.CLI_ARGS}}"
+      # CLI_ARGS is "<description> [repo ...]". The first token is the
+      # session description; any remaining tokens form an optional repo
+      # allow-list. When the list is empty, ALL repos are bumped (the
+      # original behaviour).
+      DESC:
+        sh: echo "{{.CLI_ARGS}}" | awk '{print $1}'
+      REPOS:
+        sh: echo "{{.CLI_ARGS}}" | cut -s -d' ' -f2-
     preconditions:
-      - sh: '[ -n "{{.CLI_ARGS}}" ]'
-        msg: "Usage: task session:dev -- <description>"
-      - sh: '[ -f "{{.SESSION_DIR}}/{{.CLI_ARGS}}/.branches" ]'
-        msg: "Session '{{.CLI_ARGS}}' not found — run session:new first"
+      - sh: '[ -n "{{.DESC}}" ]'
+        msg: "Usage: task session:dev -- <description> [repo ...]"
+      - sh: '[ -f "{{.SESSION_DIR}}/{{.DESC}}/.branches" ]'
+        msg: "Session '{{.DESC}}' not found — run session:new first"
     cmds:
+      - |
+        if [ -n "{{.REPOS}}" ]; then
+          echo "=== Dev iteration for: {{.REPOS}} ==="
+        else
+          echo "=== Dev iteration for: ALL repos ==="
+        fi
       - task: _bump-dev
-        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-api", REPO_DIR: "{{.REPO_API_DIR}}" }
+        vars: { DESC: "{{.DESC}}", REPOS: "{{.REPOS}}", REPO_NAME: "metahub-api", REPO_DIR: "{{.REPO_API_DIR}}" }
       - task: _bump-dev
-        vars: { DESC: "{{.DESC}}", REPO_NAME: "metalib", REPO_DIR: "{{.REPO_LIB_DIR}}" }
+        vars: { DESC: "{{.DESC}}", REPOS: "{{.REPOS}}", REPO_NAME: "metalib", REPO_DIR: "{{.REPO_LIB_DIR}}" }
       - task: _bump-dev
-        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-admin", REPO_DIR: "{{.REPO_ADMIN_DIR}}" }
+        vars: { DESC: "{{.DESC}}", REPOS: "{{.REPOS}}", REPO_NAME: "metahub-admin", REPO_DIR: "{{.REPO_ADMIN_DIR}}" }
       - task: _bump-dev
-        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-ui", REPO_DIR: "{{.REPO_UI_DIR}}" }
+        vars: { DESC: "{{.DESC}}", REPOS: "{{.REPOS}}", REPO_NAME: "metahub-ui", REPO_DIR: "{{.REPO_UI_DIR}}" }
       - task: _bump-dev
-        vars: { DESC: "{{.DESC}}", REPO_NAME: "community-edition", REPO_DIR: "{{.REPO_CE_DIR}}" }
+        vars: { DESC: "{{.DESC}}", REPOS: "{{.REPOS}}", REPO_NAME: "community-edition", REPO_DIR: "{{.REPO_CE_DIR}}" }
       - echo ""
       - echo "=== Dev iteration complete ==="
 
@@ -480,6 +493,8 @@ tasks:
     requires:
       vars: [DESC, REPO_NAME, REPO_DIR]
     vars:
+      # REPOS is an optional space-separated allow-list. Empty = all repos.
+      REPOS: '{{.REPOS | default ""}}'
       WORKTREE_PATH:
         sh: echo "$(pwd)/{{.SESSION_DIR}}/{{.DESC}}/{{.REPO_NAME}}"
     cmds:
@@ -488,6 +503,23 @@ tasks:
         REPO_NAME="{{.REPO_NAME}}"
         WT_PATH="{{.WORKTREE_PATH}}"
         BRANCHES_FILE="$(pwd)/{{.SESSION_DIR}}/{{.DESC}}/.branches"
+
+        # Repo allow-list: when REPOS is non-empty, only bump repos that
+        # appear in it. Whitespace-delimited exact match.
+        REPOS="{{.REPOS}}"
+        if [ -n "${REPOS}" ]; then
+          MATCHED=0
+          for r in ${REPOS}; do
+            if [ "${r}" = "${REPO_NAME}" ]; then
+              MATCHED=1
+              break
+            fi
+          done
+          if [ "${MATCHED}" -eq 0 ]; then
+            echo "[${REPO_NAME}] Not in repo list '${REPOS}' — skipping dev bump"
+            exit 0
+          fi
+        fi
 
         # Skip repos that are already closed or versioned
         LAST_STATUS=$(grep "^${REPO_NAME}\.status=" "${BRANCHES_FILE}" 2>/dev/null | tail -1 | cut -d= -f2)

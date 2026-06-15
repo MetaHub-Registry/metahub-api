@@ -218,9 +218,13 @@ version: '3'
 
 tasks:
   dev:
-    desc: "Iterate dev version in all repos"
+    desc: "Iterate dev version (all repos, or only the repos passed as args)"
     cmds:
-      - task -d "${REL_API_ROOT}" session:dev -- ${DESC}
+      # Forward any extra args as a repo allow-list:
+      #   task dev                         -> bump all repos
+      #   task dev -- metahub-ui           -> bump only metahub-ui
+      #   task dev -- metahub-ui metalib   -> bump only those two
+      - task -d "${REL_API_ROOT}" session:dev -- ${DESC} {{.CLI_ARGS}}
   render:
     desc: "Print the 'task render:*' line for the flux dev-stack (slots: API:LIB:ADMIN:CE:OCI:UI)"
     silent: true
@@ -402,7 +406,8 @@ All tasks run from this session directory:
 |------|---------|
 | Show git status of all worktrees | \`task status\` |
 | Verify committed + push all branches | \`task push\` |
-| Iterate dev version | \`task dev\` |
+| Iterate dev version (all repos) | \`task dev\` |
+| Iterate dev version (only some repos) | \`task dev -- metahub-ui metalib\` |
 | Print flux render line | \`task render\` |
 | Finalize session | \`task finish\` |
 | Set release version | \`task version:REPO:LEVEL\` |
