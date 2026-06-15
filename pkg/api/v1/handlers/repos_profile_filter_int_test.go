@@ -101,6 +101,27 @@ func TestRepoGetOne_ProfileFilter_AllManifestsWhenAbsent(t *testing.T) {
 		"absent profile must return manifests (backwards-compat)")
 }
 
+// TestRepoGetOne_ProfileFilter_EmptyTreatedAsAbsent asserts that an
+// explicit empty / whitespace-only `profile` is treated identically to
+// an omitted field: the full manifest set is returned (no filter). This
+// guards the normalizeProfile() contract at the wire level.
+func TestRepoGetOne_ProfileFilter_EmptyTreatedAsAbsent(t *testing.T) {
+	ctx := context.Background()
+	colID, tagID, teardown := bootstrapProfileFilterFixture(t, ctx)
+	defer teardown()
+
+	absent := postRepoGetOne(t, ReqPayload{ColID: colID, TagID: tagID})
+	require.NotEmpty(t, absent.Collection.Manifests,
+		"precondition: omitted profile returns manifests")
+
+	for _, p := range []string{"", "   ", "\t"} {
+		got := postRepoGetOne(t, ReqPayload{ColID: colID, TagID: tagID, Profile: p})
+		assert.Equal(t, len(absent.Collection.Manifests),
+			len(got.Collection.Manifests),
+			"empty/whitespace profile %q must behave like no filter", p)
+	}
+}
+
 // TestRepoGetOne_ProfileFilter_FilterIsWired asserts the handler actually
 // applies the profile filter: with a non-empty `profile` and a fixture
 // whose manifests carry an empty profiles slice, the result must narrow

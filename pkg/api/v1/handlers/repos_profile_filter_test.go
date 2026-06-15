@@ -12,6 +12,41 @@ import (
 // field lives in repos_test.go (TestCollectionGetOne_* family) and
 // runs against a bootstrapped graph.
 
+// normalizeProfile: an empty / whitespace-only profile must collapse to
+// "" so it is treated as "no profile given"; a real label is trimmed.
+func TestNormalizeProfile(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"empty", "", ""},
+		{"spaces", "   ", ""},
+		{"tab", "\t", ""},
+		{"newline", "\n", ""},
+		{"plain label", "cpu#zen2", "cpu#zen2"},
+		{"padded label", "  cpu#zen2  ", "cpu#zen2"},
+		{"generic", "generic", "generic"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			assert.Equal(t, c.want, normalizeProfile(c.in))
+		})
+	}
+}
+
+// normalise() must apply the profile normalisation as part of payload
+// canonicalisation, so RepoGetOne's `if profile != ""` guard sees "".
+func TestRepoGetOnePayload_NormaliseProfile(t *testing.T) {
+	pl := repoGetOnePayload{RepoName: "qnib/ftest", TagName: "latest", Profile: "   "}
+	pl.normalise()
+	assert.Equal(t, "", pl.Profile, "whitespace profile must normalise to empty (no filter)")
+
+	pl2 := repoGetOnePayload{RepoName: "qnib/ftest", TagName: "latest", Profile: " cpu#zen2 "}
+	pl2.normalise()
+	assert.Equal(t, "cpu#zen2", pl2.Profile, "padded label must be trimmed")
+}
+
 func TestFilterManifestsByProfile_EmptyProfileReturnsAll(t *testing.T) {
 	// Guard for the backwards-compat path: when no profile is set,
 	// the handler must short-circuit before reaching the filter.

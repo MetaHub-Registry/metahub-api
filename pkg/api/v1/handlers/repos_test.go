@@ -40,7 +40,9 @@ func (rr ReqRepo) ToByte() []byte {
 type ReqPayload struct {
 	ColID   int64  `json:"collection_id"`
 	TagID   int64  `json:"tag_id"`
-	Profile string `json:"profile,omitempty"`
+	// No omitempty: tests need to send `"profile":""` explicitly to
+	// verify the handler normalises an empty string to "no filter".
+	Profile string `json:"profile"`
 }
 
 func (rpl ReqPayload) ToByte() []byte {

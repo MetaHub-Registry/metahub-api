@@ -54,8 +54,21 @@ type repoGetOnePayload struct {
 	Profile  string `json:"profile"`
 }
 
+// normalizeProfile canonicalises a profile filter so that an absent,
+// empty, or whitespace-only value all collapse to "". Downstream code
+// (the RepoGetOne `if profile != ""` guard and metalib's
+// CollectionListingGetByRepoLikeForProfile) treats "" as "no filter",
+// so this makes `"profile": ""`, `"profile": "  "`, and an omitted
+// field behave identically — an empty profile is treated as no profile
+// given. A non-empty value is trimmed of surrounding whitespace so a
+// padded label like `" cpu#zen2 "` still matches.
+func normalizeProfile(profile string) string {
+	return strings.TrimSpace(profile)
+}
+
 // normalise folds the legacy `repo`/`tag` aliases onto the canonical
-// `repo_name`/`tag_name` fields.
+// `repo_name`/`tag_name` fields and collapses an empty/whitespace-only
+// profile to "" (treated as no filter).
 func (pl *repoGetOnePayload) normalise() {
 	if pl.RepoName == "" && pl.Repo != "" {
 		pl.RepoName = pl.Repo
@@ -63,6 +76,7 @@ func (pl *repoGetOnePayload) normalise() {
 	if pl.TagName == "" && pl.Tag != "" {
 		pl.TagName = pl.Tag
 	}
+	pl.Profile = normalizeProfile(pl.Profile)
 }
 
 // resolveCollection loads the CollectionListing addressed by the
@@ -313,11 +327,15 @@ func (h Handlers) RepoGetAll(w http.ResponseWriter, r *http.Request) {
 		h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
 		return
 	}
+	// Treat an empty/whitespace-only profile as no profile given, so
+	// `"profile": ""` behaves identically to an omitted field.
+	pl.Profile = normalizeProfile(pl.Profile)
 	l = l.WithFields(logrus.Fields{"repo": pl.Repo, "profile": pl.Profile})
 	l.Infof("RepoGetAll: '%s' (profile: '%s')", pl.Repo, pl.Profile)
 	repoSlug := strings.Split(pl.Repo, "/")
 	// When a profile is specified, filter collection listings to only those
-	// served under that profile. Otherwise fall back to unfiltered.
+	// served under that profile. Otherwise (empty profile) fall back to
+	// unfiltered — CollectionListingGetByRepoLikeForProfile delegates "".
 	cols, err := h.mag.Database.CollectionListingGetByRepoLikeForProfile(ctx, pl.Repo, pl.Profile)
 	if err != nil {
 		h.writeJSON(w, http.StatusInternalServerError, envelope{"error": err.Error()})
