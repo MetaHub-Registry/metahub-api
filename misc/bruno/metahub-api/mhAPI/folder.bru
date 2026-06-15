@@ -11,6 +11,10 @@ auth:bearer {
   token: {{mhapi_jwt}}
 }
 
+vars:pre-request {
+  mhapi_profile: 
+}
+
 docs {
   # mhAPI — inspect the metahub-api JSON endpoints used by metahub-ui.
 
@@ -88,6 +92,16 @@ docs {
       in dev).
     - `repo`      — repo prefix to filter collections (`qnib/ftest`).
     - `oras_repo`, `oras_artifact_type` — for ORAS calls.
+    - `mhapi_profile` — OPTIONAL profile filter shared by
+      `listCollections` (step 5) and `getCollection` (step 6).
+      Defaults to "" (folder `vars:pre-request`), meaning UNFILTERED
+      (all collections / all manifests). Set it to a profile label
+      (e.g. `cpu#zen2`, `generic`) to narrow BOTH the listing and the
+      detail to that profile. Distinct from the qnib-ftest `profile`
+      var (which drives /v2 auth and defaults to `generic`); here the
+      no-op default is empty so "no profile" truly means "all".
+      Override at any level: this folder's `vars:pre-request`, an
+      environment file, or a single request.
 
   Writes to the active environment:
     - `mhapi_jwt`              — metahub-api Bearer (step 0).
