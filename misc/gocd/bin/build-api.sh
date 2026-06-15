@@ -67,13 +67,17 @@ fi
 echo "> REGISTRY: ${REGISTRY}"
 echo "> NEW_IMAGE_NAME: ${NEW_IMAGE_NAME}"
 
-# Harbor login is only needed when building against Harbor; skip for Zot (insecure registry, no auth)
-if [[ ! -z "${HARBOR_REG}" && "${REGISTRY}" == "${HARBOR_REG}" ]];then
+# Harbor login is required whenever Harbor creds are present: the build may pull
+# base images from Harbor (e.g. Dockerfile.result FROM harbor.example.com/...), and we
+# may also push there. This is independent of the push target (Zot vs Harbor).
+if [[ ! -z "${HARBOR_REG}" && ! -z "${HARBOR_TOKEN}" ]];then
    echo "> Login to ${HARBOR_REG} as 'robot$good'"
    echo "HARBOR_TOKEN length: $(echo ${HARBOR_TOKEN}|wc -c)"
    docker login ${HARBOR_REG} \
       -u 'robot$good' \
       -p "${HARBOR_TOKEN}"
+else
+   echo "> WARNING: HARBOR_REG/HARBOR_TOKEN not set; skipping Harbor login (base image pulls from Harbor may fail with 401)"
 fi
 
 docker login registry.gitlab.com \
