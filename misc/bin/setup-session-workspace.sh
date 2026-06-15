@@ -253,6 +253,121 @@ tasks:
       - task -d "${REL_API_ROOT}" session:close:{{.REPO}} -- ${DESC}
 EOF
 
+# Append the local (no-network) git helper tasks. These are
+# self-contained shell loops driven by the session's .branches file, so
+# they need no interpolation — use a QUOTED heredoc so the embedded
+# shell \${vars} survive verbatim into the generated Taskfile.
+cat >> "${S}/Taskfile.yml" <<'EOF'
+  status:
+    desc: "Show git status (committed?, branch, ahead/behind) for every worktree"
+    silent: true
+    cmds:
+      - |
+        set -uo pipefail
+        SESSION_DIR="$(pwd)"
+        BRANCHES_FILE="${SESSION_DIR}/.branches"
+        if [ ! -f "${BRANCHES_FILE}" ]; then
+          echo "ERROR: .branches file not found in ${SESSION_DIR}" >&2
+          exit 1
+        fi
+
+        DIRTY=0
+        printf "%-18s %-30s %-6s %-12s %s\n" "REPO" "BRANCH" "AHEAD" "WORKTREE" "HEAD"
+        printf "%-18s %-30s %-6s %-12s %s\n" "----" "------" "-----" "--------" "----"
+        while IFS='=' read -r REPO BRANCH; do
+          [ -z "${REPO}" ] && continue
+          WT="${SESSION_DIR}/${REPO}"
+          if [ ! -d "${WT}/.git" ] && [ ! -f "${WT}/.git" ]; then
+            printf "%-18s %-30s %-6s %-12s %s\n" "${REPO}" "${BRANCH}" "-" "MISSING" "(suspended?)"
+            continue
+          fi
+          # Refresh remote-tracking ref quietly so ahead-count is accurate.
+          git -C "${WT}" fetch -q origin "${BRANCH}" 2>/dev/null || true
+          COUNT="$(git -C "${WT}" status --porcelain | wc -l | tr -d ' ')"
+          if [ "${COUNT}" = "0" ]; then
+            CLEAN="clean"
+          else
+            CLEAN="dirty(${COUNT})"
+            DIRTY=1
+          fi
+          AHEAD="$(git -C "${WT}" rev-list --count "origin/${BRANCH}..HEAD" 2>/dev/null || echo "?")"
+          HEAD="$(git -C "${WT}" log -1 --format='%h %s' 2>/dev/null)"
+          printf "%-18s %-30s %-6s %-12s %s\n" "${REPO}" "${BRANCH}" "${AHEAD}" "${CLEAN}" "${HEAD}"
+        done < "${BRANCHES_FILE}"
+
+        echo ""
+        if [ "${DIRTY}" -ne 0 ]; then
+          echo "Some worktrees have uncommitted changes (dirty)."
+        else
+          echo "All worktrees are committed."
+        fi
+  push:
+    desc: "Verify every worktree is committed, then push all branches"
+    silent: true
+    cmds:
+      - |
+        set -euo pipefail
+        SESSION_DIR="$(pwd)"
+        BRANCHES_FILE="${SESSION_DIR}/.branches"
+        if [ ! -f "${BRANCHES_FILE}" ]; then
+          echo "ERROR: .branches file not found in ${SESSION_DIR}" >&2
+          exit 1
+        fi
+
+        # --- Phase 1: verify all worktrees are fully committed -----------
+        DIRTY=0
+        while IFS='=' read -r REPO BRANCH; do
+          [ -z "${REPO}" ] && continue
+          WT="${SESSION_DIR}/${REPO}"
+          if [ ! -d "${WT}/.git" ] && [ ! -f "${WT}/.git" ]; then
+            echo "[${REPO}] worktree missing (suspended?) — skipping"
+            continue
+          fi
+          STATUS="$(git -C "${WT}" status --porcelain)"
+          if [ -n "${STATUS}" ]; then
+            echo "[${REPO}] UNCOMMITTED changes:"
+            echo "${STATUS}" | sed 's/^/    /'
+            DIRTY=1
+          fi
+        done < "${BRANCHES_FILE}"
+
+        if [ "${DIRTY}" -ne 0 ]; then
+          echo ""
+          echo "ABORT: commit (or stash) the changes above before pushing." >&2
+          exit 1
+        fi
+        echo "All worktrees are committed."
+
+        # --- Phase 2: push each branch ----------------------------------
+        echo ""
+        FAILED=0
+        while IFS='=' read -r REPO BRANCH; do
+          [ -z "${REPO}" ] && continue
+          WT="${SESSION_DIR}/${REPO}"
+          if [ ! -d "${WT}/.git" ] && [ ! -f "${WT}/.git" ]; then
+            continue
+          fi
+          CUR="$(git -C "${WT}" rev-parse --abbrev-ref HEAD)"
+          AHEAD="$(git -C "${WT}" rev-list --count "origin/${BRANCH}..HEAD" 2>/dev/null || echo "?")"
+          if [ "${AHEAD}" = "0" ]; then
+            echo "[${REPO}] ${BRANCH} already up to date — nothing to push"
+            continue
+          fi
+          echo "[${REPO}] pushing ${CUR} -> origin/${BRANCH} (${AHEAD} commit(s))"
+          if ! git -C "${WT}" push origin "HEAD:${BRANCH}"; then
+            echo "[${REPO}] PUSH FAILED" >&2
+            FAILED=1
+          fi
+        done < "${BRANCHES_FILE}"
+
+        echo ""
+        if [ "${FAILED}" -ne 0 ]; then
+          echo "DONE with errors: one or more pushes failed (see above)." >&2
+          exit 1
+        fi
+        echo "DONE: all branches pushed."
+EOF
+
 # --- AGENTS.md — auto-generated with session context ---
 # (branch vars already read above for the render task)
 cat > "${S}/AGENTS.md" <<EOF
@@ -285,6 +400,8 @@ All tasks run from this session directory:
 
 | Task | Command |
 |------|---------|
+| Show git status of all worktrees | \`task status\` |
+| Verify committed + push all branches | \`task push\` |
 | Iterate dev version | \`task dev\` |
 | Print flux render line | \`task render\` |
 | Finalize session | \`task finish\` |
@@ -292,6 +409,11 @@ All tasks run from this session directory:
 | Close unchanged repo | \`task close:REPO\` |
 | Suspend (free disk) | \`task suspend\` |
 | Resume | \`task resume\` |
+
+\`task status\` is read-only (committed?, branch, ahead/behind per
+repo). \`task push\` aborts if any worktree is dirty, then pushes each
+branch that is ahead of its remote. Both iterate the \`.branches\`
+mapping, so they stay correct as repos are added or closed.
 
 Examples:
 \`\`\`bash
