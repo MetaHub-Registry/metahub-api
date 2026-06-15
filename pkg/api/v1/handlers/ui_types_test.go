@@ -171,6 +171,78 @@ func TestOrasBreadCrumbs(t *testing.T) {
 	}
 }
 
+func TestCPUTargetFromAnnotations(t *testing.T) {
+	t.Run("microarch zen2", func(t *testing.T) {
+		ct := cpuTargetFromAnnotations(map[string]string{
+			"org.supercontainers.hardware.cpu.target":           "microarch",
+			"org.supercontainers.hardware.cpu.target.microarch": "zen2",
+		})
+		require.NotNil(t, ct)
+		assert.Equal(t, "microarch", ct.Kind)
+		assert.Equal(t, "zen2", ct.Microarch)
+		assert.Empty(t, ct.Generic)
+	})
+
+	t.Run("generic x86_64_v4", func(t *testing.T) {
+		ct := cpuTargetFromAnnotations(map[string]string{
+			"org.supercontainers.hardware.cpu.target":         "generic",
+			"org.supercontainers.hardware.cpu.target.generic": "x86_64_v4",
+		})
+		require.NotNil(t, ct)
+		assert.Equal(t, "generic", ct.Kind)
+		assert.Equal(t, "x86_64_v4", ct.Generic)
+		assert.Empty(t, ct.Microarch)
+	})
+
+	t.Run("no cpu target annotation is nil", func(t *testing.T) {
+		assert.Nil(t, cpuTargetFromAnnotations(map[string]string{"cpu:skylake": "true"}))
+		assert.Nil(t, cpuTargetFromAnnotations(nil))
+	})
+}
+
+// TestToUIManifest_CPUTargetAndFeaturesIndependent guards that the new
+// CPUTarget field is additive: a manifest carrying both a cpu:foo=true
+// feature and a microarch cpu.target annotation surfaces BOTH the
+// feature (unchanged) and the structured CPU target.
+func TestToUIManifest_CPUTargetAndFeaturesIndependent(t *testing.T) {
+	annos, err := types.NewAnnotationsFromMap(map[string]string{
+		"cpu:skylake": "true",
+		"org.supercontainers.hardware.cpu.target":           "microarch",
+		"org.supercontainers.hardware.cpu.target.microarch": "zen2",
+	})
+	require.NoError(t, err)
+
+	md := types.Manifest{
+		Digest:    "sha256:zen2",
+		MediaType: "application/vnd.oci.image.manifest.v1+json",
+		Platform:  types.Platform{Arch: "amd64", OS: "linux"},
+		Upstream:  types.Upstream{Reg: "registry.gitlab.com"},
+		Annotations: annos,
+	}
+
+	ui := toUIManifest(md)
+	assert.Contains(t, ui.Platform.Features, "cpu:skylake", "feature surface unchanged")
+	require.NotNil(t, ui.CPUTarget, "CPU target must be surfaced")
+	assert.Equal(t, "microarch", ui.CPUTarget.Kind)
+	assert.Equal(t, "zen2", ui.CPUTarget.Microarch)
+}
+
+// TestToUIManifest_NoCPUTargetOmitted asserts the field is omitted from
+// JSON when the manifest carries no cpu.target annotation.
+func TestToUIManifest_NoCPUTargetOmitted(t *testing.T) {
+	md := types.Manifest{
+		Digest:    "sha256:plain",
+		MediaType: "application/vnd.oci.image.manifest.v1+json",
+		Platform:  types.Platform{Arch: "amd64", OS: "linux"},
+		Upstream:  types.Upstream{Reg: "registry.gitlab.com"},
+	}
+	ui := toUIManifest(md)
+	assert.Nil(t, ui.CPUTarget)
+	b, err := json.Marshal(ui)
+	require.NoError(t, err)
+	assert.NotContains(t, string(b), "cpu_target", "omitted when absent")
+}
+
 func TestExtractFeatures(t *testing.T) {
 	tests := []struct {
 		name     string

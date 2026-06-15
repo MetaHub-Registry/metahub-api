@@ -1,0 +1,52 @@
+meta {
+  name: godmodeLogin
+  type: http
+  seq: 0
+}
+
+post {
+  url: {{registry}}/api/v1/godmode/login
+  body: json
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "username": "{{username}}",
+    "password": "{{password}}"
+  }
+}
+
+script:post-response {
+  // God-mode is the dev login path that swaps {username,password}
+  // for a metahub-api JWT. The UI uses this via godmodeLogin() in
+  // src/lib/api.ts. Returns 404 when god-mode is disabled on the
+  // server (e.g. in production). Returns 401 on bad credentials.
+  if (res.status === 404) {
+    throw new Error(
+      "godmode disabled server-side (404). Run getAuthConfig and " +
+      "check {godmode_enabled:false}, or use the OIDC flow."
+    );
+  }
+  if (res.status !== 200) {
+    throw new Error("godmode/login expected 200, got " + res.status +
+      ": " + (res.body && JSON.stringify(res.body).slice(0, 200)));
+  }
+  const body = res.body || {};
+  if (!body.token) {
+    throw new Error("godmode/login response missing 'token': " +
+      JSON.stringify(body).slice(0, 200));
+  }
+  // Distinct from `oci_bearer` (which is the /v2 OCI bearer).
+  bru.setEnvVar("mhapi_jwt", body.token);
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
