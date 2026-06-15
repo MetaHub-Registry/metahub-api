@@ -1,0 +1,113 @@
+meta {
+  name: mhAPI
+  seq: 10
+}
+
+auth {
+  mode: bearer
+}
+
+auth:bearer {
+  token: {{mhapi_jwt}}
+}
+
+vars:pre-request {
+  ~mhapi_profile: cpu#zen2
+}
+
+docs {
+  # mhAPI — inspect the metahub-api JSON endpoints used by metahub-ui.
+  
+  These requests target the `/api/v1/*` surface that the React UI
+  consumes (collections, profiles, oras, version, session, registry
+  tokens). They are distinct from the `/v2/*` OCI registry surface
+  exercised by the qnib-ftest folder.
+  
+  ## Auth model
+  
+  metahub-api has TWO independent tokens:
+  
+    - `oci_bearer` — OCI Bearer for `/v2/*` (minted via the
+      WWW-Authenticate challenge in qnib-ftest/refreshToken).
+    - `mhapi_jwt`  — metahub-api JWT for `/api/v1/protected/*`
+      (minted via `godmodeLogin` below).
+  
+  This folder defaults to `auth: bearer` carrying `{{mhapi_jwt}}`.
+  Public endpoints (`/api/v1/collections`, `/api/v1/profiles`, etc.)
+  ignore the header; protected endpoints (`/api/v1/protected/*`)
+  require it.
+  
+  ## Sequence
+  
+  Run in order — public calls work without auth, protected calls
+  require `godmodeLogin` to have populated `mhapi_jwt`.
+  
+    0. godmodeLogin        — POST /api/v1/godmode/login,
+                             stores `mhapi_jwt` in active env
+                             (mirrors UI godmodeLogin() in
+                             metahub-ui/src/lib/api.ts).
+    1. getAuthConfig       — GET /api/v1/auth/config — discover
+                             whether oidc / godmode are enabled.
+                             Used by the UI's Login page to pick
+                             which flow to render.
+    2. getVersion          — GET /api/v1/version — api + metalib
+                             versions baked into the running binary.
+                             Surfaced in the UI footer; also drives
+                             the GoCD verify-ce deploy guard.
+    3. listProfiles        — GET /api/v1/profiles — profile catalog
+                             used by `<ProfileSelector>`. Extracts
+                             the first profile's `label` into
+                             `mhapi_profile_label` for step 4.
+    4. getProfileDetail    — GET /api/v1/profiles/{label} — full
+                             profile incl. manipulations. Powers
+                             the Profile detail page and its
+                             ManipulationCard sections.
+    5. listCollections     — POST /api/v1/collections with
+                             `{repo}` body — collection list with
+                             optional `profile` filter (used by
+                             the Collections page). Extracts the
+                             first collection's repo_name + first
+                             tag's tag_name into
+                             `mhapi_repo_name` / `mhapi_tag_name`
+                             for step 6.
+    6. getCollection       — POST /api/v1/collection with
+                             `{repo_name, tag_name}` body — leaf
+                             detail with manifests, layers, cpu_target
+                             (post-surface-cpu-target-ui).
+    7. listOras            — GET /api/v1/oras?repo=… — ORAS
+                             artifact list for the OrasArtifacts page.
+    8. getOrasArtifact     — GET /api/v1/oras/artifact?repo=…&artifact_type=…
+                             — single artifact detail.
+    9. getSession          — GET /api/v1/protected/session — current
+                             user (requires `mhapi_jwt`).
+   10. listRegistryTokens  — GET /api/v1/protected/registry-tokens
+                             — Authentik app passwords for the
+                             Settings page (requires `mhapi_jwt`).
+  
+  ## Variables
+  
+  Reads from the active environment:
+    - `registry`  — metahub-api base URL (same host as /v2/*).
+    - `username`, `password` — god-mode credentials (`oci` / `oci`
+      in dev).
+    - `repo`      — repo prefix to filter collections (`qnib/ftest`).
+    - `oras_repo`, `oras_artifact_type` — for ORAS calls.
+    - `mhapi_profile` — OPTIONAL profile filter shared by
+      `listCollections` (step 5) and `getCollection` (step 6). Both
+      send it in the request body as `"profile": "{{mhapi_profile}}"`.
+      Defaults to "" (folder `vars:pre-request`); an EMPTY string is
+      ignored by the API, so the default is UNFILTERED (all
+      collections / all manifests). Set it to a profile label (e.g.
+      `cpu#zen2`, `generic`) to narrow BOTH the listing and the detail
+      to that profile. Distinct from the qnib-ftest `profile` var
+      (which drives /v2 auth and defaults to `generic`); here the no-op
+      default is empty so "no profile" truly means "all". Override at
+      any level: this folder's `vars:pre-request`, an environment
+      file, or a single request.
+  
+  Writes to the active environment:
+    - `mhapi_jwt`              — metahub-api Bearer (step 0).
+    - `mhapi_profile_label`    — first profile label (step 3).
+    - `mhapi_repo_name`, `mhapi_tag_name` — collection coordinates
+                                 (step 5).
+}

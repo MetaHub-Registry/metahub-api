@@ -27,10 +27,25 @@ type UIManifest struct {
 	Upstream    string            `json:"upstream,omitempty"`
 	Annotations map[string]string `json:"annotations,omitempty"`
 	Profiles    []string          `json:"profiles"`
+	// CPUTarget is the structured CPU optimization parsed from the
+	// org.supercontainers.hardware.cpu.target* annotations, when present.
+	// Lets the frontend distinguish otherwise-identical platform rows
+	// (e.g. a zen2-optimized amd64 image from a plain amd64 one).
+	CPUTarget *UICPUTarget `json:"cpu_target,omitempty"`
 	// Config is the image config blob descriptor when known.
 	Config *UIDescriptor `json:"config,omitempty"`
 	// Layers lists the layer blob descriptors in layer order.
 	Layers []UIDescriptor `json:"layers,omitempty"`
+}
+
+// UICPUTarget is the structured CPU optimization for a manifest, parsed
+// from the org.supercontainers.hardware.cpu.target* annotations.
+// Kind is the discriminator ("platform", "microarch", or "generic");
+// Microarch / Generic carry the specific value when applicable.
+type UICPUTarget struct {
+	Kind      string `json:"kind,omitempty"`
+	Microarch string `json:"microarch,omitempty"`
+	Generic   string `json:"generic,omitempty"`
 }
 
 // UIManipuCommand represents a CMD or ENTRYPOINT mutation.
@@ -149,6 +164,7 @@ func toUIManifest(md types.Manifest) UIManifest {
 		Registry:    md.Upstream.Reg,
 		Upstream:    upstream,
 		Annotations: annotations,
+		CPUTarget:   cpuTargetFromAnnotations(annotations),
 	}
 	if md.Config.Digest != "" {
 		out.Config = &UIDescriptor{
@@ -180,6 +196,26 @@ func extractFeatures(annotations map[string]string) []string {
 		}
 	}
 	return features
+}
+
+const (
+	annoCPUTarget          = "org.supercontainers.hardware.cpu.target"
+	annoCPUTargetMicroarch = "org.supercontainers.hardware.cpu.target.microarch"
+	annoCPUTargetGeneric   = "org.supercontainers.hardware.cpu.target.generic"
+)
+
+// cpuTargetFromAnnotations parses the org.supercontainers.hardware.cpu.target*
+// annotations into a structured CPU target. It returns nil when no
+// cpu.target annotation is present, so the DTO field is omitted for
+// manifests that carry no CPU optimization metadata.
+func cpuTargetFromAnnotations(annotations map[string]string) *UICPUTarget {
+	kind := annotations[annoCPUTarget]
+	microarch := annotations[annoCPUTargetMicroarch]
+	generic := annotations[annoCPUTargetGeneric]
+	if kind == "" && microarch == "" && generic == "" {
+		return nil
+	}
+	return &UICPUTarget{Kind: kind, Microarch: microarch, Generic: generic}
 }
 
 // toUICollectionDetail converts a metalib CollectionListing into a UICollectionDetail.
