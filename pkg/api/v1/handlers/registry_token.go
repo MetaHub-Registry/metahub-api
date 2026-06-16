@@ -29,12 +29,16 @@ type RegistryTokenCreateResponse struct {
 	DockerLogin string `json:"docker_login"`
 	Username    string `json:"username"`
 	Password    string `json:"password"`
+	Expiring    bool   `json:"expiring"`
+	Expires     string `json:"expires,omitempty"`
 }
 
 // RegistryTokenListItem represents a registry token in list responses.
 type RegistryTokenListItem struct {
 	Identifier  string `json:"identifier"`
 	Description string `json:"description"`
+	Expiring    bool   `json:"expiring"`
+	Expires     string `json:"expires,omitempty"`
 }
 
 // RegistryTokenCreate handles POST /api/v1/protected/registry-token.
@@ -71,7 +75,7 @@ func (h Handlers) RegistryTokenCreate(w http.ResponseWriter, r *http.Request) {
 	identifier := fmt.Sprintf("%s%d", registryTokenPrefix, time.Now().Unix())
 	client := NewAuthentikClient(h.oidc.AuthentikAPIURL)
 
-	_, err := client.CreateAppPassword(ctx, rawToken, identifier, req.Description)
+	created, err := client.CreateAppPassword(ctx, rawToken, identifier, req.Description, h.oidc.RegistryTokenTTL)
 	if err != nil {
 		if authErr, ok := err.(*AuthentikError); ok && authErr.StatusCode == http.StatusForbidden {
 			writeJSONError(w, http.StatusForbidden, errInsufficientScope)
@@ -100,6 +104,8 @@ func (h Handlers) RegistryTokenCreate(w http.ResponseWriter, r *http.Request) {
 		DockerLogin: dockerLogin,
 		Username:    claims.Username,
 		Password:    key,
+		Expiring:    created.Expiring,
+		Expires:     created.Expires,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -139,6 +145,8 @@ func (h Handlers) RegistryTokenList(w http.ResponseWriter, r *http.Request) {
 		items = append(items, RegistryTokenListItem{
 			Identifier:  t.Identifier,
 			Description: t.Description,
+			Expiring:    t.Expiring,
+			Expires:     t.Expires,
 		})
 	}
 

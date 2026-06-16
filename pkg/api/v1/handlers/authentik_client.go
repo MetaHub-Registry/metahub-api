@@ -102,11 +102,22 @@ func checkResponse(resp *http.Response) error {
 
 // CreateAppPassword creates a new app password token in Authentik for the authenticated user.
 // The identifier should be unique (e.g., "metahub-registry-<timestamp>").
-func (c *AuthentikClient) CreateAppPassword(ctx context.Context, userToken, identifier, description string) (*AuthentikToken, error) {
+//
+// ttl controls the token lifetime. A zero ttl creates a NON-expiring token
+// (expiring=false), so registry credentials do not inherit Authentik's short
+// tenant default_token_duration. A positive ttl creates an expiring token with
+// expires = now + ttl (RFC3339, UTC).
+func (c *AuthentikClient) CreateAppPassword(ctx context.Context, userToken, identifier, description string, ttl time.Duration) (*AuthentikToken, error) {
 	payload := map[string]interface{}{
 		"identifier":  identifier,
 		"intent":      "app_password",
 		"description": description,
+	}
+	if ttl > 0 {
+		payload["expiring"] = true
+		payload["expires"] = time.Now().UTC().Add(ttl).Format(time.RFC3339)
+	} else {
+		payload["expiring"] = false
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {

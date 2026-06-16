@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
@@ -55,6 +56,32 @@ func TestRegistryTokenCreate_Success(t *testing.T) {
 	assert.Equal(t, "secret-app-password-key", resp.Password)
 	assert.Contains(t, resp.DockerLogin, "docker login")
 	assert.Contains(t, resp.DockerLogin, "alice")
+	// Default handler has zero TTL ⇒ durable, non-expiring registry token.
+	assert.False(t, resp.Expiring, "default registry token should be non-expiring")
+	assert.Empty(t, resp.Expires)
+}
+
+func TestRegistryTokenCreate_WithTTL(t *testing.T) {
+	_, client := newMockAuthentikAPI(t)
+	hh := Handlers{oidc: &OIDCProvider{
+		AuthentikAPIURL:  client.BaseURL,
+		RegistryTokenTTL: 365 * 24 * time.Hour,
+	}}
+	claims := &OIDCClaims{Sub: "sub-1", Username: "alice"}
+
+	body := strings.NewReader(`{"description":"ci"}`)
+	req := httptest.NewRequest("POST", "/api/v1/protected/registry-token", body)
+	req.Host = "registry.example.com"
+	req = injectClaimsAndToken(req, claims, "valid-user-token")
+
+	rr := httptest.NewRecorder()
+	hh.RegistryTokenCreate(rr, req)
+
+	assert.Equal(t, http.StatusCreated, rr.Code)
+	var resp RegistryTokenCreateResponse
+	require.NoError(t, json.NewDecoder(rr.Body).Decode(&resp))
+	assert.True(t, resp.Expiring, "configured TTL should yield an expiring token")
+	assert.NotEmpty(t, resp.Expires)
 }
 
 func TestRegistryTokenCreate_NotConfigured(t *testing.T) {
@@ -102,6 +129,9 @@ func TestRegistryTokenList_Success(t *testing.T) {
 	require.NoError(t, json.NewDecoder(rr.Body).Decode(&items))
 	assert.Len(t, items, 2)
 	assert.Equal(t, "metahub-registry-111", items[0].Identifier)
+	assert.False(t, items[0].Expiring)
+	assert.True(t, items[1].Expiring)
+	assert.Equal(t, "2027-01-01T00:00:00Z", items[1].Expires)
 }
 
 func TestRegistryTokenList_NotConfigured(t *testing.T) {

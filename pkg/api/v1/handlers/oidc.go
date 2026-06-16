@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	gooidc "github.com/coreos/go-oidc/v3/oidc"
 	"github.com/metahub-registry/metahub-api/pkg/config"
@@ -55,6 +56,9 @@ type OIDCProvider struct {
 	Config          oauth2.Config
 	Verifier        *gooidc.IDTokenVerifier
 	AuthentikAPIURL string // Base URL for Authentik core API (e.g., "https://authentik.example.com/api/v3")
+	// RegistryTokenTTL is the lifetime applied to registry app passwords. Zero
+	// means non-expiring (durable registry credentials, the default).
+	RegistryTokenTTL time.Duration
 }
 
 // NewOIDCProvider performs OIDC discovery against cfg.Issuer and returns a
@@ -89,10 +93,11 @@ func NewOIDCProvider(ctx context.Context, cfg config.OIDCConfig) (*OIDCProvider,
 	}
 
 	return &OIDCProvider{
-		Provider:        provider,
-		Config:          oauthCfg,
-		Verifier:        verifier,
-		AuthentikAPIURL: cfg.AuthentikAPIURL,
+		Provider:         provider,
+		Config:           oauthCfg,
+		Verifier:         verifier,
+		AuthentikAPIURL:  cfg.AuthentikAPIURL,
+		RegistryTokenTTL: cfg.RegistryTokenTTL,
 	}, nil
 }
 
