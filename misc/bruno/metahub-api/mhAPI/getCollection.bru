@@ -23,6 +23,12 @@ body:json {
   }
 }
 
+vars:pre-request {
+  mhapi_repo_name: qnib/featuretest
+  mhapi_tag_name: latest
+  mhapi_profile: generic
+}
+
 script:post-response {
   // Powers the CollectionDetail page. Returns:
   //   { collection: { name, tag, manifests: [...] },
