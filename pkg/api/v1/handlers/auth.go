@@ -253,6 +253,24 @@ func realmForRequest(r *http.Request) string {
 // parseTokenParts) have been removed. /v2/ routes now use OCIAuthMiddleware
 // which validates JWTs via JWKS and sets gorilla context for metalib compatibility.
 
+// forbidden returns a 403 DENIED for an authenticated user that lacks the
+// privilege for the requested action (e.g. a pull-only account attempting a
+// push). Unlike unauthorized (401), the client is known — re-authenticating
+// will not help — so per the OCI distribution spec we return 403/DENIED and
+// do NOT emit a WWW-Authenticate challenge.
+func forbidden(w http.ResponseWriter, r *http.Request, det helper.Detail, msg string) {
+	l := logrus.WithFields(logrus.Fields{
+		"package": "middleware",
+		"func":    "forbidden",
+		"host":    r.Host,
+		"method":  r.Method,
+	})
+	l.Infof("write denied: %s", msg)
+	w.Header().Add(headerContentType, contentTypeJSON)
+	e := helper.NewErrPayload("DENIED", msg, det)
+	helper.WriteOCIErrror(w, http.StatusForbidden, e)
+}
+
 // unauthorized returns a request to the user for auth - e.g., "get a token from this endpoint"
 func unauthorized(w http.ResponseWriter, r *http.Request, realm string, det helper.Detail, err oauthError, format string, v ...interface{}) {
 	l := logrus.WithFields(logrus.Fields{

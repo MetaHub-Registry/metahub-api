@@ -108,6 +108,10 @@ func Initialize(mag magazine.Magazine, oidcProvider *handlers.OIDCProvider, godm
 		// 401 with WWW-Authenticate when no valid token is present.
 		r.Group(func(r chi.Router) {
 			r.Use(h.OCIAuthMiddleware())
+			// Authorize writes: any authenticated user may pull, but
+			// push/delete (PUT/POST/PATCH/DELETE) require the admin role.
+			// This makes the demo / pull-only accounts real.
+			r.Use(h.OCIWriteAuthMiddleware())
 			r.Get("/", h.OCIHeartbeatHandler)
 			// TODO: Is there no way to match multiple lengh path?
 			r.Head(imgManifestRefPath, h.ManifestHeadHandler)
