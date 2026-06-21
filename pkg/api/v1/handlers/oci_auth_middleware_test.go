@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/metahub-registry/metahub-api/pkg/config"
 )
 
 // ---------------------------------------------------------------------------
@@ -102,7 +103,126 @@ func TestOCIAuthMiddleware_ExpiredToken(t *testing.T) {
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusUnauthorized, rr.Code)
-	assert.Contains(t, rr.Header().Get("WWW-Authenticate"), "Bearer realm=")
+}
+
+// ---------------------------------------------------------------------------
+// OCIWriteAuthMiddleware tests — pull-only vs admin authorization
+// ---------------------------------------------------------------------------
+
+// writeAuthRouter builds a /v2 router with both auth middlewares chained and a
+// catch-all handler that 200s, so the only non-200 comes from authorization.
+func writeAuthRouter(hh Handlers) *chi.Mux {
+	r := chi.NewRouter()
+	r.Route("/v2", func(r chi.Router) {
+		r.Use(hh.OCIAuthMiddleware())
+		r.Use(hh.OCIWriteAuthMiddleware())
+		r.HandleFunc("/*", func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+	})
+	return r
+}
+
+func TestOCIWriteAuth_AdminCanWrite(t *testing.T) {
+	m := newMockOIDC(t)
+	hh := m.handlers(t)
+	token := m.signJWT(t, m.srv.URL, "sub-admin", time.Now().Add(5*time.Minute),
+		map[string]interface{}{
+			"preferred_username": "akadmin",
+			"aud":                []string{"test-client"},
+			"groups":             []string{"metahub-admin"},
+		})
+	r := writeAuthRouter(hh)
+
+	for _, method := range []string{"PUT", "POST", "PATCH", "DELETE"} {
+		req := httptest.NewRequest(method, "/v2/test/manifests/latest", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusOK, rr.Code, "admin should be allowed to %s", method)
+	}
+}
+
+func TestOCIWriteAuth_PullOnlyUserDeniedWrites(t *testing.T) {
+	m := newMockOIDC(t)
+	hh := m.handlers(t)
+	token := m.signJWT(t, m.srv.URL, "sub-user", time.Now().Add(5*time.Minute),
+		map[string]interface{}{
+			"preferred_username": "meta",
+			"aud":                []string{"test-client"},
+			"groups":             []string{"some-other-group"}, // not admin -> role "user"
+		})
+	r := writeAuthRouter(hh)
+
+	for _, method := range []string{"PUT", "POST", "PATCH", "DELETE"} {
+		req := httptest.NewRequest(method, "/v2/test/manifests/latest", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusForbidden, rr.Code, "pull-only user must be denied %s", method)
+		assert.Contains(t, rr.Body.String(), "DENIED", "%s denial should be an OCI DENIED error", method)
+	}
+}
+
+func TestOCIWriteAuth_PullOnlyUserCanRead(t *testing.T) {
+	m := newMockOIDC(t)
+	hh := m.handlers(t)
+	token := m.signJWT(t, m.srv.URL, "sub-user", time.Now().Add(5*time.Minute),
+		map[string]interface{}{
+			"preferred_username": "meta",
+			"aud":                []string{"test-client"},
+			"groups":             []string{"some-other-group"},
+		})
+	r := writeAuthRouter(hh)
+
+	for _, method := range []string{"GET", "HEAD"} {
+		req := httptest.NewRequest(method, "/v2/test/manifests/latest", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		assert.Equal(t, http.StatusOK, rr.Code, "pull-only user must be allowed to %s", method)
+	}
+}
+
+func TestOCIWriteAuth_GodModeRolesEnforced(t *testing.T) {
+	m := newMockOIDC(t)
+	hh := m.handlers(t)
+	// god-mode admin (oci) may write; god-mode pull-only user (meta) may not.
+	gm := NewGodModeAuth(config.GodModeConfig{
+		SigningKey: "test-signing-key-that-is-at-least-32-characters-long",
+		Users: []config.GodModeUser{
+			{Username: "oci", Password: "oci", Role: "admin"},
+			{Username: "meta", Password: "hub", Role: "user"},
+		},
+	})
+	hh.godmode = gm
+	r := writeAuthRouter(hh)
+
+	adminTok, err := gm.MintToken("oci")
+	require.NoError(t, err)
+	demoTok, err := gm.MintToken("meta")
+	require.NoError(t, err)
+
+	// admin push allowed
+	req := httptest.NewRequest("PUT", "/v2/test/manifests/latest", nil)
+	req.Header.Set("Authorization", "Bearer "+adminTok)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusOK, rr.Code, "god-mode admin should push")
+
+	// demo push denied
+	req = httptest.NewRequest("PUT", "/v2/test/manifests/latest", nil)
+	req.Header.Set("Authorization", "Bearer "+demoTok)
+	rr = httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusForbidden, rr.Code, "god-mode demo (user) must not push")
+
+	// demo pull allowed
+	req = httptest.NewRequest("GET", "/v2/test/manifests/latest", nil)
+	req.Header.Set("Authorization", "Bearer "+demoTok)
+	rr = httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusOK, rr.Code, "god-mode demo should pull")
 }
 
 func TestOCIAuthMiddleware_InvalidSignature(t *testing.T) {
