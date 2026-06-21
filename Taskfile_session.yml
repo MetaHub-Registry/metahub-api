@@ -52,6 +52,9 @@ vars:
   REPO_ADMIN_DIR: "../metahub-admin"
   REPO_UI_DIR: "~/src/gitlab.com/qnib-frontend/metahub-ui"
   REPO_CE_DIR: "~/src/gitlab.com/qnib-metahub/community-edition"
+  REPO_DEVSTACK_DIR: "~/src/gitlab.com/qnib-ansible/dev-stack"
+  REPO_PRODSTACK_DIR: "~/src/gitlab.com/qnib-ansible/prod-stack"
+  REPO_DOCS_DIR: "~/src/gitlab.com/qshuf-mkdocs/metahub-docs"
 
 tasks:
   # ===========================================================================
@@ -86,6 +89,12 @@ tasks:
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-ui", REPO_DIR: "{{.REPO_UI_DIR}}" }
       - task: _branch-and-mr
         vars: { DESC: "{{.DESC}}", REPO_NAME: "community-edition", REPO_DIR: "{{.REPO_CE_DIR}}" }
+      - task: _branch-and-mr
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "dev-stack", REPO_DIR: "{{.REPO_DEVSTACK_DIR}}" }
+      - task: _branch-and-mr
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "prod-stack", REPO_DIR: "{{.REPO_PRODSTACK_DIR}}" }
+      - task: _branch-and-mr
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-docs", REPO_DIR: "{{.REPO_DOCS_DIR}}" }
       - task: _setup-session-workspace
         vars: { DESC: "{{.DESC}}" }
       - task: _update-dev-stack
@@ -136,6 +145,12 @@ tasks:
         vars: { DESC: "{{.DESC}}", REPOS: "{{.REPOS}}", REPO_NAME: "metahub-ui", REPO_DIR: "{{.REPO_UI_DIR}}" }
       - task: _bump-dev
         vars: { DESC: "{{.DESC}}", REPOS: "{{.REPOS}}", REPO_NAME: "community-edition", REPO_DIR: "{{.REPO_CE_DIR}}" }
+      - task: _bump-dev
+        vars: { DESC: "{{.DESC}}", REPOS: "{{.REPOS}}", REPO_NAME: "dev-stack", REPO_DIR: "{{.REPO_DEVSTACK_DIR}}" }
+      - task: _bump-dev
+        vars: { DESC: "{{.DESC}}", REPOS: "{{.REPOS}}", REPO_NAME: "prod-stack", REPO_DIR: "{{.REPO_PRODSTACK_DIR}}" }
+      - task: _bump-dev
+        vars: { DESC: "{{.DESC}}", REPOS: "{{.REPOS}}", REPO_NAME: "metahub-docs", REPO_DIR: "{{.REPO_DOCS_DIR}}" }
       - echo ""
       - echo "=== Dev iteration complete ==="
 
@@ -174,6 +189,12 @@ tasks:
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-ui", REPO_DIR: "{{.REPO_UI_DIR}}" }
       - task: _finalize-repo
         vars: { DESC: "{{.DESC}}", REPO_NAME: "community-edition", REPO_DIR: "{{.REPO_CE_DIR}}" }
+      - task: _finalize-repo
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "dev-stack", REPO_DIR: "{{.REPO_DEVSTACK_DIR}}" }
+      - task: _finalize-repo
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "prod-stack", REPO_DIR: "{{.REPO_PRODSTACK_DIR}}" }
+      - task: _finalize-repo
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-docs", REPO_DIR: "{{.REPO_DOCS_DIR}}" }
       # Write session-level CONTEXT.md to Obsidian if it exists in the session dir
       - |
         set -e
@@ -215,6 +236,9 @@ tasks:
             metahub-admin)     eval echo "{{.REPO_ADMIN_DIR}}" ;;
             metahub-ui)        eval echo "{{.REPO_UI_DIR}}" ;;
             community-edition) eval echo "{{.REPO_CE_DIR}}" ;;
+            dev-stack)         eval echo "{{.REPO_DEVSTACK_DIR}}" ;;
+            prod-stack)        eval echo "{{.REPO_PRODSTACK_DIR}}" ;;
+            metahub-docs)      eval echo "{{.REPO_DOCS_DIR}}" ;;
             *) echo "" ;;
           esac
     preconditions:
@@ -227,7 +251,7 @@ tasks:
       - sh: 'grep -q "^{{.REPO_NAME}}=" "{{.SESSION_DIR}}/{{.CLI_ARGS}}/.branches"'
         msg: "Repo '{{.REPO_NAME}}' not found in session '{{.CLI_ARGS}}'"
       - sh: '[ -n "{{.REPO_DIR}}" ]'
-        msg: "Unknown repo '{{.REPO_NAME}}'. Must be one of: metahub-api, metalib, metahub-admin, metahub-ui, community-edition"
+        msg: "Unknown repo '{{.REPO_NAME}}'. Must be one of: metahub-api, metalib, metahub-admin, metahub-ui, community-edition, dev-stack, prod-stack, metahub-docs"
     cmds:
       - task: _version-repo
         vars:
@@ -254,6 +278,9 @@ tasks:
             metahub-admin)     eval echo "{{.REPO_ADMIN_DIR}}" ;;
             metahub-ui)        eval echo "{{.REPO_UI_DIR}}" ;;
             community-edition) eval echo "{{.REPO_CE_DIR}}" ;;
+            dev-stack)         eval echo "{{.REPO_DEVSTACK_DIR}}" ;;
+            prod-stack)        eval echo "{{.REPO_PRODSTACK_DIR}}" ;;
+            metahub-docs)      eval echo "{{.REPO_DOCS_DIR}}" ;;
             *) echo "" ;;
           esac
     preconditions:
@@ -306,6 +333,12 @@ tasks:
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-ui", REPO_DIR: "{{.REPO_UI_DIR}}" }
       - task: _worktree-rm
         vars: { DESC: "{{.DESC}}", REPO_NAME: "community-edition", REPO_DIR: "{{.REPO_CE_DIR}}" }
+      - task: _worktree-rm
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "dev-stack", REPO_DIR: "{{.REPO_DEVSTACK_DIR}}" }
+      - task: _worktree-rm
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "prod-stack", REPO_DIR: "{{.REPO_PRODSTACK_DIR}}" }
+      - task: _worktree-rm
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-docs", REPO_DIR: "{{.REPO_DOCS_DIR}}" }
       - echo ""
       - echo "=== Session '{{.DESC}}' suspended ==="
       - 'echo "Resume with: task session:resume -- {{.DESC}}"'
@@ -335,6 +368,12 @@ tasks:
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-ui", REPO_DIR: "{{.REPO_UI_DIR}}" }
       - task: _worktree-resume
         vars: { DESC: "{{.DESC}}", REPO_NAME: "community-edition", REPO_DIR: "{{.REPO_CE_DIR}}" }
+      - task: _worktree-resume
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "dev-stack", REPO_DIR: "{{.REPO_DEVSTACK_DIR}}" }
+      - task: _worktree-resume
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "prod-stack", REPO_DIR: "{{.REPO_PRODSTACK_DIR}}" }
+      - task: _worktree-resume
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-docs", REPO_DIR: "{{.REPO_DOCS_DIR}}" }
       - echo ""
       - echo "=== Session '{{.DESC}}' resumed ==="
       - ls -1 "{{.SESSION_DIR}}/{{.DESC}}/" | grep -v '^\.'
