@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
@@ -35,6 +36,13 @@ func newMockAuthentikAPI(t *testing.T) (*httptest.Server, *AuthentikClient) {
 			Description: payload["description"].(string),
 			Intent:      "app_password",
 		}
+		// Echo the lifetime fields the caller requested so tests can assert them.
+		if exp, ok := payload["expiring"].(bool); ok {
+			resp.Expiring = exp
+		}
+		if expires, ok := payload["expires"].(string); ok {
+			resp.Expires = expires
+		}
 		resp.UserObj.Username = "alice"
 		resp.UserObj.PK = 1
 		w.Header().Set("Content-Type", "application/json")
@@ -50,8 +58,8 @@ func newMockAuthentikAPI(t *testing.T) (*httptest.Server, *AuthentikClient) {
 		}
 		resp := AuthentikTokenList{
 			Results: []AuthentikToken{
-				{Identifier: "metahub-registry-111", Description: "laptop", Intent: "app_password"},
-				{Identifier: "metahub-registry-222", Description: "ci", Intent: "app_password"},
+				{Identifier: "metahub-registry-111", Description: "laptop", Intent: "app_password", Expiring: false},
+				{Identifier: "metahub-registry-222", Description: "ci", Intent: "app_password", Expiring: true, Expires: "2027-01-01T00:00:00Z"},
 			},
 		}
 		resp.Pagination.Count = 2
@@ -98,18 +106,36 @@ func newMockAuthentikAPI(t *testing.T) (*httptest.Server, *AuthentikClient) {
 func TestCreateAppPassword_Success(t *testing.T) {
 	_, client := newMockAuthentikAPI(t)
 	ctx := context.Background()
-	token, err := client.CreateAppPassword(ctx, "valid-user-token", "metahub-registry-123", "my laptop")
+	// Zero TTL ⇒ durable, non-expiring registry token.
+	token, err := client.CreateAppPassword(ctx, "valid-user-token", "metahub-registry-123", "my laptop", 0)
 	require.NoError(t, err)
 	assert.Equal(t, "metahub-registry-123", token.Identifier)
 	assert.Equal(t, "my laptop", token.Description)
 	assert.Equal(t, "app_password", token.Intent)
 	assert.Equal(t, "alice", token.UserObj.Username)
+	assert.False(t, token.Expiring, "default registry token should be non-expiring")
+	assert.Empty(t, token.Expires, "non-expiring token should not carry an expires timestamp")
+}
+
+func TestCreateAppPassword_WithTTL(t *testing.T) {
+	_, client := newMockAuthentikAPI(t)
+	ctx := context.Background()
+	ttl := 365 * 24 * time.Hour
+	before := time.Now().UTC()
+	token, err := client.CreateAppPassword(ctx, "valid-user-token", "metahub-registry-456", "ci", ttl)
+	require.NoError(t, err)
+	assert.True(t, token.Expiring, "TTL > 0 should produce an expiring token")
+	require.NotEmpty(t, token.Expires, "expiring token should carry an expires timestamp")
+	expires, perr := time.Parse(time.RFC3339, token.Expires)
+	require.NoError(t, perr)
+	// expires should be ~now+ttl (allow generous slack for execution time).
+	assert.WithinDuration(t, before.Add(ttl), expires, time.Minute)
 }
 
 func TestCreateAppPassword_Forbidden(t *testing.T) {
 	_, client := newMockAuthentikAPI(t)
 	ctx := context.Background()
-	_, err := client.CreateAppPassword(ctx, "bad-token", "metahub-registry-123", "test")
+	_, err := client.CreateAppPassword(ctx, "bad-token", "metahub-registry-123", "test", 0)
 	require.Error(t, err)
 	var authErr *AuthentikError
 	require.ErrorAs(t, err, &authErr)
@@ -141,7 +167,10 @@ func TestListAppPasswords_Success(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, tokens, 2)
 	assert.Equal(t, "metahub-registry-111", tokens[0].Identifier)
+	assert.False(t, tokens[0].Expiring)
 	assert.Equal(t, "metahub-registry-222", tokens[1].Identifier)
+	assert.True(t, tokens[1].Expiring)
+	assert.Equal(t, "2027-01-01T00:00:00Z", tokens[1].Expires)
 }
 
 func TestListAppPasswords_Forbidden(t *testing.T) {

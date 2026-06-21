@@ -13,6 +13,10 @@ import (
 const (
 	// groupMetahubAdmin is the Authentik group name that grants superuser (admin) role.
 	groupMetahubAdmin = "metahub-admin"
+	// roleAdmin is the role required to perform registry write operations.
+	roleAdmin = "admin"
+	// roleUser is the default role for authenticated, non-admin (pull-only) users.
+	roleUser = "user"
 )
 
 // OCIAuthContext carries authenticated user identity for OCI registry handlers.
@@ -26,10 +30,10 @@ type OCIAuthContext struct {
 func roleFromGroups(groups []string) string {
 	for _, g := range groups {
 		if g == groupMetahubAdmin {
-			return "admin"
+			return roleAdmin
 		}
 	}
-	return "user"
+	return roleUser
 }
 
 // ociAuthCtxKey is the typed context key for OCIAuthContext.
@@ -181,6 +185,40 @@ func (h Handlers) OCIAuthMiddleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			h.ociAuthHandleRequest(w, r, next)
+		})
+	}
+}
+
+// isOCIWriteMethod reports whether the HTTP method mutates registry state
+// (manifest/blob upload or delete). Reads (GET/HEAD) are not writes.
+func isOCIWriteMethod(method string) bool {
+	switch method {
+	case http.MethodPut, http.MethodPost, http.MethodPatch, http.MethodDelete:
+		return true
+	default:
+		return false
+	}
+}
+
+// OCIWriteAuthMiddleware enforces role-based authorization for registry writes.
+// Any authenticated user may pull (GET/HEAD); only users with the "admin" role
+// may push or delete (PUT/POST/PATCH/DELETE). This is what makes a demo /
+// pull-only account real: without it, every authenticated user could push.
+//
+// It must run AFTER OCIAuthMiddleware so the OCIAuthContext (with the resolved
+// role) is present on the request context.
+func (h Handlers) OCIWriteAuthMiddleware() func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if isOCIWriteMethod(r.Method) {
+				auth, ok := OCIUserFromContext(r.Context())
+				if !ok || auth.Role != roleAdmin {
+					det := helper.NewDetail("repository", "", r.Method)
+					forbidden(w, r, det, "write access requires the admin role")
+					return
+				}
+			}
+			next.ServeHTTP(w, r)
 		})
 	}
 }

@@ -28,10 +28,17 @@ cors:
 
 godmode:
   signing_key: "a-random-secret-key-at-least-32-characters"
+  # Multiple accounts with per-account roles. Only the "admin" role may push
+  # or delete; "user" accounts are pull-only (enforced by OCIWriteAuthMiddleware).
   users:
+    # CI / conformance service account — full read+write.
     - username: oci
       password: oci
       role: admin
+    # Public demo account — pull-only.
+    - username: meta
+      password: hub
+      role: user
 
 # Upstream registries available for pullthrough.
 # A client URL metahub-host/<hostname>/<repo>:<tag> triggers pullthrough
