@@ -6,6 +6,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/metahub-registry/metahub-api/pkg/lib/helper"
+	"github.com/metahub-registry/metahub-api/pkg/metrics"
 	"github.com/metahub-registry/metahub-core/pkg/types"
 	"github.com/metahub-registry/metahub-core/pkg/utils"
 )
@@ -16,6 +17,7 @@ const (
 
 func (h Handlers) TagGetHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	defer func() { metrics.ObserveTagsList(metrics.StatusOf(w)) }()
 	req := types.NewRequest(ctx, r)
 	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
 		"package": pkgFileOciTagGo,

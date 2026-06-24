@@ -13,6 +13,8 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/metahub-registry/metahub-api/pkg/config"
+	"github.com/metahub-registry/metahub-api/pkg/metrics"
+	"github.com/metahub-registry/metahub-api/pkg/usage"
 	"github.com/metahub-registry/metahub-core/pkg/helper"
 	"github.com/metahub-registry/metahub-core/pkg/utils"
 )
@@ -152,6 +154,7 @@ func (h Handlers) AuthHandler(w http.ResponseWriter, r *http.Request) {
 	// Anonymous access: no credentials provided
 	if !hasAuth || rawUsername == "" {
 		utils.Debug(l, span, "anonymous auth request, returning generic token")
+		metrics.ObserveTokenIssued(metrics.AuthAnonymous, "")
 		w.Header().Set(headerContentType, contentTypeJSON)
 		json.NewEncoder(w).Encode(map[string]string{"token": "REDACTED-IN-HISTORY"})
 		return
@@ -174,6 +177,8 @@ func (h Handlers) AuthHandler(w http.ResponseWriter, r *http.Request) {
 			json.NewEncoder(w).Encode(map[string]string{"error": "token creation failed"})
 			return
 		}
+		metrics.ObserveTokenIssued(metrics.AuthGodmode, profile)
+		usage.Auth(username, profile, metrics.AuthGodmode, usage.ResultSuccess)
 		w.Header().Set(headerContentType, contentTypeJSON)
 		json.NewEncoder(w).Encode(map[string]string{"token": token})
 		return
@@ -191,11 +196,14 @@ func (h Handlers) AuthHandler(w http.ResponseWriter, r *http.Request) {
 	authentikJWT, err := h.exchangeCredentialsWithAuthentik(username, password)
 	if err != nil {
 		utils.Warn(l, span, "Authentik token exchange failed for user '%s': %v", username, err)
+		usage.Auth(username, profile, metrics.AuthOIDC, usage.ResultFailure)
 		w.Header().Set(headerContentType, contentTypeJSON)
 		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(map[string]string{"error": "invalid credentials"})
 		return
 	}
+	metrics.ObserveTokenIssued(metrics.AuthOIDC, profile)
+	usage.Auth(username, profile, metrics.AuthOIDC, usage.ResultSuccess)
 
 	// If the login username contains a profile suffix (e.g., "alice/zen2"), wrap
 	// the Authentik JWT in a profile envelope token so the profile is preserved
