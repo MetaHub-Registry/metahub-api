@@ -12,6 +12,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/metahub-registry/metahub-api/pkg/lib/helper"
+	"github.com/metahub-registry/metahub-api/pkg/metrics"
 	"github.com/metahub-registry/metahub-core/pkg/types"
 	"github.com/metahub-registry/metahub-core/pkg/upstream"
 	"github.com/metahub-registry/metahub-core/pkg/utils"
@@ -527,6 +528,8 @@ func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
 	})
 	defer span.End()
 	req := types.NewRequest(ctx, r)
+	// Usage: bounded blob-pull metric + detailed VictoriaLogs event.
+	defer recordPull(w, r, req, metrics.KindBlob)
 	msg := fmt.Sprintf("%-5s BlobHandler(%s, ", r.Method, req.Repo)
 	if req.Tag == "" {
 		msg += fmt.Sprintf("%s)", req.Digest)

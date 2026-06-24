@@ -14,9 +14,14 @@ import (
 	"github.com/metahub-registry/metahub-api/pkg/api/v1/handlers"
 	"github.com/metahub-registry/metahub-api/pkg/api/v1/router"
 	"github.com/metahub-registry/metahub-api/pkg/config"
+	"github.com/metahub-registry/metahub-api/pkg/metrics"
 	"github.com/metahub-registry/metahub-core/pkg/backends/magazine"
 	mlver "github.com/metahub-registry/metahub-core/pkg/version"
 )
+
+// flagMetricsPort is the name of the metrics-port flag, referenced both when
+// the flag is defined and when its overridden value is read.
+const flagMetricsPort = "metrics-port"
 
 // serveCmd represents the parse command
 var serveCmd = &cobra.Command{
@@ -28,8 +33,36 @@ var serveCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(serveCmd)
 	serveCmd.Flags().Int("port", 80, "The API port")
+	serveCmd.Flags().Int(flagMetricsPort, 9090, "The Prometheus metrics port (served on a dedicated listener)")
 	serveCmd.Flags().String("user-db", "", "The user database file to use - will be overwritten")
 	serveCmd.Flags().String("registries", "", "Backend registries to add (comma-separated)")
+}
+
+// startMetricsServer records build info and, when metrics are enabled, serves
+// Prometheus metrics on a dedicated listener separate from live API/registry
+// traffic. It runs in its own goroutine and never fatals the API — a metrics
+// bind failure must not take down the registry.
+func startMetricsServer(cmd *cobra.Command) {
+	metrics.SetBuildInfo(version, mlver.Version)
+	mCfg := config.MetricsConfigFromViper()
+	metrics.SetEnabled(mCfg.Enabled)
+	if !mCfg.Enabled {
+		logrus.Info("Metrics endpoint disabled (metrics.enabled=false)")
+		return
+	}
+	metricsPort := mCfg.Port
+	if f := cmd.Flags().Lookup(flagMetricsPort); f != nil && f.Changed {
+		metricsPort, _ = cmd.Flags().GetInt(flagMetricsPort)
+	}
+	go func() {
+		mAddr := fmt.Sprintf(":%d", metricsPort)
+		mux := http.NewServeMux()
+		mux.Handle("/metrics", metrics.Handler())
+		logrus.Infof("Start serving metrics on %s/metrics", mAddr)
+		if mErr := http.ListenAndServe(mAddr, mux); mErr != nil {
+			logrus.Errorf("metrics server stopped: %v", mErr)
+		}
+	}()
 }
 
 func sCmd(cmd *cobra.Command, args []string) {
@@ -88,6 +121,9 @@ func sCmd(cmd *cobra.Command, args []string) {
 			log.Fatalf("Envelope token signing key not configured: %v", err)
 		}
 	}
+
+	// Metrics live on a dedicated listener; see startMetricsServer.
+	startMetricsServer(cmd)
 
 	r := router.Initialize(mag, oidcProvider, godmodeAuth)
 	addr := fmt.Sprintf(":%d", port)

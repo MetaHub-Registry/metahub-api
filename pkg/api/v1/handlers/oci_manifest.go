@@ -12,6 +12,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/metahub-registry/metahub-api/pkg/lib/helper"
+	"github.com/metahub-registry/metahub-api/pkg/metrics"
 	"github.com/metahub-registry/metahub-core/pkg/types"
 	"github.com/metahub-registry/metahub-core/pkg/upstream"
 	"github.com/metahub-registry/metahub-core/pkg/utils"
@@ -392,6 +393,10 @@ func (h Handlers) ManifestHandler(ctx context.Context, w http.ResponseWriter, r 
 func (h Handlers) ManifestGetHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	req := types.NewRequest(ctx, r)
+	// Usage: bounded metrics (pull + profile-aware resolution) plus a detailed
+	// VictoriaLogs event (which image, profile, user) — derived from the
+	// response status after the handler completes.
+	defer recordPull(w, r, req, metrics.KindManifest)
 	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
 		"package": pkgNameOciMani,
 		"func":    "api.ManifestGetHandler",

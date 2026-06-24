@@ -7,6 +7,7 @@ import (
 
 	gCtx "github.com/gorilla/context"
 	"github.com/metahub-registry/metahub-api/pkg/config"
+	"github.com/metahub-registry/metahub-api/pkg/metrics"
 	"github.com/metahub-registry/metahub-core/pkg/helper"
 )
 
@@ -58,6 +59,16 @@ type ociClaimsResult struct {
 	err    error
 	reject bool // true means send 401 immediately without further fallback
 	msg    string
+	method string // auth method that produced the claims (godmode|oidc), for metrics
+}
+
+// authMethodOrUnknown returns a bounded auth-method label, defaulting to
+// "unknown" when no verifier identified the token.
+func authMethodOrUnknown(m string) string {
+	if m == "" {
+		return metrics.AuthUnknown
+	}
+	return m
 }
 
 // verifyGodModeToken attempts god-mode JWT verification.
@@ -67,7 +78,7 @@ func (h Handlers) verifyGodModeToken(rawToken string) ociClaimsResult {
 	}
 	gm, err := h.godmode.VerifyToken(rawToken)
 	if gm != nil {
-		return ociClaimsResult{claims: gm.OIDCClaims, role: gm.Role}
+		return ociClaimsResult{claims: gm.OIDCClaims, role: gm.Role, method: metrics.AuthGodmode}
 	}
 	return ociClaimsResult{err: err}
 }
@@ -94,7 +105,7 @@ func (h Handlers) verifyEnvelopeToken(ctx context.Context, rawToken string) ociC
 		return ociClaimsResult{reject: true, msg: fmt.Sprintf("inner token invalid: %s", tokenErrMsg(innerErr))}
 	}
 	merged := &OIDCClaims{Sub: inner.Sub, Username: rawUsername, Email: inner.Email, Groups: inner.Groups}
-	return ociClaimsResult{claims: merged, role: roleFromGroups(inner.Groups)}
+	return ociClaimsResult{claims: merged, role: roleFromGroups(inner.Groups), method: metrics.AuthOIDC}
 }
 
 // verifyOIDCToken attempts OIDC JWKS verification.
@@ -104,7 +115,7 @@ func (h Handlers) verifyOIDCToken(ctx context.Context, rawToken string) ociClaim
 	}
 	claims, err := h.oidc.oidcClaimsFromToken(ctx, rawToken)
 	if claims != nil {
-		return ociClaimsResult{claims: claims, role: roleFromGroups(claims.Groups)}
+		return ociClaimsResult{claims: claims, role: roleFromGroups(claims.Groups), method: metrics.AuthOIDC}
 	}
 	return ociClaimsResult{err: err}
 }
@@ -132,6 +143,7 @@ func (h Handlers) resolveOCIClaims(r *http.Request, rawToken string) ociClaimsRe
 func (h Handlers) ociAuthHandleRequest(w http.ResponseWriter, r *http.Request, next http.Handler) {
 	rawToken := extractRawToken(r)
 	if rawToken == "" {
+		metrics.ObserveAuthRequest(metrics.AuthAnonymous, "", metrics.ResultDeny)
 		realm := realmForRequest(r)
 		det := helper.NewDetail("repository", "", r.Method)
 		unauthorized(w, r, realm, det, invalidRequest, missingAuthHeader)
@@ -141,6 +153,7 @@ func (h Handlers) ociAuthHandleRequest(w http.ResponseWriter, r *http.Request, n
 	result := h.resolveOCIClaims(r, rawToken)
 
 	if result.reject {
+		metrics.ObserveAuthRequest(authMethodOrUnknown(result.method), "", metrics.ResultDeny)
 		realm := realmForRequest(r)
 		det := helper.NewDetail("repository", "", r.Method)
 		unauthorized(w, r, realm, det, invalidToken, "%s", result.msg)
@@ -154,6 +167,7 @@ func (h Handlers) ociAuthHandleRequest(w http.ResponseWriter, r *http.Request, n
 		if result.err != nil {
 			msg = tokenErrMsg(result.err)
 		}
+		metrics.ObserveAuthRequest(authMethodOrUnknown(result.method), "", metrics.ResultDeny)
 		unauthorized(w, r, realm, det, invalidToken, "%s", msg)
 		return
 	}
@@ -173,6 +187,7 @@ func (h Handlers) ociAuthHandleRequest(w http.ResponseWriter, r *http.Request, n
 	gCtx.Set(rWithCtx, "userRole", ociAuth.Role)
 	gCtx.Set(rWithCtx, "accountName", rawToken)
 
+	metrics.ObserveAuthRequest(authMethodOrUnknown(result.method), profile, metrics.ResultAllow)
 	next.ServeHTTP(w, rWithCtx)
 }
 

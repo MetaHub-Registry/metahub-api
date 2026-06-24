@@ -18,6 +18,9 @@ frontend:
   redirect: {{ FRONTEND_REDIRECT | default("https://frontend.metahub-registry.org") }}
 cors:
   enabled: {{ CORS_ENABLED |default("false")}}
+metrics:
+  enabled: {{ METRICS_ENABLED |default("true") }}
+  port: {{ METRICS_PORT |default("9090") }}
 {% if TRACING_URL %}tracing:
   name: "{{ TRACING_NAME |default("metahub-api") }}"
   endpoint: "{{ TRACING_URL }}"{% endif %}

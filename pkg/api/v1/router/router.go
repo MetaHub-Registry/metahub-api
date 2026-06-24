@@ -11,6 +11,7 @@ import (
 	"github.com/riandyrn/otelchi"
 	"github.com/sirupsen/logrus"
 	"github.com/metahub-registry/metahub-api/pkg/api/v1/handlers"
+	"github.com/metahub-registry/metahub-api/pkg/metrics"
 	"github.com/metahub-registry/metahub-core/pkg/backends/magazine"
 )
 
@@ -37,11 +38,15 @@ func Initialize(mag magazine.Magazine, oidcProvider *handlers.OIDCProvider, godm
 		},
 	)
 	router.Use(
+		// Heartbeat first: Kubernetes liveness/readiness probes to /health are
+		// answered before the logging and metrics middleware run, so probe
+		// traffic is neither logged nor counted in the HTTP metrics.
+		middleware.Heartbeat("/health"),               //for heartbeat process such as Kubernetes liveprobeness
+		metrics.Middleware,                            // operational HTTP metrics (no-op when metrics disabled)
 		render.SetContentType(render.ContentTypeJSON), //forces Content-type
 		middleware.StripSlashes,
 		logger.Logger("router", log),
-		middleware.Recoverer,            //middleware to recover from panics
-		middleware.Heartbeat("/health"), //for heartbeat process such as Kubernetes liveprobeness
+		middleware.Recoverer, //middleware to recover from panics
 	)
 	if mag.Config.CORS.Enabled {
 		router.Use(cors.Handler(cors.Options{
