@@ -489,6 +489,19 @@ tasks:
         cd "${REPO_DIR}"
         git fetch --quiet origin 2>/dev/null || true
 
+        # Fast-forward the source repo's current branch to its upstream so a
+        # brand-new session branch is cut from the latest commit, not a stale
+        # local HEAD. ff-only is non-destructive: it's a no-op when already up
+        # to date, diverged, or the working tree is dirty.
+        CURRENT_BRANCH=$(git symbolic-ref --quiet --short HEAD 2>/dev/null || echo "")
+        if [ -n "${CURRENT_BRANCH}" ] && git show-ref --verify --quiet "refs/remotes/origin/${CURRENT_BRANCH}"; then
+          if git merge --ff-only "origin/${CURRENT_BRANCH}" >/dev/null 2>&1; then
+            echo "[${REPO_NAME}] ${CURRENT_BRANCH} up to date with origin/${CURRENT_BRANCH}"
+          else
+            echo "[${REPO_NAME}] Could not fast-forward ${CURRENT_BRANCH} — branching from current HEAD"
+          fi
+        fi
+
         # Create the worktree, tracking an existing branch when present.
         # FRESH stays 0 unless we cut a brand-new branch from HEAD — only
         # then do we apply the initial dev bump, so a re-run never bumps a
@@ -517,7 +530,14 @@ tasks:
             NEW_VER=$(grep "current_version" .bumpversion.cfg | head -1 | cut -d= -f2 | tr -d ' ')
             echo "[${REPO_NAME}] Version: ${NEW_VER}"
             git add -A
-            git commit -m "Start dev: ${NEW_VER}"
+            # A no-op bump (new version == on-disk version, or no file matched
+            # the configured pattern) leaves nothing staged. Don't let the empty
+            # commit abort the whole session under set -e.
+            if git diff --cached --quiet; then
+              echo "[${REPO_NAME}] Bump produced no changes — nothing to commit"
+            else
+              git commit -m "Start dev: ${NEW_VER}"
+            fi
           fi
           echo "[${REPO_NAME}] Pushing '${BRANCH}' to origin..."
           git push -u origin "${BRANCH}"
@@ -674,7 +694,13 @@ tasks:
           NEW_VER=$(grep "current_version" .bumpversion.cfg | head -1 | cut -d= -f2 | tr -d ' ')
           echo "[${REPO_NAME}] → ${NEW_VER}"
           git add -A
-          git commit -m "Dev iteration: ${NEW_VER}"
+          # Skip the commit when the bump changed nothing, so a no-op
+          # iteration doesn't abort the run under set -e.
+          if git diff --cached --quiet; then
+            echo "[${REPO_NAME}] Bump produced no changes — nothing to commit"
+          else
+            git commit -m "Dev iteration: ${NEW_VER}"
+          fi
           git push
         else
           echo "[${REPO_NAME}] No .bumpversion.cfg — skipping"
