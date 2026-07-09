@@ -762,7 +762,7 @@ tasks:
         if [ "${REAL_COMMITS}" -le 0 ]; then
           echo "[${REPO_NAME}] No changes beyond dev bumps — unchanged"
           echo "${REPO_NAME}.status=unchanged" >> "${BRANCHES_FILE}"
-          return
+          exit 0
         fi
 
         echo "[${REPO_NAME}] ${REAL_COMMITS} change commit(s) found"
