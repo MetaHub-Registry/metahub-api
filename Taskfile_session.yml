@@ -972,8 +972,9 @@ tasks:
 
         cd "${DEV_STACK}"
 
-        # render slots: API:LIB:ADMIN:CE:OCI:UI:DOCS
-        NEW_LINE="      - task: render:${API}:${LIB}:${ADMIN}:${CE}:dev:${UI}:${DOCS}"
+        # render slots: API:LIB:ADMIN:CE:OCI:UI:DOCS (all 7 required)
+        RENDER_CMD="render:${API}:${LIB}:${ADMIN}:${CE}:dev:${UI}:${DOCS}"
+        NEW_LINE="      - task: ${RENDER_CMD}"
         awk -v new="${NEW_LINE}" '
           /- task: render:/ && !/\{\{/ { print new; next }
           { print }
@@ -986,6 +987,9 @@ tasks:
         git push || echo "[dev-stack] Push failed — push manually"
 
         echo "[dev-stack] Committed and pushed"
+        echo ""
+        echo "[dev-stack] Render the session pipelines with (all 7 slots incl. DOCS):"
+        echo "             (cd ${DEV_STACK} && task ${RENDER_CMD})"
 
   # ---------------------------------------------------------------------------
   # _worktree-rm — remove a single worktree
