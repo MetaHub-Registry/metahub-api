@@ -185,15 +185,9 @@ func (h Handlers) handleIndexAsManifest(ctx context.Context, w http.ResponseWrit
 		utils.Debug(l, span, "index has %d descriptors, cannot unwrap to single manifest", len(ml.Manifests))
 		return false // multi-descriptor → serve index as-is
 	}
-	// Lazy manipulation for single-descriptor index unwrap
-	if req.Profile != "" {
-		prf, prfFound, prfErr := h.mag.Database.ProfileGetByLabel(ctx, req.Profile)
-		if prfErr == nil && prfFound {
-			manipulated, manipErr := h.mag.ApplyManipulationsToManifests(ctx, prf, ml.Manifests)
-			if manipErr == nil {
-				ml.Manifests = manipulated
-			}
-		}
+	// Lazy manipulation for single-descriptor index unwrap.
+	if h.manipulateSingleIndex(ctx, w, req, &ml) {
+		return true
 	}
 	// Single descriptor: serve the underlying manifest
 	singleDigest := ml.Manifests[0].Digest
@@ -213,6 +207,30 @@ func (h Handlers) handleIndexAsManifest(ctx context.Context, w http.ResponseWrit
 		return false
 	}
 	return true
+}
+
+// manipulateSingleIndex applies pull-time manipulations to a single-descriptor
+// index in place (when a profile is set). Returns true only if it wrote an OCI
+// error (an infeasible model quant → reject); other manipulation errors are
+// non-fatal (serve the original).
+func (h Handlers) manipulateSingleIndex(ctx context.Context, w http.ResponseWriter, req types.Request, ml *types.Index) bool {
+	if req.Profile == "" {
+		return false
+	}
+	prf, prfFound, prfErr := h.mag.Database.ProfileGetByLabel(ctx, req.Profile)
+	if prfErr != nil || !prfFound {
+		return false
+	}
+	manipulated, manipErr := h.mag.ApplyManipulationsToManifests(ctx, prf, ml.Manifests)
+	if manipErr != nil {
+		if isQuantInfeasible(manipErr) {
+			writeOCIError(w, manipErr)
+			return true
+		}
+		return false
+	}
+	ml.Manifests = manipulated
+	return false
 }
 
 // resolveUpstreamTarget detects an upstream registry prefix on req.Repo
@@ -366,6 +384,24 @@ func (h Handlers) ManifestHandler(ctx context.Context, w http.ResponseWriter, r 
 		l.Infof("%-5s ManifestGetHandler(%s:%s) Profile:%s", req.Method, req.Repo, req.Tag, req.Profile)
 	}
 
+	// Model-centric pull: models/<org>/<name>:<tag> under a model-serving profile is
+	// served by rewriting the request to the model's runtime collection; the
+	// per-profile manipulation engine (wired by `parse models`) then injects the
+	// model+config layers, with the requested quant threaded via context (an explicit
+	// tag pins that quant, else best-fit). Guarded to models/* with a resolvable
+	// runtime, so non-model pulls are untouched (and models/* 404s today, so this can
+	// only improve them).
+	if runtimeRepo, modelName, quant, ok := h.resolveModelCentricRuntime(ctx, req); ok {
+		l.Infof("model-centric pull %s:%s → runtime %s (profile %s, model %q, quant %q)", req.Repo, req.Tag, runtimeRepo, req.Profile, modelName, quant)
+		req.Repo, req.Tag = runtimeRepo, "latest"
+		up.Repo, up.Tag = runtimeRepo, "latest"
+		ctx = types.WithRequestedQuant(ctx, quant)
+		// Scope the on-demand manipulation compose to THIS model, so a profile
+		// hosting several models injects only the pulled one (no cross-model leak,
+		// no sibling-config QNIB_MODEL_CONFIG_DIR collision).
+		ctx = types.WithRequestedModel(ctx, modelName)
+	}
+
 	mediaType, colFound, err := h.mag.Database.ManifestExists(ctx, up)
 	if err != nil {
 		writeInternalError(w, l, span, req, "failed to check if collection exists: %v", err)
@@ -388,6 +424,32 @@ func (h Handlers) ManifestHandler(ctx context.Context, w http.ResponseWriter, r 
 		return
 	}
 	writeManifestNotFound(w, l, span, req)
+}
+
+// resolveModelCentricRuntime detects a model-centric pull (models/<org>/<name>:<tag>)
+// and returns the model's runtime collection repo plus the requested quant (the pull
+// tag). ok is false for non-model repos, the internal -layer/-config repos, or when
+// the model has no composition (hence no runtime). The runtime is read from the
+// model's compositions (the ModelRuntimeAnnotation set by `repackage --runtime`).
+func (h Handlers) resolveModelCentricRuntime(ctx context.Context, req types.Request) (runtimeRepo, modelName, quant string, ok bool) {
+	const prefix = "models/"
+	if !strings.HasPrefix(req.Repo, prefix) {
+		return "", "", "", false
+	}
+	name := strings.TrimPrefix(req.Repo, prefix)
+	if strings.HasSuffix(name, "-layer") || strings.HasSuffix(name, "-config") {
+		return "", "", "", false // internal repackage outputs, not a model repo
+	}
+	detail, found, err := h.mag.Database.ModelDetailGet(ctx, name)
+	if err != nil || !found {
+		return "", "", "", false
+	}
+	for _, c := range detail.Compositions {
+		if c.Runtime != "" {
+			return c.Runtime, name, req.Tag, true
+		}
+	}
+	return "", "", "", false
 }
 
 func (h Handlers) ManifestGetHandler(w http.ResponseWriter, r *http.Request) {

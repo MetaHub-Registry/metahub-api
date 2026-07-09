@@ -12,7 +12,7 @@ func TestRegistryPullEmitsEvent(t *testing.T) {
 	hook := logrustest.NewGlobal()
 	defer hook.Reset()
 
-	RegistryPull("manifest", "qnib/ftest", "latest", "sha256:abc", "", "", 200)
+	RegistryPull(PullEvent{Kind: "manifest", Repo: "qnib/ftest", Tag: "latest", Digest: "sha256:abc", Status: 200})
 
 	e := hook.LastEntry()
 	if e == nil {
@@ -30,6 +30,9 @@ func TestRegistryPullEmitsEvent(t *testing.T) {
 	if e.Data["user"] != "anonymous" {
 		t.Errorf("empty user should normalise to anonymous, got %v", e.Data["user"])
 	}
+	if e.Data["client_ip"] != "unknown" {
+		t.Errorf("empty client_ip should normalise to unknown, got %v", e.Data["client_ip"])
+	}
 }
 
 func TestAuthEmitsEvent(t *testing.T) {
@@ -37,7 +40,7 @@ func TestAuthEmitsEvent(t *testing.T) {
 	hook := logrustest.NewGlobal()
 	defer hook.Reset()
 
-	Auth("alice", "zen2", "oidc", ResultSuccess)
+	Auth("alice", "zen2", "oidc", ResultSuccess, "203.0.113.7")
 
 	e := hook.LastEntry()
 	if e == nil {
@@ -49,5 +52,8 @@ func TestAuthEmitsEvent(t *testing.T) {
 	if e.Data["user"] != "alice" || e.Data["profile"] != "zen2" ||
 		e.Data["method"] != "oidc" || e.Data["result"] != ResultSuccess {
 		t.Errorf("unexpected auth fields: %+v", e.Data)
+	}
+	if e.Data["client_ip"] != "203.0.113.7" {
+		t.Errorf("client_ip = %v, want 203.0.113.7", e.Data["client_ip"])
 	}
 }

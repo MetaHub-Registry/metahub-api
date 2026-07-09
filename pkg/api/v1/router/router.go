@@ -16,13 +16,17 @@ import (
 )
 
 const (
-	apiTimeout                = 5 * time.Second
-	ImgBlobUploadUuidPath     = "/{image}/blobs/uploads/{uuid}"
-	RepoImgBlobUploadUuidPath = "/{repo}/{image}/blobs/uploads/{uuid}"
-	imgManifestRefPath        = "/{image}/manifests/{reference}"
-	repoImgManifestRefPath    = "/{repo}/{image}/manifests/{reference}"
-	imgBlobRefPath            = "/{image}/blobs/{reference}"
-	repoImgBlobRefPath        = "/{repo}/{image}/blobs/{reference}"
+	apiTimeout                 = 5 * time.Second
+	ImgBlobUploadUuidPath      = "/{image}/blobs/uploads/{uuid}"
+	RepoImgBlobUploadUuidPath  = "/{repo}/{image}/blobs/uploads/{uuid}"
+	Repo2ImgBlobUploadUuidPath = "/{repo}/{repo2}/{image}/blobs/uploads/{uuid}"
+	Repo3ImgBlobUploadUuidPath = "/{repo}/{repo2}/{repo3}/{image}/blobs/uploads/{uuid}"
+	imgManifestRefPath         = "/{image}/manifests/{reference}"
+	repoImgManifestRefPath     = "/{repo}/{image}/manifests/{reference}"
+	repo2ImgManifestRefPath    = "/{repo}/{repo2}/{image}/manifests/{reference}"
+	repo3ImgManifestRefPath    = "/{repo}/{repo2}/{repo3}/{image}/manifests/{reference}"
+	imgBlobRefPath             = "/{image}/blobs/{reference}"
+	repoImgBlobRefPath         = "/{repo}/{image}/blobs/{reference}"
 )
 
 func Initialize(mag magazine.Magazine, oidcProvider *handlers.OIDCProvider, godmode *handlers.GodModeAuth) *chi.Mux {
@@ -67,6 +71,22 @@ func Initialize(mag magazine.Magazine, oidcProvider *handlers.OIDCProvider, godm
 		// ORAS artifact browsing (public)
 		r.Get("/oras", h.OrasGetAll)
 		r.Get("/oras/artifact", h.OrasGetOne)
+		// Model catalog (public) — repackaged model-layer images, kept out of
+		// collections and surfaced here instead.
+		r.Get("/models", h.ModelsGetAll)
+		r.Get("/models/{ref}", h.ModelsGetOne)
+		r.Get("/models/{ref}/compositions", h.ModelsGetCompositions)
+		// Org-qualified model names (models/<org>/<name>) arrive %2F-encoded; chi
+		// 307-redirects that to the decoded two-segment path, which the single
+		// {ref} route can't match. These explicit {org}/{name} routes catch the
+		// redirected form (loadModelDetail reassembles ref = org/name).
+		r.Get("/models/{org}/{name}", h.ModelsGetOne)
+		r.Get("/models/{org}/{name}/compositions", h.ModelsGetCompositions)
+		// Manifest blob content proxy — streams a config layer blob as plain
+		// text using API JWT auth, bypassing the OCI Bearer auth flow.
+		r.Get("/manifest/blob-content", h.ManifestBlobContentGet)
+		// Runtime registry (public) — application containers + compatibility.
+		r.Get("/runtimes", h.RuntimesGetAll)
 		// Profiles (public)
 		r.Get("/profiles/{label}", h.ProfileGetOne)
 		r.Get("/profiles", h.ProfilesGetAll)
@@ -123,14 +143,16 @@ func Initialize(mag magazine.Magazine, oidcProvider *handlers.OIDCProvider, godm
 			r.Get(imgManifestRefPath, h.ManifestGetHandler)
 			r.Head(repoImgManifestRefPath, h.ManifestHeadHandler)
 			r.Get(repoImgManifestRefPath, h.ManifestGetHandler)
-			r.Head("/{repo}/{repo2}/{image}/manifests/{reference}", h.ManifestHeadHandler)
-			r.Get("/{repo}/{repo2}/{image}/manifests/{reference}", h.ManifestGetHandler)
-			r.Head("/{repo}/{repo2}/{repo3}/{image}/manifests/{reference}", h.ManifestHeadHandler)
-			r.Get("/{repo}/{repo2}/{repo3}/{image}/manifests/{reference}", h.ManifestGetHandler)
+			r.Head(repo2ImgManifestRefPath, h.ManifestHeadHandler)
+			r.Get(repo2ImgManifestRefPath, h.ManifestGetHandler)
+			r.Head(repo3ImgManifestRefPath, h.ManifestHeadHandler)
+			r.Get(repo3ImgManifestRefPath, h.ManifestGetHandler)
 
 			//// Upload Manifest
 			r.Put(imgManifestRefPath, h.ManifestPutHandler)
 			r.Put(repoImgManifestRefPath, h.ManifestPutHandler)
+			r.Put(repo2ImgManifestRefPath, h.ManifestPutHandler)
+			r.Put(repo3ImgManifestRefPath, h.ManifestPutHandler)
 			//// Delete
 			r.Delete(imgManifestRefPath, h.ManifestDelHandler)
 			r.Delete(repoImgManifestRefPath, h.ManifestDelHandler)
@@ -151,15 +173,24 @@ func Initialize(mag magazine.Magazine, oidcProvider *handlers.OIDCProvider, godm
 			r.Get("/{repo}/{repo2}/{image}/tags/list", h.TagGetHandler)
 			r.Get("/{repo}/{repo2}/{repo3}/{image}/tags/list", h.TagGetHandler)
 			r.Get("/_catalog", h.CatalogGetHandler)
-			// Upload Blobs
-			r.Post("/{repo}/{image}/blobs/uploads", h.BlobUploadPostHandler)
+			// Upload Blobs — support up to 3 repo segments (like the GET/HEAD blob +
+			// manifest routes) so deep repos such as models/<org>/<name>-layer push.
 			r.Post("/{image}/blobs/uploads", h.BlobUploadPostHandler)
+			r.Post("/{repo}/{image}/blobs/uploads", h.BlobUploadPostHandler)
+			r.Post("/{repo}/{repo2}/{image}/blobs/uploads", h.BlobUploadPostHandler)
+			r.Post("/{repo}/{repo2}/{repo3}/{image}/blobs/uploads", h.BlobUploadPostHandler)
 			r.Patch(ImgBlobUploadUuidPath, h.BlobUploadPatchHandler)
 			r.Patch(RepoImgBlobUploadUuidPath, h.BlobUploadPatchHandler)
+			r.Patch(Repo2ImgBlobUploadUuidPath, h.BlobUploadPatchHandler)
+			r.Patch(Repo3ImgBlobUploadUuidPath, h.BlobUploadPatchHandler)
 			r.Put(ImgBlobUploadUuidPath, h.BlobUploadPutHandler)
 			r.Put(RepoImgBlobUploadUuidPath, h.BlobUploadPutHandler)
+			r.Put(Repo2ImgBlobUploadUuidPath, h.BlobUploadPutHandler)
+			r.Put(Repo3ImgBlobUploadUuidPath, h.BlobUploadPutHandler)
 			r.Get(ImgBlobUploadUuidPath, h.BlobUploadGetHandler)
 			r.Get(RepoImgBlobUploadUuidPath, h.BlobUploadGetHandler)
+			r.Get(Repo2ImgBlobUploadUuidPath, h.BlobUploadGetHandler)
+			r.Get(Repo3ImgBlobUploadUuidPath, h.BlobUploadGetHandler)
 			// Delete Blobs
 			r.Delete(repoImgBlobRefPath, h.BlobDelHandler)
 			r.Delete(imgBlobRefPath, h.BlobDelHandler)

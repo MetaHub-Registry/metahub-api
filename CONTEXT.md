@@ -1,6 +1,46 @@
 # Context: metahub-api
 
 > This file helps AI agents understand the repo quickly.
+
+## model-centric-pull (session isc-session-v2, 2026-07-07) — branch `109-isc-session-v2`
+
+**Done:**
+- `a0d0a1f` — `pickBlobLayerDigest` (pure, 100%) + guard tests for `ManifestBlobContentGet`.
+- `1e8d20d` — **#8 serve interception SHIPPED**: `resolveModelCentricRuntime` + the rewrite in
+  `ManifestHandler` (`oci_manifest.go`). Guarded to `models/*` (can't regress); guard branches tested.
+
+**#8 remaining validation (NOT yet done):**
+- **Injection happy-path integration test** (local harness): seed a model-serving profile → repackage
+  a model to it → seed the runtime collection → `GET /v2/models/<name>/manifests/<quant>` → assert the
+  composed manifest (runtime+model+config). This validates the open assumption that serving the runtime
+  collection under the profile triggers the per-profile manipulation injection. **Do this before dev.**
+- **Multi-model scoping**: a profile with >1 model would inject all; thread the requested model name
+  (like the quant, `WithRequestedQuant`) to scope. Non-issue for the single-model first e2e.
+
+**#8 serve interception — the plan (as implemented):**
+- Serve flow: `ManifestGetHandler` → `ManifestHandler` (`pkg/api/v1/handlers/oci_manifest.go:362`) →
+  `ManifestExists(up{repo,tag,profile})` (`:387`) → `dispatchByMediaType`. A `models/<org>/<name>:<tag>`
+  pull 404s today (repackage pushes `…-layer`/`…-config`, not the bare repo).
+- **Reuse the existing manipulation engine** (much less code): #7's `parse models` already attaches
+  `model/<name>` + `config/<name>` manipulations to each model-serving profile. So at the top of
+  `ManifestHandler`: if `req.Repo` is `models/<org>/<name>`, profile is model-serving, and a
+  `model/<name>` exists → **rewrite req to the model's runtime collection** (repo+tag), keep
+  `req.Profile`, and set `ctx = types.WithRequestedQuant(ctx, req.Tag)` (metalib `1194295`, already
+  threads into resolution). The engine then injects model+config for the profile.
+- **Needs a model→runtime lookup** (given `model/<name>` + profile → runtime collection). Runtime is
+  the config-artefact annotation from repackage; `metalib neo/model_detail.go:modelCompositionsGet`
+  surfaces compositions with runtime — likely the query, or a small addition.
+- A3 (runtime resolution) is already profile-scoped: `ManifestGetByRequest({Repo,Tag,Profile})`.
+
+**Gotchas:**
+- Live pull path — cover with a serve-path integration test (local testcontainers harness, CPU-only)
+  BEFORE `frame`. `TestIndexPullAfterTwoArchPushes` is a **pre-existing flake** under full-package
+  load (passes in isolation; not model-centric-pull related).
+- metahub-api `replace`s metalib `=> ../metahub-core`, so local metalib changes are live in tests.
+- Sonar new-code gate (80%): `oci_blob.go` new lines + `manifest_blob` happy path still uncovered —
+  do the **consolidated coverage pass AFTER #8** (serve code is new code too).
+
+Full design + step-by-step: DevDiary `Metahub/DevDiary/…/2026-07-07-1438-model-centric-pull-implementation`.
 > Updated after each session that modifies this repo.
 
 ## What This Repo Is

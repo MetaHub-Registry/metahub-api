@@ -47,6 +47,24 @@ it is faster and cheaper than blind file/grep search for "where does X live",
 - **First stop for orientation.** Grep the graph for relevant `name`/`summary`/`tags`
   to find nodes, then follow `imports`/`calls`/`contains` edges for the 1-hop
   subgraph. Don't dump the whole file into context — search the sections you need.
+- **Resolve symbols via the graph, not `grep`.** Node IDs are
+  `function:<relpath>:<Name>` (methods likewise) and `calls` edges run
+  caller → callee, so "who uses this function?" is a graph query — not a source
+  grep. Reserve `rg`/grep for string/literal search; for "where is X defined",
+  "who calls X", "what depends on X", query the graph first:
+
+  ```bash
+  KG=.understand-anything/knowledge-graph.json
+
+  # Where is it defined?
+  jq -r '.nodes[] | select(.id|endswith(":ProfileGetOne")) | .id' "$KG"
+
+  # Who calls it? (the usages you'd otherwise grep for)
+  jq -r '.edges[] | select(.type=="calls" and (.target|endswith(":ProfileGetOne"))) | .source' "$KG"
+
+  # What does it call / import? (1-hop out)
+  jq -r '.edges[] | select((.type=="calls" or .type=="imports") and (.source|endswith(":ProfileGetOne"))) | .target' "$KG"
+  ```
 - **Graph skills** (in `.opencode/skills/`, available as project skills):
   - `understand-chat` — ask questions about the codebase using the graph.
   - `understand-explain` — deep-dive a specific file/function/module.

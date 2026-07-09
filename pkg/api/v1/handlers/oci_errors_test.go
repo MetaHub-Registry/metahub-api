@@ -3,12 +3,14 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	mlibTypes "github.com/metahub-registry/metahub-core/pkg/types"
 )
 
 // ociErrorEnvelope mirrors the OCI error response shape for test assertions.
@@ -78,6 +80,27 @@ func TestWriteOCIError_SentinelMappings(t *testing.T) {
 			assert.Equal(t, tc.wantCode, env.Errors[0].Code, "unexpected OCI error code")
 			assert.Contains(t, env.Errors[0].Message, tc.errMsg, "error message should be preserved")
 		})
+	}
+}
+
+// TestWriteOCIError_QuantInfeasible verifies the model resolver's typed
+// *ErrQuantInfeasible maps to OCI UNSUPPORTED / 400, both directly and when
+// wrapped, with the quant + profile preserved in the message.
+func TestWriteOCIError_QuantInfeasible(t *testing.T) {
+	base := &mlibTypes.ErrQuantInfeasible{
+		Quant: "q8", Profile: "12gb#strixhalo", Required: 34359738368, Available: 12884901888,
+	}
+	for _, err := range []error{error(base), fmt.Errorf("resolve failed: %w", base)} {
+		w := httptest.NewRecorder()
+		writeOCIError(w, err)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+		var env ociErrorEnvelope
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &env))
+		require.Len(t, env.Errors, 1)
+		assert.Equal(t, "UNSUPPORTED", env.Errors[0].Code)
+		assert.Contains(t, env.Errors[0].Message, "q8")
+		assert.Contains(t, env.Errors[0].Message, "12gb#strixhalo")
 	}
 }
 

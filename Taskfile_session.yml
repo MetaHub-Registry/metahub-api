@@ -93,9 +93,11 @@ tasks:
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-ui", REPO_DIR: "{{.REPO_UI_DIR}}" }
       - task: _branch-and-mr
         vars: { DESC: "{{.DESC}}", REPO_NAME: "community-edition", REPO_DIR: "{{.REPO_CE_DIR}}" }
-      - task: _branch-and-mr
+      # dev-stack + prod-stack track main directly (like flux/metahub): no session
+      # branch/MR, edits commit to main and push to main.
+      - task: _worktree-main
         vars: { DESC: "{{.DESC}}", REPO_NAME: "dev-stack", REPO_DIR: "{{.REPO_DEVSTACK_DIR}}" }
-      - task: _branch-and-mr
+      - task: _worktree-main
         vars: { DESC: "{{.DESC}}", REPO_NAME: "prod-stack", REPO_DIR: "{{.REPO_PRODSTACK_DIR}}" }
       - task: _worktree-main
         vars: { DESC: "{{.DESC}}", REPO_NAME: "flux/metahub", REPO_DIR: "{{.REPO_FLUX_DIR}}" }
@@ -197,10 +199,8 @@ tasks:
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-ui", REPO_DIR: "{{.REPO_UI_DIR}}" }
       - task: _finalize-repo
         vars: { DESC: "{{.DESC}}", REPO_NAME: "community-edition", REPO_DIR: "{{.REPO_CE_DIR}}" }
-      - task: _finalize-repo
-        vars: { DESC: "{{.DESC}}", REPO_NAME: "dev-stack", REPO_DIR: "{{.REPO_DEVSTACK_DIR}}" }
-      - task: _finalize-repo
-        vars: { DESC: "{{.DESC}}", REPO_NAME: "prod-stack", REPO_DIR: "{{.REPO_PRODSTACK_DIR}}" }
+      # dev-stack + prod-stack track main (like flux/metahub) — not finalized via
+      # session-branch logic; their edits are pushed to main directly.
       - task: _finalize-repo
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-docs", REPO_DIR: "{{.REPO_DOCS_DIR}}" }
       # Write session-level CONTEXT.md to Obsidian if it exists in the session dir
@@ -942,6 +942,8 @@ tasks:
         sh: grep "^metahub-ui=" "{{.SESSION_DIR}}/{{.DESC}}/.branches" | cut -d= -f2
       CE_BRANCH:
         sh: grep "^community-edition=" "{{.SESSION_DIR}}/{{.DESC}}/.branches" | cut -d= -f2
+      DOCS_BRANCH:
+        sh: grep "^metahub-docs=" "{{.SESSION_DIR}}/{{.DESC}}/.branches" | cut -d= -f2
     preconditions:
       - sh: '[ -d "{{.DEV_STACK_EXPANDED}}" ]'
         msg: "Dev-stack directory not found at {{.DEV_STACK_DIR}}"
@@ -956,6 +958,7 @@ tasks:
         ADMIN="{{.ADMIN_BRANCH}}"
         UI="{{.UI_BRANCH}}"
         CE="{{.CE_BRANCH}}"
+        DOCS="{{.DOCS_BRANCH}}"
         DESC="{{.DESC}}"
 
         echo ""
@@ -965,11 +968,12 @@ tasks:
         echo "  ADMIN: ${ADMIN}"
         echo "  CE:    ${CE}"
         echo "  UI:    ${UI}"
+        echo "  DOCS:  ${DOCS}"
 
         cd "${DEV_STACK}"
 
-        # render slots: API:LIB:ADMIN:CE:OCI:UI
-        NEW_LINE="      - task: render:${API}:${LIB}:${ADMIN}:${CE}:dev:${UI}"
+        # render slots: API:LIB:ADMIN:CE:OCI:UI:DOCS
+        NEW_LINE="      - task: render:${API}:${LIB}:${ADMIN}:${CE}:dev:${UI}:${DOCS}"
         awk -v new="${NEW_LINE}" '
           /- task: render:/ && !/\{\{/ { print new; next }
           { print }
