@@ -34,5 +34,8 @@ func recordPull(w http.ResponseWriter, r *http.Request, req types.Request, kind 
 	if kind == metrics.KindManifest {
 		metrics.ObserveManifestResolution(profile, metrics.ResultFromStatus(st))
 	}
-	usage.RegistryPull(kind, req.Repo, req.Tag, req.Digest, profile, user, st)
+	usage.RegistryPull(usage.PullEvent{
+		Kind: kind, Repo: req.Repo, Tag: req.Tag, Digest: req.Digest,
+		Profile: profile, User: user, ClientIP: clientIP(r), Status: st,
+	})
 }

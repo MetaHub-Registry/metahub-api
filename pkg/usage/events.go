@@ -37,30 +37,54 @@ func orAnon(s string) string {
 	return s
 }
 
-// RegistryPull records a single registry pull with full detail (which image, by
-// which profile, by which user). Bounded aggregate counts are recorded
-// separately via pkg/metrics.ObservePull.
-func RegistryPull(kind, repo, tag, digest, profile, user string, status int) {
+func orUnknown(s string) string {
+	if s == "" {
+		return "unknown"
+	}
+	return s
+}
+
+// PullEvent is the full detail of a single registry pull (which image, by which
+// profile/user, from which client IP, with what HTTP status).
+type PullEvent struct {
+	Kind     string
+	Repo     string
+	Tag      string
+	Digest   string
+	Profile  string
+	User     string
+	ClientIP string
+	Status   int
+}
+
+// RegistryPull records a single registry pull with full detail. Bounded
+// aggregate counts are recorded separately via pkg/metrics.ObservePull. The
+// client_ip dimension is left raw here; reverse-DNS / GeoIP enrichment happens
+// downstream at query time in VictoriaLogs / Grafana.
+func RegistryPull(e PullEvent) {
 	logrus.WithFields(logrus.Fields{
-		eventField: EventPull,
-		"kind":     kind,
-		"repo":     repo,
-		"tag":      tag,
-		"digest":   digest,
-		"profile":  orNone(profile),
-		"user":     orAnon(user),
-		"status":   status,
+		eventField:  EventPull,
+		"kind":      e.Kind,
+		"repo":      e.Repo,
+		"tag":       e.Tag,
+		"digest":    e.Digest,
+		"profile":   orNone(e.Profile),
+		"user":      orAnon(e.User),
+		"client_ip": orUnknown(e.ClientIP),
+		"status":    e.Status,
 	}).Info("registry pull")
 }
 
 // Auth records an authentication attempt (login / token issuance): which user
-// and profile authenticated, by which method, and whether it succeeded.
-func Auth(user, profile, method, result string) {
+// and profile authenticated, by which method, from which client IP, and whether
+// it succeeded.
+func Auth(user, profile, method, result, clientIP string) {
 	logrus.WithFields(logrus.Fields{
-		eventField: EventAuth,
-		"user":     orAnon(user),
-		"profile":  orNone(profile),
-		"method":   method,
-		"result":   result,
+		eventField:  EventAuth,
+		"user":      orAnon(user),
+		"profile":   orNone(profile),
+		"method":    method,
+		"result":    result,
+		"client_ip": orUnknown(clientIP),
 	}).Info("auth")
 }

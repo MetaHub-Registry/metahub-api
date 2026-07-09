@@ -178,7 +178,7 @@ func (h Handlers) AuthHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		metrics.ObserveTokenIssued(metrics.AuthGodmode, profile)
-		usage.Auth(username, profile, metrics.AuthGodmode, usage.ResultSuccess)
+		usage.Auth(username, profile, metrics.AuthGodmode, usage.ResultSuccess, clientIP(r))
 		w.Header().Set(headerContentType, contentTypeJSON)
 		json.NewEncoder(w).Encode(map[string]string{"token": token})
 		return
@@ -196,14 +196,14 @@ func (h Handlers) AuthHandler(w http.ResponseWriter, r *http.Request) {
 	authentikJWT, err := h.exchangeCredentialsWithAuthentik(username, password)
 	if err != nil {
 		utils.Warn(l, span, "Authentik token exchange failed for user '%s': %v", username, err)
-		usage.Auth(username, profile, metrics.AuthOIDC, usage.ResultFailure)
+		usage.Auth(username, profile, metrics.AuthOIDC, usage.ResultFailure, clientIP(r))
 		w.Header().Set(headerContentType, contentTypeJSON)
 		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(map[string]string{"error": "invalid credentials"})
 		return
 	}
 	metrics.ObserveTokenIssued(metrics.AuthOIDC, profile)
-	usage.Auth(username, profile, metrics.AuthOIDC, usage.ResultSuccess)
+	usage.Auth(username, profile, metrics.AuthOIDC, usage.ResultSuccess, clientIP(r))
 
 	// If the login username contains a profile suffix (e.g., "alice/zen2"), wrap
 	// the Authentik JWT in a profile envelope token so the profile is preserved

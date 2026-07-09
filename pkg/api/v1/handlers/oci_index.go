@@ -7,8 +7,10 @@ import (
 	"strings"
 
 	"github.com/opencontainers/go-digest"
+	"github.com/sirupsen/logrus"
 	"github.com/metahub-registry/metahub-core/pkg/types"
 	"github.com/metahub-registry/metahub-core/pkg/utils"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -32,48 +34,61 @@ func (h Handlers) handleIndex(ctx context.Context, w http.ResponseWriter, req ty
 	if err != nil {
 		l.Errorf("failed to fetch Index: %v", err)
 		writeOCIError(w, fmt.Errorf("failed to fetch Index: %w", err))
-		ok = true
-		return
+		return true
 	}
-	if found {
-		// Lazy manipulation: if the pulling profile has manipulations,
-		// apply them to the Index's manifests on-demand. Manipulated
-		// copies are cached in the graph + MinIO for subsequent pulls.
-		if len(ml.Manifests) > 0 && req.Profile != "" {
-			prf, prfFound, prfErr := h.mag.Database.ProfileGetByLabel(ctx, req.Profile)
-			if prfErr != nil {
-				utils.Warn(l, span, "failed to fetch profile '%s' for manipulation check: %v", req.Profile, prfErr)
-			} else if prfFound {
-				manipulated, manipErr := h.mag.ApplyManipulationsToManifests(ctx, prf, ml.Manifests)
-				if manipErr != nil {
-					utils.Warn(l, span, "lazy manipulation failed for profile '%s' (serving original): %v", req.Profile, manipErr)
-				} else {
-					ml.Manifests = manipulated
-					// Persist the manipulated Index in MinIO so that
-					// Docker's follow-up GET-by-digest can find it.
-					// Without this, the on-the-fly Index digest returned
-					// in HEAD is transient and the GET returns 404.
-					indexBytes := ml.ToOCIBytes()
-					indexDigest := digest.FromBytes(indexBytes).String()
-					if storeErr := h.mag.Minio.ManifestsPutObj(ctx, indexDigest, indexBytes); storeErr != nil {
-						utils.Warn(l, span, "failed to persist manipulated index in MinIO: %v", storeErr)
-					} else {
-						utils.Debug(l, span, "persisted manipulated index %s in MinIO (%d bytes)", utils.ShortenDigest(indexDigest), len(indexBytes))
-					}
-				}
-			}
+	if !found {
+		return false
+	}
+	// Lazy manipulation: if the pulling profile has manipulations, apply them to
+	// the Index's manifests on-demand (cached in the graph + MinIO for next pulls).
+	if h.manipulateIndexInPlace(ctx, l, span, w, req, &ml) {
+		return true
+	}
+	switch req.Method {
+	case http.MethodGet:
+		ml.WriteWWW(w)
+	case http.MethodHead:
+		ml.WriteWWWHeader(w)
+	default:
+		l.Errorf("unsupported method '%s' for index", strings.ToUpper(req.Method))
+		writeOCIError(w, fmt.Errorf("unsupported method '%s' for index", strings.ToUpper(req.Method)))
+	}
+	return true
+}
+
+// manipulateIndexInPlace applies pull-time manipulations to the index's manifests
+// (when the profile has any) and persists the manipulated Index in MinIO so a
+// follow-up GET-by-digest finds it (the HEAD digest is otherwise transient).
+// Returns true only if it wrote an OCI error (infeasible model quant → reject);
+// other manipulation errors are non-fatal (serve the original).
+func (h Handlers) manipulateIndexInPlace(ctx context.Context, l *logrus.Entry, span trace.Span, w http.ResponseWriter, req types.Request, ml *types.Index) bool {
+	if len(ml.Manifests) == 0 || req.Profile == "" {
+		return false
+	}
+	prf, prfFound, prfErr := h.mag.Database.ProfileGetByLabel(ctx, req.Profile)
+	if prfErr != nil {
+		utils.Warn(l, span, "failed to fetch profile '%s' for manipulation check: %v", req.Profile, prfErr)
+		return false
+	}
+	if !prfFound {
+		return false
+	}
+	manipulated, manipErr := h.mag.ApplyManipulationsToManifests(ctx, prf, ml.Manifests)
+	if manipErr != nil {
+		if isQuantInfeasible(manipErr) {
+			writeOCIError(w, manipErr)
+			return true
 		}
-		switch req.Method {
-		case http.MethodGet:
-			ml.WriteWWW(w)
-		case http.MethodHead:
-			ml.WriteWWWHeader(w)
-		default:
-			l.Errorf("unsupported method '%s' for index", strings.ToUpper(req.Method))
-			writeOCIError(w, fmt.Errorf("unsupported method '%s' for index", strings.ToUpper(req.Method)))
-		}
-		ok = true
-		return
+		utils.Warn(l, span, "lazy manipulation failed for profile '%s' (serving original): %v", req.Profile, manipErr)
+		return false
+	}
+	ml.Manifests = manipulated
+	indexBytes := ml.ToOCIBytes()
+	indexDigest := digest.FromBytes(indexBytes).String()
+	if storeErr := h.mag.Minio.ManifestsPutObj(ctx, indexDigest, indexBytes); storeErr != nil {
+		utils.Warn(l, span, "failed to persist manipulated index in MinIO: %v", storeErr)
+	} else {
+		utils.Debug(l, span, "persisted manipulated index %s in MinIO (%d bytes)", utils.ShortenDigest(indexDigest), len(indexBytes))
 	}
 	return false
 }

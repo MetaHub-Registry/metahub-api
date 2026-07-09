@@ -31,6 +31,7 @@ const (
 	failedToStoreBlobUpload = "failed to store blob upload"
 	logSeverityKey          = "log.severity"
 	dockerUploadUUIDKey     = "Docker-Upload-UUID"
+	dockerContentDigestKey  = "Docker-Content-Digest"
 	FailedAuthPushPrfFMT    = "failed to authorize push for profile '%s'"
 )
 
@@ -61,13 +62,15 @@ func (h Handlers) BlobUploadPutHandler(w http.ResponseWriter, r *http.Request) {
 		helper.WriteOCIErrror(w, http.StatusBadRequest, e)
 		return
 	}
-	buf, err := io.ReadAll(r.Body)
-	if err != nil {
-		log.Fatal("request", err)
-	}
 	bu, found, err := h.mag.Database.BlobUploadGetOCIByUUID(ctx, req.UUID)
 	if err != nil {
-		log.Fatal("request", err)
+		msg := BlobUploadFetchErr
+		err = errors.Wrap(err, msg)
+		logrus.Error(err)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
+		return
 	}
 	if !found {
 		msg := fmt.Sprintf("BlobUpload with UUID %s not found", req.UUID)
@@ -78,42 +81,8 @@ func (h Handlers) BlobUploadPutHandler(w http.ResponseWriter, r *http.Request) {
 		helper.WriteOCIErrror(w, http.StatusNotFound, e)
 		return
 	}
-	if req.Length > 0 {
-		logrus.Infof("completing upload UUID:%s with final chunk of size %d", req.UUID, len(buf))
-		// We do not have a PATH but directly a PUT request with the data
-		dig := digest.FromBytes(buf)
-		bu.Digest = dig.String()
-		/// Create New Chunk
-		_, err := h.mag.Database.UploadChunkCreate(ctx, &bu, 0, int64(req.Length))
-		if err != nil {
-			msg := ChunkUploadErr
-			err = errors.Wrap(err, msg)
-			logrus.Error(err)
-			det := helper.NewDetailFromReq(req)
-			e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
-			helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
-			return
-		}
-		err = h.mag.StoreBlobUpload(ctx, &bu, buf)
-		if err != nil {
-			err = errors.Wrap(err, failedToStoreBlobUpload)
-			logrus.Error(err)
-			det := helper.NewDetailFromReq(req)
-			e := helper.NewErrPayload("INTERNAL_ERROR", failedToStoreBlobUpload, det)
-			helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
-			return
-		}
-		err = h.mag.Database.BlobUploadUpdateByUUID(ctx, &bu)
-		if err != nil {
-			msg := "failed to update blob upload"
-			err = errors.Wrap(err, msg)
-			logrus.Error(err)
-			det := helper.NewDetailFromReq(req)
-			e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
-			helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
-			return
-		}
-
+	if h.finalizeUploadBody(ctx, w, r, req, &bu) {
+		return
 	}
 	// How many chunks do we have?
 	chunks, err := h.mag.Database.UploadChunkGetByUUID(ctx, bu.ID)
@@ -127,6 +96,12 @@ func (h Handlers) BlobUploadPutHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The finalize PUT carries the whole-blob digest as ?digest=; use it as the
+	// composed blob's identity (bu.Digest otherwise holds the last chunk's digest,
+	// which is wrong for a multi-chunk upload).
+	if req.Digest != "" {
+		bu.Digest = req.Digest
+	}
 	err = h.mag.ComposeFromChunks(ctx, &bu, chunks)
 	if err != nil {
 		msg := "failed to compose blob from chunks"
@@ -154,11 +129,68 @@ func (h Handlers) BlobUploadPutHandler(w http.ResponseWriter, r *http.Request) {
 		attribute.String(Location, bu.Location),
 		attribute.String(Range, fmt.Sprintf("%d-%d", bu.RangeStart, bu.RangeStop)),
 		attribute.String(dockerUploadUUIDKey, bu.UUID.String()),
-		attribute.String("Docker-Content-Digest", bu.Digest),
+		attribute.String(dockerContentDigestKey, bu.Digest),
 		attribute.String(ContentLength, fmt.Sprintf("%d", len(bu.Data))),
 	))
 	span.SetStatus(http.StatusAccepted, "Accepted")
 	bu.WriteOCIPutResponse(w)
+}
+
+// writeBlobInternalError logs err and writes a 500 OCI INTERNAL_ERROR response.
+func (h Handlers) writeBlobInternalError(w http.ResponseWriter, req types.Request, err error, msg string) {
+	logrus.Error(err)
+	det := helper.NewDetailFromReq(req)
+	helper.WriteOCIErrror(w, http.StatusInternalServerError, helper.NewErrPayload("INTERNAL_ERROR", msg, det))
+}
+
+// finalizeUploadBody records + stores the final chunk of a PUT that carries a
+// body (req.Length>0). A monolithic PUT that carries the whole-blob digest in
+// ?digest= and has no prior PATCH chunks STREAMs straight to MinIO at constant
+// memory (never io.ReadAll, which OOMs on 10-100 GB model layers); chunked /
+// no-digest uploads take the buffered path. A req.Length of 0 is a no-op.
+// Returns true when it has already written an OCI error response (caller returns).
+func (h Handlers) finalizeUploadBody(ctx context.Context, w http.ResponseWriter, r *http.Request, req types.Request, bu *types.OCIBlobUpload) bool {
+	if req.Length == 0 {
+		return false
+	}
+	prior, e := h.mag.Database.UploadChunkGetByUUID(ctx, bu.ID)
+	if e != nil {
+		h.writeBlobInternalError(w, req, errors.Wrap(e, BlobUploadFetchErr), BlobUploadFetchErr)
+		return true
+	}
+	var buf []byte
+	stream := req.Digest != "" && len(prior) == 0
+	if stream {
+		bu.Digest = req.Digest
+	} else {
+		b, err := io.ReadAll(r.Body)
+		if err != nil {
+			h.writeBlobInternalError(w, req, errors.Wrap(err, "while reading request body"), "failed to read request body")
+			return true
+		}
+		buf = b
+		bu.Digest = digest.FromBytes(buf).String()
+	}
+	logrus.Infof("completing upload UUID:%s (%d bytes, streaming=%t)", req.UUID, req.Length, stream)
+	if _, e := h.mag.Database.UploadChunkCreate(ctx, bu, 0, int64(req.Length)); e != nil {
+		h.writeBlobInternalError(w, req, errors.Wrap(e, ChunkUploadErr), ChunkUploadErr)
+		return true
+	}
+	var err error
+	if stream {
+		err = h.mag.StoreBlobUploadReader(ctx, bu, r.Body, int64(req.Length))
+	} else {
+		err = h.mag.StoreBlobUpload(ctx, bu, buf)
+	}
+	if err != nil {
+		h.writeBlobInternalError(w, req, errors.Wrap(err, failedToStoreBlobUpload), failedToStoreBlobUpload)
+		return true
+	}
+	if err := h.mag.Database.BlobUploadUpdateByUUID(ctx, bu); err != nil {
+		h.writeBlobInternalError(w, req, errors.Wrap(err, "failed to update blob upload"), "failed to update blob upload")
+		return true
+	}
+	return false
 }
 
 func (h Handlers) BlobUploadGetHandler(w http.ResponseWriter, r *http.Request) {
@@ -243,7 +275,12 @@ func (h Handlers) validateChunkSequence(ctx context.Context, w http.ResponseWrit
 		helper.WriteOCIErrror(w, http.StatusRequestedRangeNotSatisfiable, e)
 	case len(chunks) > 0:
 		lastChunk := chunks[len(chunks)-1]
-		expectedStart = lastChunk.StartByte + lastChunk.Bytes + 1
+		// lastChunk.Bytes stores the inclusive END offset (Content-Range
+		// "start-end" → RangeBytes = end, see request.ParseRange), so the next
+		// chunk must start at END+1. Adding StartByte here double-counted it and
+		// rejected the 3rd+ chunk of any >2-chunk upload with 416 — the 2-chunk
+		// tests never exercised a last chunk whose StartByte != 0.
+		expectedStart = lastChunk.Bytes + 1
 		if req.RangeStartByte != expectedStart {
 			msg := fmt.Sprintf("Range should start at %d", expectedStart)
 			det := helper.NewDetailFromReq(req)
@@ -493,7 +530,7 @@ func (h Handlers) tryBlobGetRedirect(ctx context.Context, w http.ResponseWriter,
 		utils.Debug(l, span, "upstream redirect found: %s (reqDig: %s / upstreamDig: %s)", lyrUp.GetLabel(), utils.ShortenDigest(req.Digest), utils.ShortenDigest(lyrUp.Digest.String()))
 		redUrl := h.mag.GetBlobRedirectURL(lyrUp, req.Digest)
 		utils.Debug(l, span, "redirecting to upstream: %s", redUrl)
-		w.Header().Set("Docker-Content-Digest", req.Digest)
+		w.Header().Set(dockerContentDigestKey, req.Digest)
 		w.Header().Set(Location, redUrl)
 		w.Header().Del("Authorization")
 		http.Redirect(w, r, redUrl, http.StatusTemporaryRedirect)
@@ -545,7 +582,10 @@ func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
 		Digest: digest.Digest(req.Digest),
 	}
 
-	blob, found, err := h.mag.BlobGetByHTTPRequest(ctx, r)
+	// Metadata-only lookup — never buffer the blob here. Model layers can be
+	// 10s–100s of GB; fetching bytes eagerly (BlobGetByHTTPRequest buffers on
+	// GET) OOMs the pod. The bytes are streamed below at constant memory.
+	blob, found, err := h.mag.Database.BlobGetByDigest(ctx, req.Digest)
 	if err != nil {
 		// 1. FALSE
 		msg := fmt.Sprintf("failed to fetch layer: %v", err)
@@ -580,33 +620,43 @@ func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	layer, found, err := h.mag.LayerGetByHTTPRequest(r)
+	// Anything other than GET reaching here (HEAD returned above) needs only
+	// headers, not a body.
+	if r.Method != "GET" {
+		blob.WriteWWWHeader(w)
+		return
+	}
+	// Stream the blob straight from object storage at constant memory. Never
+	// buffer the whole layer (BlobGetBytes) — model layers can be 10s–100s of GB
+	// and buffering OOMs the pod. cf. minio.BlobGetReader.
+	rc, err := h.mag.Minio.BlobGetReader(ctx, req.Digest)
 	if err != nil {
-		// 1. FALSE
-		msg := fmt.Sprintf("failed to fetch layer: %v", err)
-		logrus.Error(msg)
-		msg = "failed to fetch layer blob"
+		if err.Error() == "The specified key does not exist." {
+			msg = "could not find blob"
+			det := helper.NewDetailFromReq(req)
+			e := helper.NewErrPayload("NAME_UNKNOWN", msg, det)
+			span.SetStatus(http.StatusNotFound, e.Message)
+			helper.WriteOCIErrror(w, http.StatusNotFound, e)
+			return
+		}
+		logrus.Errorf("failed to open blob stream: %v", err)
 		det := helper.NewDetailFromReq(req)
-		e := helper.NewErrPayload("INTERNAL_ERROR", msg, det)
+		e := helper.NewErrPayload("INTERNAL_ERROR", "failed to fetch layer blob", det)
 		span.SetStatus(http.StatusInternalServerError, e.Message)
 		helper.WriteOCIErrror(w, http.StatusInternalServerError, e)
 		return
 	}
-	if found {
-		span.SetStatus(codes.Ok, "found blob")
-		if r.Method == "GET" {
-			layer.WriteWWW(w)
-		}
-		layer.WriteWWWHeader(w)
-		return
+	defer rc.Close()
+	span.SetStatus(codes.Ok, "streaming blob")
+	w.Header().Set(dockerContentDigestKey, blob.Digest)
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set(ContentLength, fmt.Sprintf("%d", blob.Size))
+	w.Header().Set("Docker-Distribution-API-Version", "registry/2.0")
+	w.WriteHeader(http.StatusOK)
+	if _, cerr := io.Copy(w, rc); cerr != nil {
+		// Headers already sent — can only log a truncated transfer.
+		utils.Warn(l, span, "failed to stream blob %s: %v", utils.ShortenDigest(req.Digest), cerr)
 	}
-
-	// Not found
-	msg = "could not find blob"
-	det := helper.NewDetailFromReq(req)
-	e := helper.NewErrPayload("NAME_UNKNOWN", msg, det)
-	span.SetStatus(http.StatusNotFound, e.Message)
-	helper.WriteOCIErrror(w, http.StatusNotFound, e)
 }
 
 func (h Handlers) BlobDelHandler(w http.ResponseWriter, r *http.Request) {

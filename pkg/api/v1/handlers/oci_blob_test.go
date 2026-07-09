@@ -451,6 +451,66 @@ func TestUploadUploadBlobSequenceSplit(t *testing.T) {
 	assert.Equal(t, fmt.Sprintf("/v2/qnib/alpine/blobs/uploads/%s", uuid), gotPutLoc)
 }
 
+// TestUploadUploadMonolithicStream covers the streaming (constant-memory) PUT
+// path: POST then a monolithic PUT?digest carrying the whole body with NO prior
+// PATCH chunks — regclient's large model-layer push — which must be streamed to
+// MinIO rather than buffered via io.ReadAll.
+func TestUploadUploadMonolithicStream(t *testing.T) {
+	bs := utils.NewBootstrap()
+	bs.SetEmptyAll()
+	bs.SetYAMLPrefix("../../../../misc/yaml")
+	bs.AddBootstrap("users")
+	bs.AddBootstrap("rules:rules/generic/linux.yaml")
+	bs.AddBootstrap("profile:profiles/generic.yaml")
+	ctx := context.Background()
+	br, err := SetupTest(ctx, bs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer TeardownTest(bs, br)
+	testRepo := "qnib"
+	testProfile := "generic"
+	token, err := br.Get("user:test#bearer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	l0bytes := types.FTarmLayer0Byte()
+	l0ref := types.FTarmLayer0Reference()
+	// POST to open the upload
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/{image}/blobs/uploads/", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("repo", testRepo)
+	rctx.URLParams.Add("image", "alpine")
+	r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
+	gCtx.Set(r, "accountName", token)
+	gCtx.Set(r, "userName", testRepo)
+	gCtx.Set(r, "profileName", testProfile)
+	r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	h.BlobUploadPostHandler(w, r)
+	assert.Equal(t, http.StatusAccepted, w.Code)
+	uuid := w.Header().Get("Docker-Upload-UUID")
+	// Monolithic PUT: whole body + ?digest, no PATCH → streaming path.
+	wPut := httptest.NewRecorder()
+	putURL := fmt.Sprintf("/{repo}/{image}/blobs/uploads/{uuid}?digest=%s", l0ref.Digest)
+	rPut := httptest.NewRequest(http.MethodPut, putURL, bytes.NewReader(l0bytes))
+	rctxPut := chi.NewRouteContext()
+	rctxPut.URLParams.Add("repo", testRepo)
+	rctxPut.URLParams.Add("image", "alpine")
+	rctxPut.URLParams.Add("uuid", uuid)
+	rPut = rPut.WithContext(context.WithValue(rPut.Context(), chi.RouteCtxKey, rctxPut))
+	gCtx.Set(rPut, "accountName", token)
+	gCtx.Set(rPut, "userName", testRepo)
+	gCtx.Set(rPut, "profileName", testProfile)
+	rPut.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	// A real monolithic PUT always carries Content-Length; the handler reads it
+	// from the header (req.Length) to size the streamed store. Set it so this
+	// faithfully simulates regclient's push (httptest only sets r.ContentLength).
+	rPut.Header.Set("Content-Length", fmt.Sprint(len(l0bytes)))
+	h.BlobUploadPutHandler(wPut, rPut)
+	assert.Equal(t, http.StatusCreated, wPut.Code)
+}
+
 // BlobUploadGetHandler
 func TestBlobUploadGetHandler(t *testing.T) {
 	ctx := context.Background()
