@@ -444,6 +444,14 @@ func (h Handlers) resolveModelCentricRuntime(ctx context.Context, req types.Requ
 	ctx, span := tracer.Start(ctx, "ManifestHandler.resolveModelCentricRuntime")
 	defer span.End()
 	name := strings.TrimPrefix(req.Repo, prefix)
+	// Self-describe the model-centric resolution so a trace can be attributed to
+	// the pulling profile + requested model/quant — the two profiles (e.g. frame
+	// vs bazzite) resolve the same repo to different runtimes/child manifests.
+	span.SetAttributes(
+		attribute.Key("model").String(name),
+		attribute.Key("quant").String(req.Tag),
+		attribute.Key("profile").String(req.Profile),
+	)
 	if strings.HasSuffix(name, "-layer") || strings.HasSuffix(name, "-config") {
 		return "", "", "", false // internal repackage outputs, not a model repo
 	}
@@ -472,6 +480,7 @@ func (h Handlers) ManifestGetHandler(w http.ResponseWriter, r *http.Request) {
 		"repo":    req.Repo,
 		"tag":     req.Tag,
 		"digest":  utils.ShortenDigest(req.Digest),
+		"profile": req.Profile,
 	})
 	defer span.End()
 	_ = l
