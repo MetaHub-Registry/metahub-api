@@ -402,7 +402,9 @@ func (h Handlers) ManifestHandler(ctx context.Context, w http.ResponseWriter, r 
 		ctx = types.WithRequestedModel(ctx, modelName)
 	}
 
-	mediaType, colFound, err := h.mag.Database.ManifestExists(ctx, up)
+	resolveCtx, resolveSpan := tracer.Start(ctx, "ManifestHandler.manifestExists")
+	mediaType, colFound, err := h.mag.Database.ManifestExists(resolveCtx, up)
+	resolveSpan.End()
 	if err != nil {
 		writeInternalError(w, l, span, req, "failed to check if collection exists: %v", err)
 		return
@@ -436,6 +438,11 @@ func (h Handlers) resolveModelCentricRuntime(ctx context.Context, req types.Requ
 	if !strings.HasPrefix(req.Repo, prefix) {
 		return "", "", "", false
 	}
+	// Model-centric resolution fans out to ModelDetailGet + compositions and
+	// only fires on model pulls; span it to isolate model-serving resolution
+	// cost on the manifest critical path.
+	ctx, span := tracer.Start(ctx, "ManifestHandler.resolveModelCentricRuntime")
+	defer span.End()
 	name := strings.TrimPrefix(req.Repo, prefix)
 	if strings.HasSuffix(name, "-layer") || strings.HasSuffix(name, "-config") {
 		return "", "", "", false // internal repackage outputs, not a model repo
