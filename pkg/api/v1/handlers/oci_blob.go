@@ -608,6 +608,14 @@ func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !found {
+		// INSTRUMENTATION (perf-debug, non-behavioral): the existence check above is
+		// graph-scoped (Database.BlobGetByDigest). Log whether the content-addressed
+		// S3 object is present anyway — a graph-miss with s3_present=true is the
+		// graph-vs-object divergence (a wiped :Blob node while the object survives)
+		// that makes a client HEAD 404 and needlessly re-upload an existing blob.
+		_, statErr := h.mag.Minio.BlobStatObj(ctx, req.Digest)
+		utils.Info(l, span, "blob-head graph-miss method=%s repo=%s digest=%s s3_present=%v stat_err=%v",
+			r.Method, req.Repo, req.Digest, statErr == nil, statErr)
 		utils.Debug(l, span, "blob for w/ digest '%s' not found", utils.ShortenDigest(req.Digest))
 		// Not found
 		msg = "could not find blob"
@@ -617,6 +625,7 @@ func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
 		helper.WriteOCIErrror(w, http.StatusNotFound, e)
 		return
 	}
+	utils.Info(l, span, "blob-head graph-hit method=%s repo=%s digest=%s", r.Method, req.Repo, req.Digest)
 	utils.Debug(l, span, "blob for w/ digest '%s' found", utils.ShortenDigest(req.Digest))
 	// If redirect is enabled, we need to fetch the PreSignedURL
 	switch r.Method {
