@@ -164,6 +164,8 @@ tail -3 test.log
 
 ### DevDiary (Obsidian)
 
+The **MetaHub session DevDiary** index lives in Obsidian at `Metahub/DevDiary/README.md` (`[[Metahub/DevDiary/README]]`) — it lists every session and links its entries. Register your session there.
+
 After each major change, create a DevDiary entry in Obsidian at:
 
 ```
