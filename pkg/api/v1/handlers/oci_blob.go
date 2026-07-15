@@ -508,7 +508,24 @@ func (h Handlers) BlobUploadPostHandler(w http.ResponseWriter, r *http.Request) 
 	} else {
 		// Registries that do not support single request monolithic uploads SHOULD return
 		// a 202 Accepted status code and Location header and clients SHOULD proceed with a subsequent PUT request
-		// TODO: Send presigned upload URL
+		//
+		// CAUTION — do NOT naively "return a presigned S3 PUT URL here" as a push
+		// offload (mirror of the pull-side presigned GET redirect). Push is not a
+		// single request: it is POST -> optional PATCH(Content-Range) -> PUT(?digest=),
+		// and it is content-addressed. An S3 presigned PUT is a single fixed-signature
+		// object write that cannot carry the ?digest= finalize query (breaks the
+		// signature), cannot accept PATCH chunk semantics, and — critically — bypasses
+		// the pod so the server can neither verify the digest nor create the :Blob
+		// graph node from the bytes. This is why Docker Distribution / Harbor / Zot
+		// redirect pulls but stream pushes through the registry. It is also why the
+		// in-cluster seed/repackage path (regclient -> api, both pod-side) would NOT
+		// benefit — its slow leg is pod->S3 egress either way; the dedup skip in
+		// metalib StoreBlobUpload{,Reader}/ComposeFromChunks already removed that
+		// path's real waste. The only viable variant (307 the *monolithic* PUT to a
+		// presigned S3 PUT + optimistically create the :Blob node from the declared
+		// ?digest= + lazily verify via HEAD) trusts client-supplied digests until
+		// verified and only helps *remote* large-blob pushers — treat it as a
+		// scoped, flag-gated experiment, not a drop-in. See PERF-FINDINGS.md.
 		span.AddEvent("log", trace.WithAttributes(
 			attribute.String(logSeverityKey, "debug"),
 			attribute.String(Location, bu.Location),
@@ -550,8 +567,8 @@ func (h Handlers) tryBlobGetRedirect(ctx context.Context, w http.ResponseWriter,
 	if h.mag.Minio.GetBlobBucketConfig().Redirect {
 		utils.Info(l, span, "redirecting to MinIO/S3 presigned URL")
 		redirSpan.SetAttributes(attribute.Key("blob.redirect").String("minio_presign"))
-		_, psSpan := tracer.Start(ctx, "BlobHandler.presign")
-		psUrl, err := h.mag.LayerGetPresignedUrlByHTTPRequest(r)
+		psCtx, psSpan := tracer.Start(ctx, "BlobHandler.presign")
+		psUrl, err := h.mag.LayerGetPresignedUrlByHTTPRequest(psCtx, r)
 		psSpan.End()
 		if err != nil {
 			det := helper.NewDetailFromReq(req)
@@ -608,25 +625,32 @@ func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !found {
-		// INSTRUMENTATION (perf-debug, non-behavioral): the existence check above is
-		// graph-scoped (Database.BlobGetByDigest). Log whether the content-addressed
-		// S3 object is present anyway — a graph-miss with s3_present=true is the
-		// graph-vs-object divergence (a wiped :Blob node while the object survives)
-		// that makes a client HEAD 404 and needlessly re-upload an existing blob.
-		_, statErr := h.mag.Minio.BlobStatObj(ctx, req.Digest)
-		utils.Info(l, span, "blob-head graph-miss method=%s repo=%s digest=%s s3_present=%v stat_err=%v",
-			r.Method, req.Repo, req.Digest, statErr == nil, statErr)
-		utils.Debug(l, span, "blob for w/ digest '%s' not found", utils.ShortenDigest(req.Digest))
-		// Not found
-		msg = "could not find blob"
-		det := helper.NewDetailFromReq(req)
-		e := helper.NewErrPayload("NAME_UNKNOWN", msg, det)
-		span.SetStatus(http.StatusNotFound, e.Message)
-		helper.WriteOCIErrror(w, http.StatusNotFound, e)
-		return
+		// Content-addressed fallback: blob metadata lives in the graph, but the
+		// authoritative store is the object bucket (blobs are keyed by digest). The
+		// e2e `parse rules --empty-graph=…` wipe DETACH DELETEs :Blob nodes while
+		// leaving the S3 objects intact, so a graph-miss does NOT mean the blob is
+		// gone. Stat the object; when present, synthesise the descriptor and serve
+		// it (HEAD 200 / GET stream) so clients don't re-upload/re-send an existing
+		// (potentially ~GB) layer. HEAD and GET stay consistent — a client that
+		// HEADs 200 must be able to GET the bytes.
+		obj, statErr := h.mag.Minio.BlobStatObj(ctx, req.Digest)
+		if statErr != nil {
+			utils.Info(l, span, "blob graph-miss AND object-absent — 404 method=%s repo=%s digest=%s stat_err=%v",
+				r.Method, req.Repo, req.Digest, statErr)
+			// Not found
+			msg = "could not find blob"
+			det := helper.NewDetailFromReq(req)
+			e := helper.NewErrPayload("NAME_UNKNOWN", msg, det)
+			span.SetStatus(http.StatusNotFound, e.Message)
+			helper.WriteOCIErrror(w, http.StatusNotFound, e)
+			return
+		}
+		utils.Info(l, span, "blob graph-miss but object present — content-addressed serve method=%s repo=%s digest=%s size=%d",
+			r.Method, req.Repo, req.Digest, obj.Size)
+		blob = &types.Blob{Digest: req.Digest, MediaType: "application/octet-stream", Size: obj.Size}
+	} else {
+		utils.Debug(l, span, "blob for w/ digest '%s' found in graph", utils.ShortenDigest(req.Digest))
 	}
-	utils.Info(l, span, "blob-head graph-hit method=%s repo=%s digest=%s", r.Method, req.Repo, req.Digest)
-	utils.Debug(l, span, "blob for w/ digest '%s' found", utils.ShortenDigest(req.Digest))
 	// If redirect is enabled, we need to fetch the PreSignedURL
 	switch r.Method {
 	case "HEAD":
