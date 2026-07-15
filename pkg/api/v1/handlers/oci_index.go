@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/opencontainers/go-digest"
 	"github.com/sirupsen/logrus"
@@ -16,6 +17,16 @@ import (
 const (
 	pkgNameOciIndex = "api/handler/oci_index.go"
 )
+
+// persistedIndexDigests remembers the manipulated-index digests this process has
+// already stored in object storage, so a repeat profile-scoped pull skips the
+// remote (~100-250ms against eu-west-1 S3) ManifestsPutObj on the GET path — the
+// write-on-read that dominated the pull critical path. The index is
+// content-addressed and immutable, so a cached digest can never serve wrong
+// bytes; the worst case after a pod restart or on another replica is one
+// redundant re-PUT. Cardinality is bounded by distinct manipulated indexes
+// actually pulled (repo × tag × profile).
+var persistedIndexDigests sync.Map // digest string -> struct{}
 
 // handleIndex handles pull-side requests for OCI image indexes (formerly
 // handleManifestList). It calls IndexGetByRequest which returns a
@@ -85,9 +96,19 @@ func (h Handlers) manipulateIndexInPlace(ctx context.Context, l *logrus.Entry, s
 	ml.Manifests = manipulated
 	indexBytes := ml.ToOCIBytes()
 	indexDigest := digest.FromBytes(indexBytes).String()
+	// Write-on-read guard: only persist a given manipulated index once per
+	// process. Skipping the re-PUT on every subsequent pull removes the S3 round
+	// trip (~100-250ms) that dominated the manifest critical path. Record the
+	// digest only AFTER a successful PUT, so we never skip storing an object that
+	// isn't actually persisted yet.
+	if _, stored := persistedIndexDigests.Load(indexDigest); stored {
+		utils.Debug(l, span, "manipulated index %s already persisted, skipping MinIO PUT", utils.ShortenDigest(indexDigest))
+		return false
+	}
 	if storeErr := h.mag.Minio.ManifestsPutObj(ctx, indexDigest, indexBytes); storeErr != nil {
 		utils.Warn(l, span, "failed to persist manipulated index in MinIO: %v", storeErr)
 	} else {
+		persistedIndexDigests.Store(indexDigest, struct{}{})
 		utils.Debug(l, span, "persisted manipulated index %s in MinIO (%d bytes)", utils.ShortenDigest(indexDigest), len(indexBytes))
 	}
 	return false

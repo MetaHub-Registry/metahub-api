@@ -9,7 +9,10 @@ minio:
     bucket: {{ MINIO_BUCKET_MANIFESTS |default("manifests") }}
   blobs:
     bucket: {{ MINIO_BUCKET_BLOBS |default("blobs") }}
-neo4j:
+{% if MINIO_BLOBS_REDIRECT %}    redirect: {{ MINIO_BLOBS_REDIRECT }}
+{% endif %}{% if MINIO_BLOBS_PUBLIC_URL %}    public_url: {{ MINIO_BLOBS_PUBLIC_URL }}
+    public_ssl: {{ MINIO_BLOBS_PUBLIC_SSL |default("false") }}
+{% endif %}neo4j:
   dbname: {{ NEO4J_DB_NAME |default("neo4j") }}
   user: {{ NEO4J_USER |default("neo4j") }}
   password: {{ NEO4J_PASSWD |default("neo4j123") }}

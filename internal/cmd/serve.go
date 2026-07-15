@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -93,7 +94,11 @@ func sCmd(cmd *cobra.Command, args []string) {
 
 	var godmodeAuth *handlers.GodModeAuth
 	if godmodeCfg.IsEnabled() {
-		logrus.Warnf("God-mode authentication enabled for %d user(s) — this bypasses OIDC validation", len(godmodeCfg.Users))
+		users := []string{}
+		for _, u := range godmodeCfg.Users {
+			users = append(users, u.Username)
+		}
+		logrus.Warnf("God-mode authentication enabled for %d user(s) ('%s') — this bypasses OIDC validation", len(godmodeCfg.Users), strings.Join(users, "', '"))
 		godmodeAuth = handlers.NewGodModeAuth(godmodeCfg)
 	}
 
