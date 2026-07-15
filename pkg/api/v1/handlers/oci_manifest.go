@@ -402,7 +402,9 @@ func (h Handlers) ManifestHandler(ctx context.Context, w http.ResponseWriter, r 
 		ctx = types.WithRequestedModel(ctx, modelName)
 	}
 
-	mediaType, colFound, err := h.mag.Database.ManifestExists(ctx, up)
+	resolveCtx, resolveSpan := tracer.Start(ctx, "ManifestHandler.manifestExists")
+	mediaType, colFound, err := h.mag.Database.ManifestExists(resolveCtx, up)
+	resolveSpan.End()
 	if err != nil {
 		writeInternalError(w, l, span, req, "failed to check if collection exists: %v", err)
 		return
@@ -436,7 +438,20 @@ func (h Handlers) resolveModelCentricRuntime(ctx context.Context, req types.Requ
 	if !strings.HasPrefix(req.Repo, prefix) {
 		return "", "", "", false
 	}
+	// Model-centric resolution fans out to ModelDetailGet + compositions and
+	// only fires on model pulls; span it to isolate model-serving resolution
+	// cost on the manifest critical path.
+	ctx, span := tracer.Start(ctx, "ManifestHandler.resolveModelCentricRuntime")
+	defer span.End()
 	name := strings.TrimPrefix(req.Repo, prefix)
+	// Self-describe the model-centric resolution so a trace can be attributed to
+	// the pulling profile + requested model/quant — the two profiles (e.g. frame
+	// vs bazzite) resolve the same repo to different runtimes/child manifests.
+	span.SetAttributes(
+		attribute.Key("model").String(name),
+		attribute.Key("quant").String(req.Tag),
+		attribute.Key("profile").String(req.Profile),
+	)
 	if strings.HasSuffix(name, "-layer") || strings.HasSuffix(name, "-config") {
 		return "", "", "", false // internal repackage outputs, not a model repo
 	}
@@ -465,6 +480,7 @@ func (h Handlers) ManifestGetHandler(w http.ResponseWriter, r *http.Request) {
 		"repo":    req.Repo,
 		"tag":     req.Tag,
 		"digest":  utils.ShortenDigest(req.Digest),
+		"profile": req.Profile,
 	})
 	defer span.End()
 	_ = l

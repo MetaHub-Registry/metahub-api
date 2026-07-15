@@ -194,5 +194,13 @@ func TeardownTest(bs utils.Bootstrap, br utils.BootstrapResult) {
 }
 
 func SetupTest(ctx context.Context, bs utils.Bootstrap) (br utils.BootstrapResult, err error) {
+	// Reset the process-wide manipulated-index persistence guard so it stays in
+	// sync with the fresh object storage each test provisions. The computed index
+	// digest is content-addressed and excludes repo/image, so identical arch
+	// manifests across tests collide on the same digest — without this reset a
+	// prior test's entry would make a later test skip a PUT its wiped MinIO needs.
+	// Prod never wipes object storage under a live process, so this is a
+	// test-isolation concern only.
+	persistedIndexDigests.Range(func(k, _ any) bool { persistedIndexDigests.Delete(k); return true })
 	return h.mag.SetupTest(ctx, bs)
 }
