@@ -66,14 +66,63 @@ cat > "${S}/.opencode/opencode.json" <<'EOF'
         "--neo4j-telemetry", "false"
       ]
     },
+    "sonarqube": {
+      "type": "local",
+      "command": [
+        "docker",
+        "run",
+        "--init",
+        "--pull=always",
+        "-i",
+        "--rm",
+        "-e",
+        "SONARQUBE_TOKEN=squ_f9a42283681ee2e9fb08b615d220775252d67074",
+        "-e",
+        "SONARQUBE_URL=http://sonar.example.com",
+        "sonarsource/sonarqube-mcp"
+      ],
+      "enabled": true
+    },
     "gocd": {
       "type": "remote",
-      "url": "http://localhost:3003/mcp"
+      "url": "http://localhost:3003/mcp",
+      "headers": {
+        "Authorization": "Bearer 92b6c82f98aedd51e3878e619fa4deb1c2a93429"
+      },
+      "enabled": true
+    },
+    "victoriametrics": {
+      "type": "local",
+      "command": [
+        "docker", "run", "-i", "--rm",
+        "--add-host", "vm.example.com:192.168.5.201",
+        "-e", "VM_INSTANCE_ENTRYPOINT=http://vm.example.com",
+        "-e", "VM_INSTANCE_TYPE=single",
+        "ghcr.io/victoriametrics/mcp-victoriametrics"
+      ],
+      "enabled": true
+    },
+    "victorialogs": {
+      "type": "local",
+      "command": [
+        "docker", "run", "-i", "--rm",
+        "--add-host", "vl.example.com:192.168.5.201",
+        "-e", "VL_INSTANCE_ENTRYPOINT=http://vl.example.com",
+        "ghcr.io/victoriametrics/mcp-victorialogs"
+      ],
+      "enabled": true
+    },
+    "victoriatraces": {
+      "type": "local",
+      "command": [
+        "docker", "run", "-i", "--rm",
+        "--add-host", "vt.example.com:192.168.5.201",
+        "-e", "VT_INSTANCE_ENTRYPOINT=http://vt.example.com",
+        "ghcr.io/victoriametrics-community/mcp-victoriatraces"
+      ],
+      "enabled": true
     }
-  },
-  "plugin": [
-    "opencode-claude-auth"
-  ]
+  }
 }
 EOF
 
