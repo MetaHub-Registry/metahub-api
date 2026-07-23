@@ -52,6 +52,7 @@ vars:
   REPO_API_DIR: "."
   REPO_LIB_DIR: "../metahub-core"
   REPO_ADMIN_DIR: "../metahub-admin"
+  REPO_OUTFITTER_DIR: "../outfitter"
   REPO_UI_DIR: "~/src/gitlab.com/qnib-frontend/metahub-ui"
   REPO_CE_DIR: "~/src/gitlab.com/qnib-metahub/community-edition"
   REPO_DEVSTACK_DIR: "~/src/gitlab.com/qnib-ansible/dev-stack"
@@ -105,6 +106,8 @@ tasks:
         vars: { DESC: "{{.DESC}}", REPO_NAME: "flux/metahub", REPO_DIR: "{{.REPO_FLUX_DIR}}" }
       - task: _branch-and-mr
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-docs", REPO_DIR: "{{.REPO_DOCS_DIR}}" }
+      - task: _worktree-main
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "outfitter", REPO_DIR: "{{.REPO_OUTFITTER_DIR}}" }
       - task: _setup-session-workspace
         vars: { DESC: "{{.DESC}}" }
       - task: _setup-session-openspec
