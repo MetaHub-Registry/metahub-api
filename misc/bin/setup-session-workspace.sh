@@ -262,6 +262,8 @@ CE_BRANCH=$(grep "^community-edition=" "${BRANCHES_FILE}" | cut -d= -f2)
 CE_BRANCH="${CE_BRANCH:-main}"
 DOCS_BRANCH=$(grep "^metahub-docs=" "${BRANCHES_FILE}" | cut -d= -f2)
 DOCS_BRANCH="${DOCS_BRANCH:-main}"
+OUTFITTER_BRANCH=$(grep "^outfitter=" "${BRANCHES_FILE}" | cut -d= -f2)
+OUTFITTER_BRANCH="${OUTFITTER_BRANCH:-main}"
 
 # --- Taskfile.yml — forwarding tasks using relative path ---
 cat > "${S}/Taskfile.yml" <<EOF
@@ -277,10 +279,10 @@ tasks:
       #   task dev -- metahub-ui metalib   -> bump only those two
       - task -d "${REL_API_ROOT}" session:dev -- ${DESC} {{.CLI_ARGS}}
   render:
-    desc: "Print the 'task render:*' line for the flux dev-stack (slots: API:LIB:ADMIN:CE:OCI:UI:DOCS)"
+    desc: "Print the 'task render:*' line for the flux dev-stack (slots: API:LIB:ADMIN:CE:OCI:UI:DOCS:OUTFITTER)"
     silent: true
     cmds:
-      - echo "task render:${API_BRANCH}:${LIB_BRANCH}:${ADMIN_BRANCH}:${CE_BRANCH}:dev:${UI_BRANCH}:${DOCS_BRANCH}"
+      - echo "task render:${API_BRANCH}:${LIB_BRANCH}:${ADMIN_BRANCH}:${CE_BRANCH}:dev:${UI_BRANCH}:${DOCS_BRANCH}:${OUTFITTER_BRANCH}"
   finish:
     desc: "Finalize session: test, sonar, archive, push, comment MRs"
     cmds:
