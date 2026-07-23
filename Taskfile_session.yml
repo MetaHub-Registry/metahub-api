@@ -107,7 +107,7 @@ tasks:
       - task: _branch-and-mr
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-docs", REPO_DIR: "{{.REPO_DOCS_DIR}}" }
       - task: _worktree-main
-        vars: { DESC: "{{.DESC}}", REPO_NAME: "outfitter", REPO_DIR: "{{.REPO_OUTFITTER_DIR}}" }
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "outfitter", REPO_DIR: "{{.REPO_OUTFITTER_DIR}}", BRANCH: "bootstrap-outfitter" }
       - task: _setup-session-workspace
         vars: { DESC: "{{.DESC}}" }
       - task: _setup-session-openspec
@@ -580,7 +580,7 @@ tasks:
         fi
 
   # ---------------------------------------------------------------------------
-  # _worktree-main — add a worktree pinned to main (no session branch / MR)
+  # _worktree-main — add a worktree pinned to a branch (BRANCH var, default main; no session branch / MR)
   #
   # For GitOps/deployment repos (flux/metahub) that must track main directly:
   # the worktree is checked out on main so deployment edits commit to main and
@@ -609,26 +609,27 @@ tasks:
         REPO_DIR="{{.EXPANDED_DIR}}"
         REPO_NAME="{{.REPO_NAME}}"
         WT_PATH="{{.WORKTREE_PATH}}"
+        BRANCH="{{.BRANCH | default "main"}}"
         BRANCHES_FILE="$(pwd)/{{.SESSION_DIR}}/{{.DESC}}/.branches"
 
         echo ""
-        echo "=== [${REPO_NAME}] worktree pinned to 'main' ==="
+        echo "=== [${REPO_NAME}] worktree pinned to '${BRANCH}' ==="
 
         cd "${REPO_DIR}"
         git fetch --quiet origin 2>/dev/null || true
 
         if [ -d "${WT_PATH}" ]; then
           echo "[${REPO_NAME}] Worktree already exists — reusing"
-        elif git worktree add "${WT_PATH}" main 2>/dev/null; then
-          echo "[${REPO_NAME}] Checked out on 'main'"
+        elif git worktree add "${WT_PATH}" "${BRANCH}" 2>/dev/null; then
+          echo "[${REPO_NAME}] Checked out on '${BRANCH}'"
         else
-          echo "[${REPO_NAME}] 'main' busy in source repo — detaching at origin/main"
-          git worktree add --detach "${WT_PATH}" origin/main
+          echo "[${REPO_NAME}] '${BRANCH}' busy in source repo — detaching at origin/${BRANCH}"
+          git worktree add --detach "${WT_PATH}" "origin/${BRANCH}"
         fi
 
         # Record the mapping once (no duplicate lines on re-run).
         if ! grep -q "^${REPO_NAME}=" "${BRANCHES_FILE}" 2>/dev/null; then
-          echo "${REPO_NAME}=main" >> "${BRANCHES_FILE}"
+          echo "${REPO_NAME}=${BRANCH}" >> "${BRANCHES_FILE}"
         fi
 
   # ---------------------------------------------------------------------------
