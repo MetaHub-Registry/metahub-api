@@ -1,4 +1,9 @@
-## MODIFIED Requirements
+# oidc-login Specification
+
+## Purpose
+OIDC login flow (authorize → callback → session) via Authentik with PKCE.
+
+## Requirements
 
 ### Requirement: OIDC login initiation
 The system SHALL redirect browser clients to the Authentik OIDC authorization endpoint when `GET /api/v1/login` is called, using the Authorization Code flow with PKCE (`code_challenge_method=S256`). The redirect MUST include a randomly generated, per-request `state` parameter stored in a short-lived signed cookie for CSRF protection. The requested scopes MUST include `openid`, `profile`, `email`, and `goauthentik.io/api` to enable both user identity extraction and Authentik core API access for registry token management.

@@ -1,4 +1,9 @@
-## ADDED Requirements
+# oidc-token-validation Specification
+
+## Purpose
+Validation of OIDC/JWT access tokens (issuer, audience, and required scopes).
+
+## Requirements
 
 ### Requirement: JWKS-based token validation middleware
 The system SHALL provide an HTTP middleware that validates `Authorization: Bearer <token>` JWTs on all `/api/v1/protected` routes. Validation MUST use Authentik's JWKS endpoint (discovered via `<issuer>/.well-known/openid-configuration`). The middleware MUST reject tokens with an invalid signature, expired `exp` claim, or mismatched `iss` (issuer) claim.
