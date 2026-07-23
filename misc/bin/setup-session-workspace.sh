@@ -441,6 +441,30 @@ Start opencode from this directory: \`./opencode.sh\`
 files, and architecture notes. Each repo worktree may also have its
 own \`CONTEXT.md\` with repo-specific context from previous sessions.
 
+## Session-scoped OpenSpec
+
+This session has its **own OpenSpec project** at \`openspec/\` (initialized by
+\`session:new\`). Use it to capture a **session-scoped change** — a proposal that
+spans repos or is still too coarse to land in a single repo — then refine it
+here and **break it down into per-repo OpenSpec changes** in the individual
+worktrees (\`<repo>/openspec/changes/...\`), where the real spec deltas live.
+
+Workflow:
+
+1. **Pose** the session change under \`openspec/changes/<name>/\` (proposal.md,
+   tasks.md, design.md, specs/<capability>/spec.md). Validate with
+   \`openspec validate <name>\`.
+2. **Refine** it as understanding grows — this is the cross-repo design space.
+3. **Decompose** it into per-repo changes under each modified worktree's
+   \`openspec/changes/\`; those are what get implemented, tested, and archived
+   per repo by \`task finish\`.
+4. On \`task finish\`, the **session-level** changes are auto-archived
+   (\`openspec/changes/* → openspec/changes/archive/\`) so nothing stays active at
+   session scope — the per-repo changes carry the work forward.
+
+Keep session-level changes as **design intent**; never let one be the sole
+record of a shipped spec — that belongs in the relevant repo's \`openspec/\`.
+
 ## Repos and Branches
 
 | Repo | Branch | Worktree |
