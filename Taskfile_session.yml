@@ -81,6 +81,8 @@ tasks:
         msg: "glab CLI is required but not found"
       - sh: 'command -v bump2version >/dev/null 2>&1'
         msg: "bump2version is required but not found"
+      - sh: 'command -v openspec >/dev/null 2>&1'
+        msg: "openspec CLI is required but not found"
     cmds:
       - mkdir -p "{{.SESSION_DIR}}/{{.DESC}}"
       - task: _branch-and-mr
@@ -104,6 +106,8 @@ tasks:
       - task: _branch-and-mr
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-docs", REPO_DIR: "{{.REPO_DOCS_DIR}}" }
       - task: _setup-session-workspace
+        vars: { DESC: "{{.DESC}}" }
+      - task: _setup-session-openspec
         vars: { DESC: "{{.DESC}}" }
       - task: _update-dev-stack
         vars: { DESC: "{{.DESC}}" }
@@ -176,6 +180,10 @@ tasks:
   #
   # Repos with no changes are reported as "unchanged".
   # The human decides per-repo: version:<repo>:<level> or close:<repo>.
+  #
+  # Finally, the session-level OpenSpec proposal(s) at the session root are
+  # archived (openspec/changes/* -> openspec/changes/archive/) so the session
+  # change is no longer active once it has been broken down into per-repo changes.
   # ===========================================================================
   finish:
     desc: "Finalize session: task session:finish -- <description>"
@@ -203,6 +211,11 @@ tasks:
       # session-branch logic; their edits are pushed to main directly.
       - task: _finalize-repo
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-docs", REPO_DIR: "{{.REPO_DOCS_DIR}}" }
+      # Archive the session-level OpenSpec proposal(s) so they are no longer
+      # active: a session may pose a session-scoped change, refined here and then
+      # broken down into per-repo changes for the actual sub-repositories.
+      - task: _archive-session-openspec
+        vars: { DESC: "{{.DESC}}" }
       # Write session-level CONTEXT.md to Obsidian if it exists in the session dir
       - |
         set -e
@@ -639,6 +652,83 @@ tasks:
           "{{.API_ROOT}}" \
           "{{.LIB_OPENCODE}}" \
           "{{.API_OPENCODE}}"
+
+  # ---------------------------------------------------------------------------
+  # _setup-session-openspec — initialize OpenSpec at the session root (idempotent)
+  #
+  # Gives the session its own OpenSpec project so it can pose a session-scoped
+  # change that is refined within the session context and later broken down into
+  # per-repo OpenSpec changes for the actual sub-repositories. Safe to re-run:
+  # skips when already initialized (session:new is idempotent).
+  # ---------------------------------------------------------------------------
+  _setup-session-openspec:
+    internal: true
+    requires:
+      vars: [DESC]
+    vars:
+      SESSION_PATH:
+        sh: echo "$(pwd)/{{.SESSION_DIR}}/{{.DESC}}"
+    cmds:
+      - |
+        set -e
+        S="{{.SESSION_PATH}}"
+        if [ -f "${S}/openspec/project.md" ]; then
+          echo "[openspec] Session OpenSpec already initialized — skipping"
+        else
+          echo "[openspec] Initializing OpenSpec for session at ${S}"
+          ( cd "${S}" && openspec init --tools opencode --force )
+        fi
+
+  # ---------------------------------------------------------------------------
+  # _archive-session-openspec — move active session OpenSpec changes to archive
+  #
+  # On session:finish the session-scoped proposal(s) must no longer be active.
+  # Each openspec/changes/<name> (except the archive dir) is moved into
+  # openspec/changes/archive/. Session-level OpenSpec lives as loose files at the
+  # session root (not a git worktree), so this is a plain filesystem move — the
+  # durable, per-repo OpenSpec changes are archived separately by _finalize-repo.
+  # Spec deltas are intentionally NOT applied at session scope: the session change
+  # is decomposed into per-repo changes, which own the real spec deltas.
+  # ---------------------------------------------------------------------------
+  _archive-session-openspec:
+    internal: true
+    requires:
+      vars: [DESC]
+    vars:
+      SESSION_PATH:
+        sh: echo "$(pwd)/{{.SESSION_DIR}}/{{.DESC}}"
+    cmds:
+      - |
+        set -e
+        S="{{.SESSION_PATH}}"
+        CHANGES="${S}/openspec/changes"
+        if [ ! -d "${CHANGES}" ]; then
+          echo "[openspec] No session OpenSpec changes dir — nothing to archive"
+          exit 0
+        fi
+        mkdir -p "${CHANGES}/archive"
+        ARCHIVED=0
+        for change_dir in "${CHANGES}"/*/; do
+          [ -d "${change_dir}" ] || continue
+          change_name="$(basename "${change_dir}")"
+          [ "${change_name}" = "archive" ] && continue
+          if [ -d "${CHANGES}/archive/${change_name}" ]; then
+            echo "[openspec] Already archived: ${change_name} — skipping"
+            continue
+          fi
+          echo "[openspec] Archiving session change: ${change_name}"
+          mv "${change_dir%/}" "${CHANGES}/archive/${change_name}"
+          ARCHIVED=$((ARCHIVED + 1))
+        done
+        if [ "${ARCHIVED}" -eq 0 ]; then
+          echo "[openspec] No active session changes to archive"
+        else
+          echo "[openspec] Archived ${ARCHIVED} session change(s) → openspec/changes/archive/"
+        fi
+        # Confirm nothing remains active (best-effort).
+        if command -v openspec >/dev/null 2>&1; then
+          ( cd "${S}" && openspec list 2>/dev/null || true )
+        fi
 
   # ---------------------------------------------------------------------------
   # _bump-dev — iterate dev version in a single repo worktree
