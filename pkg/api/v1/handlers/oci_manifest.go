@@ -545,6 +545,17 @@ func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", e, "INTERNAL_ERROR", "")
 		return
 	}
+	// Logical per-project storage-quota guard (add-registry-project-quotas):
+	// reject the push (413) when it would take the project's usage above its quota.
+	if qErr := h.enforceManifestQuota(ctx, req, buf); qErr != nil {
+		if qe, ok := qErr.(*quotaExceededError); ok {
+			l.Warnf("quota: %v", qe)
+			writeQuota413(w, qe)
+			return
+		}
+		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", qErr, "INTERNAL_ERROR", "quota check failed")
+		return
+	}
 	switch req.ContentType {
 	case dockerManifestMediaType:
 		h.handleDockerManifestPut(ctx, w, req, buf, prf)

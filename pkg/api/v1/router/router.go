@@ -114,6 +114,14 @@ func Initialize(mag magazine.Magazine, oidcProvider *handlers.OIDCProvider, godm
 		r.Post("/registry-token", h.RegistryTokenCreate)
 		r.Get("/registry-tokens", h.RegistryTokenList)
 		r.Delete("/registry-tokens/{identifier}", h.RegistryTokenRevoke)
+		// Registry project + storage-quota admin API (add-registry-project-quotas);
+		// each handler is admin-role-gated.
+		r.Post("/projects", h.ProjectCreateHandler)
+		r.Get("/projects", h.ProjectListHandler)
+		r.Get("/projects/{team}/{project}", h.ProjectGetHandler)
+		r.Get("/projects/{team}/{project}/usage", h.ProjectUsageHandler)
+		r.Put("/projects/{team}/{project}/quota", h.ProjectQuotaUpdateHandler)
+		r.Delete("/projects/{team}/{project}", h.ProjectDeleteHandler)
 		r.Get("/user", h.UserGetOne)
 		r.Get("/users/{id}", h.UserGetOne)
 		r.Put("/users/{id}/secrets", h.UserPutSecret)
