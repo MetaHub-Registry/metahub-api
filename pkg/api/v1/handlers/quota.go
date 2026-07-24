@@ -13,11 +13,10 @@ import (
 
 // quota.go implements the logical per-project storage-quota guard enforced at
 // manifest link (openspec change add-registry-project-quotas, task 3). A project
-// owns the two-segment namespace "<team>/<project>" (the leading two repo path
-// segments). Usage is the sum of DISTINCT blob sizes reachable from the project's
-// manifests; a push is rejected (413) when it would take that logical usage above
-// the project's quota. Namespaces with no :Project node are exempt (existing /
-// system content).
+// owns the two-segment namespace "<team>/<project>". Usage is the sum of DISTINCT
+// blob sizes reachable from the project's manifests; a push is rejected (413)
+// when it would take that logical usage above the project's quota. Namespaces
+// with no :Project node are exempt (existing / system content).
 
 // projectFromRepo returns (team, project, ok) from a repo path's first two
 // segments. ok is false when the repo has fewer than two non-empty segments.
@@ -40,11 +39,47 @@ func (e *quotaExceededError) Error() string {
 		e.Team, e.Project, e.Usage, e.Delta, e.Quota)
 }
 
-// enforceManifestQuota is the push guard. It parses the incoming image manifest,
-// determines the incoming blobs NOT already counted for the project (dedup within
-// the project), and returns a *quotaExceededError when usage + that delta exceeds
-// the quota. Returns nil when allowed, or exempt (no project for the namespace,
-// or a non-image-manifest payload such as an index).
+// incomingBlobs parses an image manifest and returns its config+layer blob
+// digests -> size. Returns an empty map for non-image-manifest payloads (e.g. an
+// index), whose sub-manifests are guarded when pushed.
+func incomingBlobs(buf []byte) map[string]int64 {
+	var m v1.Manifest
+	if err := json.Unmarshal(buf, &m); err != nil {
+		return nil
+	}
+	out := map[string]int64{}
+	if m.Config.Digest != "" {
+		out[m.Config.Digest.String()] = m.Config.Size
+	}
+	for _, layer := range m.Layers {
+		out[layer.Digest.String()] = layer.Size
+	}
+	return out
+}
+
+// newBytesDelta returns the total size of incoming blobs NOT already counted for
+// the project (dedup within the project by digest); sizes < 0 are ignored.
+func newBytesDelta(incoming map[string]int64, existing []string) int64 {
+	have := make(map[string]struct{}, len(existing))
+	for _, d := range existing {
+		have[d] = struct{}{}
+	}
+	var delta int64
+	for dig, size := range incoming {
+		if _, seen := have[dig]; seen {
+			continue
+		}
+		if size > 0 {
+			delta += size
+		}
+	}
+	return delta
+}
+
+// enforceManifestQuota is the push guard: it rejects (returns *quotaExceededError)
+// when the incoming manifest's not-yet-counted blobs would take the project's
+// logical usage above its quota. Returns nil when allowed, or exempt (no project
+// for the namespace, or a non-image-manifest payload).
 func (h Handlers) enforceManifestQuota(ctx context.Context, req types.Request, buf []byte) error {
 	team, project, ok := projectFromRepo(req.Repo)
 	if !ok {
@@ -57,46 +92,18 @@ func (h Handlers) enforceManifestQuota(ctx context.Context, req types.Request, b
 	if !found {
 		return nil // no :Project node -> exempt
 	}
-
-	// Collect the incoming config + layer descriptors. Index/list payloads carry
-	// no direct blobs; their sub-manifests are guarded when pushed.
-	var m v1.Manifest
-	if e := json.Unmarshal(buf, &m); e != nil {
-		return nil
-	}
-	incoming := map[string]int64{}
-	if m.Config.Digest != "" {
-		incoming[m.Config.Digest.String()] = m.Config.Size
-	}
-	for _, layer := range m.Layers {
-		incoming[layer.Digest.String()] = layer.Size
-	}
+	incoming := incomingBlobs(buf)
 	if len(incoming) == 0 {
 		return nil
 	}
-
-	digs, err := h.mag.Database.ProjectBlobDigests(ctx, team, project)
+	existing, err := h.mag.Database.ProjectBlobDigests(ctx, team, project)
 	if err != nil {
 		return err
 	}
-	existing := make(map[string]struct{}, len(digs))
-	for _, d := range digs {
-		existing[d] = struct{}{}
-	}
-
-	var delta int64
-	for dig, size := range incoming {
-		if _, seen := existing[dig]; seen {
-			continue // already counted for this project
-		}
-		if size > 0 {
-			delta += size
-		}
-	}
+	delta := newBytesDelta(incoming, existing)
 	if delta == 0 {
 		return nil // everything referenced is already counted -> free
 	}
-
 	usage, err := h.mag.Database.ProjectUsageBytes(ctx, team, project)
 	if err != nil {
 		return err
@@ -109,9 +116,7 @@ func (h Handlers) enforceManifestQuota(ctx context.Context, req types.Request, b
 
 // writeQuota413 emits an OCI-style DENIED error with HTTP 413.
 func writeQuota413(w http.ResponseWriter, qe *quotaExceededError) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusRequestEntityTooLarge)
-	_ = json.NewEncoder(w).Encode(map[string]any{
+	writeJSON(w, http.StatusRequestEntityTooLarge, map[string]any{
 		"errors": []map[string]string{{"code": "DENIED", "message": qe.Error()}},
 	})
 }

@@ -17,10 +17,15 @@ import (
 // are admin-role-gated. Quota grants are checked against the no-overcommit
 // logical pool budget under a process-level mutex.
 
-// poolGrantMu serializes quota grants so Σ(project quota) cannot overshoot the
+// poolGrantMu serializes quota grants so Sigma(project quota) cannot overshoot the
 // logical pool budget under concurrent create/update. Process-level — adequate
 // for a single-replica deployment; multi-replica would need a DB-level lock.
 var poolGrantMu sync.Mutex
+
+const (
+	msgProjectNotFound  = "project not found"
+	msgFailedGetProject = "failed to get project: %v"
+)
 
 type projectCreateRequest struct {
 	TeamSlug    string `json:"team_slug"`
@@ -41,6 +46,13 @@ type projectResponse struct {
 	CreatedAt   int64  `json:"created_at"`
 }
 
+// writeJSON writes v as a JSON response with the given status.
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
 // adminFromContext reports whether the authenticated caller has the admin role
 // (Authentik group membership resolved by roleFromGroups).
 func adminFromContext(ctx context.Context) bool {
@@ -59,9 +71,9 @@ func (h Handlers) requireAdmin(w http.ResponseWriter, r *http.Request) bool {
 	return false
 }
 
-// checkPoolCapacity enforces the no-overcommit rule: Σ(quota) + addBytes must fit
-// the configured logical pool budget. A budget of 0 means unlimited. Callers hold
-// poolGrantMu.
+// checkPoolCapacity enforces the no-overcommit rule: Sigma(quota) + addBytes must
+// fit the configured logical pool budget. A budget of 0 means unlimited. Callers
+// hold poolGrantMu.
 func (h Handlers) checkPoolCapacity(ctx context.Context, addBytes int64) error {
 	pool := h.mag.Config.LogicalPoolBytes
 	if pool <= 0 {
@@ -77,18 +89,32 @@ func (h Handlers) checkPoolCapacity(ctx context.Context, addBytes int64) error {
 	return nil
 }
 
-func (h Handlers) writeProject(ctx context.Context, w http.ResponseWriter, p types.Project, status int) {
+// projectResp builds the API response for a project, including its live usage.
+func (h Handlers) projectResp(ctx context.Context, p types.Project) projectResponse {
 	usage, _ := h.mag.Database.ProjectUsageBytes(ctx, p.TeamSlug, p.ProjectSlug)
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(projectResponse{
+	return projectResponse{
 		TeamSlug:    p.TeamSlug,
 		ProjectSlug: p.ProjectSlug,
 		Namespace:   p.Namespace(),
 		QuotaBytes:  p.QuotaBytes,
 		UsageBytes:  usage,
 		CreatedAt:   p.CreatedAt,
-	})
+	}
+}
+
+// getProjectParam resolves {team}/{project} from the URL and fetches the project,
+// writing 500/404 on failure. ok is false when the caller should stop.
+func (h Handlers) getProjectParam(w http.ResponseWriter, r *http.Request) (types.Project, bool) {
+	p, found, err := h.mag.Database.ProjectGet(r.Context(), chi.URLParam(r, "team"), chi.URLParam(r, "project"))
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf(msgFailedGetProject, err))
+		return types.Project{}, false
+	}
+	if !found {
+		writeJSONError(w, http.StatusNotFound, msgProjectNotFound)
+		return types.Project{}, false
+	}
+	return p, true
 }
 
 // ProjectCreateHandler handles POST /api/v1/protected/projects.
@@ -115,10 +141,10 @@ func (h Handlers) ProjectCreateHandler(w http.ResponseWriter, r *http.Request) {
 	// Idempotent create: an existing project is returned unchanged (no new
 	// allocation, so no pool impact).
 	if existing, found, err := h.mag.Database.ProjectGet(ctx, req.TeamSlug, req.ProjectSlug); err != nil {
-		writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("failed to look up project: %v", err))
+		writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf(msgFailedGetProject, err))
 		return
 	} else if found {
-		h.writeProject(ctx, w, existing, http.StatusOK)
+		writeJSON(w, http.StatusOK, h.projectResp(ctx, existing))
 		return
 	}
 	if err := h.checkPoolCapacity(ctx, req.QuotaBytes); err != nil {
@@ -130,7 +156,7 @@ func (h Handlers) ProjectCreateHandler(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("failed to create project: %v", err))
 		return
 	}
-	h.writeProject(ctx, w, p, http.StatusCreated)
+	writeJSON(w, http.StatusCreated, h.projectResp(ctx, p))
 }
 
 // ProjectListHandler handles GET /api/v1/protected/projects.
@@ -146,60 +172,38 @@ func (h Handlers) ProjectListHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]projectResponse, 0, len(ps))
 	for _, p := range ps {
-		usage, _ := h.mag.Database.ProjectUsageBytes(ctx, p.TeamSlug, p.ProjectSlug)
-		out = append(out, projectResponse{
-			TeamSlug: p.TeamSlug, ProjectSlug: p.ProjectSlug, Namespace: p.Namespace(),
-			QuotaBytes: p.QuotaBytes, UsageBytes: usage, CreatedAt: p.CreatedAt,
-		})
+		out = append(out, h.projectResp(ctx, p))
 	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(out)
+	writeJSON(w, http.StatusOK, out)
 }
 
 // ProjectGetHandler handles GET /api/v1/protected/projects/{team}/{project}.
 func (h Handlers) ProjectGetHandler(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
 	if !h.requireAdmin(w, r) {
 		return
 	}
-	team := chi.URLParam(r, "team")
-	project := chi.URLParam(r, "project")
-	p, found, err := h.mag.Database.ProjectGet(ctx, team, project)
-	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("failed to get project: %v", err))
+	p, ok := h.getProjectParam(w, r)
+	if !ok {
 		return
 	}
-	if !found {
-		writeJSONError(w, http.StatusNotFound, "project not found")
-		return
-	}
-	h.writeProject(ctx, w, p, http.StatusOK)
+	writeJSON(w, http.StatusOK, h.projectResp(r.Context(), p))
 }
 
 // ProjectUsageHandler handles GET /api/v1/protected/projects/{team}/{project}/usage.
 func (h Handlers) ProjectUsageHandler(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
 	if !h.requireAdmin(w, r) {
 		return
 	}
-	team := chi.URLParam(r, "team")
-	project := chi.URLParam(r, "project")
-	p, found, err := h.mag.Database.ProjectGet(ctx, team, project)
-	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("failed to get project: %v", err))
+	p, ok := h.getProjectParam(w, r)
+	if !ok {
 		return
 	}
-	if !found {
-		writeJSONError(w, http.StatusNotFound, "project not found")
-		return
-	}
-	usage, err := h.mag.Database.ProjectUsageBytes(ctx, team, project)
+	usage, err := h.mag.Database.ProjectUsageBytes(r.Context(), p.TeamSlug, p.ProjectSlug)
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("failed to compute usage: %v", err))
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]int64{"usage_bytes": usage, "quota_bytes": p.QuotaBytes})
+	writeJSON(w, http.StatusOK, map[string]int64{"usage_bytes": usage, "quota_bytes": p.QuotaBytes})
 }
 
 // ProjectQuotaUpdateHandler handles PUT /api/v1/protected/projects/{team}/{project}/quota.
@@ -208,8 +212,6 @@ func (h Handlers) ProjectQuotaUpdateHandler(w http.ResponseWriter, r *http.Reque
 	if !h.requireAdmin(w, r) {
 		return
 	}
-	team := chi.URLParam(r, "team")
-	project := chi.URLParam(r, "project")
 	var req quotaUpdateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSONError(w, http.StatusBadRequest, "invalid request body")
@@ -221,13 +223,8 @@ func (h Handlers) ProjectQuotaUpdateHandler(w http.ResponseWriter, r *http.Reque
 	}
 	poolGrantMu.Lock()
 	defer poolGrantMu.Unlock()
-	cur, found, err := h.mag.Database.ProjectGet(ctx, team, project)
-	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("failed to get project: %v", err))
-		return
-	}
-	if !found {
-		writeJSONError(w, http.StatusNotFound, "project not found")
+	cur, ok := h.getProjectParam(w, r)
+	if !ok {
 		return
 	}
 	if delta := req.QuotaBytes - cur.QuotaBytes; delta > 0 {
@@ -236,29 +233,26 @@ func (h Handlers) ProjectQuotaUpdateHandler(w http.ResponseWriter, r *http.Reque
 			return
 		}
 	}
-	if err := h.mag.Database.ProjectUpdateQuota(ctx, team, project, req.QuotaBytes); err != nil {
+	if err := h.mag.Database.ProjectUpdateQuota(ctx, cur.TeamSlug, cur.ProjectSlug, req.QuotaBytes); err != nil {
 		writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("failed to update quota: %v", err))
 		return
 	}
-	updated, _, _ := h.mag.Database.ProjectGet(ctx, team, project)
-	h.writeProject(ctx, w, updated, http.StatusOK)
+	cur.QuotaBytes = req.QuotaBytes
+	writeJSON(w, http.StatusOK, h.projectResp(ctx, cur))
 }
 
 // ProjectDeleteHandler handles DELETE /api/v1/protected/projects/{team}/{project}.
 func (h Handlers) ProjectDeleteHandler(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
 	if !h.requireAdmin(w, r) {
 		return
 	}
-	team := chi.URLParam(r, "team")
-	project := chi.URLParam(r, "project")
-	found, err := h.mag.Database.ProjectDelete(ctx, team, project)
+	found, err := h.mag.Database.ProjectDelete(r.Context(), chi.URLParam(r, "team"), chi.URLParam(r, "project"))
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("failed to delete project: %v", err))
 		return
 	}
 	if !found {
-		writeJSONError(w, http.StatusNotFound, "project not found")
+		writeJSONError(w, http.StatusNotFound, msgProjectNotFound)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

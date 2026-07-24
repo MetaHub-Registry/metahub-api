@@ -520,16 +520,45 @@ func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", e, "DENIED", failedAuthPushPrfFMT, req.Profile)
 		return
 	}
+	prf, ok := h.resolvePushProfile(ctx, w, req)
+	if !ok {
+		return
+	}
+	// Logical per-project storage-quota guard (add-registry-project-quotas):
+	// reject the push (413) when it would take the project's usage above its quota.
+	if h.rejectManifestOverQuota(ctx, w, req, buf) {
+		return
+	}
+	switch req.ContentType {
+	case dockerManifestMediaType:
+		h.handleDockerManifestPut(ctx, w, req, buf, prf)
+	case ociManifestMediaType:
+		h.handleOCIManifestPut(ctx, w, req, buf, prf)
+	case ociManifestListMediaType:
+		h.handleIndexPut(ctx, w, req, buf)
+	default:
+		e = fmt.Errorf("unsupported content type: %s (supported: %s)", req.ContentType, strings.Join([]string{dockerManifestMediaType, ociManifestMediaType}, ","))
+		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", e, "MANIFEST_INVALID", "")
+	}
+}
+
+// resolvePushProfile resolves the pusher profile by label, falling back to a tag
+// match (docker login may send only the tag portion). It writes the error
+// response and returns ok=false when the profile cannot be resolved.
+func (h Handlers) resolvePushProfile(ctx context.Context, w http.ResponseWriter, req types.Request) (types.Profile, bool) {
+	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
+		"package": pkgNameOciMani,
+		"func":    "resolvePushProfile",
+		"repo":    req.Repo,
+	})
+	defer span.End()
 	prf, found, err := h.mag.Database.ProfileGetByLabel(ctx, req.Profile)
 	if err != nil {
 		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", err, "INTERNAL_ERROR", "failed to fetch profile '%s'", req.Profile)
-		return
+		return types.Profile{}, false
 	}
-	// If label lookup failed, try matching by tag (e.g. "zen2" → "cpu#zen2").
-	// The profile field from docker login may contain only the tag portion.
 	if !found {
-		prfs, prfErr := h.mag.Database.ProfileGetAll(ctx)
-		if prfErr == nil {
+		if prfs, prfErr := h.mag.Database.ProfileGetAll(ctx); prfErr == nil {
 			for _, candidate := range prfs {
 				if candidate.Tag == req.Profile {
 					prf = candidate
@@ -541,51 +570,60 @@ func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !found {
-		e = fmt.Errorf("profile '%s' not found", req.Profile)
+		e := fmt.Errorf("profile '%s' not found", req.Profile)
 		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", e, "INTERNAL_ERROR", "")
+		return types.Profile{}, false
+	}
+	return prf, true
+}
+
+// rejectManifestOverQuota runs the per-project storage-quota guard; it writes the
+// 413 (or 500) response and returns true when the push must be rejected.
+func (h Handlers) rejectManifestOverQuota(ctx context.Context, w http.ResponseWriter, req types.Request, buf []byte) bool {
+	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
+		"package": pkgNameOciMani,
+		"func":    "rejectManifestOverQuota",
+		"repo":    req.Repo,
+	})
+	defer span.End()
+	qErr := h.enforceManifestQuota(ctx, req, buf)
+	if qErr == nil {
+		return false
+	}
+	if qe, ok := qErr.(*quotaExceededError); ok {
+		l.Warnf("quota: %v", qe)
+		writeQuota413(w, qe)
+		return true
+	}
+	utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", qErr, "INTERNAL_ERROR", "quota check failed")
+	return true
+}
+
+// handleOCIManifestPut stores an OCI image manifest and runs the compute step
+// unless it is inapplicable (ORAS artifact or push-by-digest).
+func (h Handlers) handleOCIManifestPut(ctx context.Context, w http.ResponseWriter, req types.Request, buf []byte, prf types.Profile) {
+	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
+		"package": pkgNameOciMani,
+		"func":    "handleOCIManifestPut",
+		"repo":    req.Repo,
+	})
+	defer span.End()
+	m, err := h.mag.StoreManifestUpload(ctx, req, buf)
+	if err != nil {
+		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", err, "MANIFEST_INVALID", "failed to store manifest: %v", err)
 		return
 	}
-	// Logical per-project storage-quota guard (add-registry-project-quotas):
-	// reject the push (413) when it would take the project's usage above its quota.
-	if qErr := h.enforceManifestQuota(ctx, req, buf); qErr != nil {
-		if qe, ok := qErr.(*quotaExceededError); ok {
-			l.Warnf("quota: %v", qe)
-			writeQuota413(w, qe)
-			return
-		}
-		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", qErr, "INTERNAL_ERROR", "quota check failed")
+	// Skip compute when inapplicable: ORAS artifacts don't join multi-arch Index
+	// aggregation, and push-by-digest (empty tag) has no Slot triple to compute.
+	if m.ArtifactType != "" {
+		utils.Info(l, span, "ORAS artifact detected (type=%s), skipping computeAfterManifestPush", m.ArtifactType)
+	} else if req.Tag == "" {
+		utils.Info(l, span, "Push-by-digest (no tag), skipping computeAfterManifestPush")
+	} else if err = h.computeAfterManifestPush(ctx, l, span, req, prf); err != nil {
+		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", err, "INTERNAL_ERROR", "while executing computeAfterManifestPush")
 		return
 	}
-	switch req.ContentType {
-	case dockerManifestMediaType:
-		h.handleDockerManifestPut(ctx, w, req, buf, prf)
-	case ociManifestMediaType:
-		m, err := h.mag.StoreManifestUpload(ctx, req, buf)
-		if err != nil {
-			utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", err, "MANIFEST_INVALID", "failed to store manifest: %v", err)
-			return
-		}
-		// Skip compute step when it cannot meaningfully run:
-		// - ORAS artifacts (non-empty ArtifactType) do not participate in
-		//   multi-arch Index aggregation or profile-based filtering.
-		// - Push-by-digest (empty tag) has no Slot triple to compute against.
-		if m.ArtifactType != "" {
-			utils.Info(l, span, "ORAS artifact detected (type=%s), skipping computeAfterManifestPush", m.ArtifactType)
-		} else if req.Tag == "" {
-			utils.Info(l, span, "Push-by-digest (no tag), skipping computeAfterManifestPush")
-		} else {
-			if err = h.computeAfterManifestPush(ctx, l, span, req, prf); err != nil {
-				utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", err, "INTERNAL_ERROR", "while executing computeAfterManifestPush")
-				return
-			}
-		}
-		h.ManifestPutHandlerWrapper(ctx, w, req, m)
-	case ociManifestListMediaType:
-		h.handleIndexPut(ctx, w, req, buf)
-	default:
-		e = fmt.Errorf("unsupported content type: %s (supported: %s)", req.ContentType, strings.Join([]string{dockerManifestMediaType, ociManifestMediaType}, ","))
-		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", e, "MANIFEST_INVALID", "")
-	}
+	h.ManifestPutHandlerWrapper(ctx, w, req, m)
 }
 
 func (h Handlers) handleDockerManifestPut(ctx context.Context, w http.ResponseWriter, req types.Request, buf []byte, pusherPrf types.Profile) {
