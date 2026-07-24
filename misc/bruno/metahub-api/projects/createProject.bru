@@ -1,0 +1,23 @@
+meta {
+  name: createProject
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{registry}}/api/v1/protected/projects
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "team_slug": "acme",
+    "project_slug": "web",
+    "quota_bytes": 21474836480
+  }
+}
+
+settings {
+  encodeUrl: true
+}

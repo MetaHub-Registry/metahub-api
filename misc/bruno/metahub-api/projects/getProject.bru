@@ -1,0 +1,10 @@
+meta {
+  name: getProject
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{registry}}/api/v1/protected/projects/acme/web
+  auth: inherit
+}

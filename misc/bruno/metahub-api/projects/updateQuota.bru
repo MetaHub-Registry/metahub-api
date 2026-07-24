@@ -1,0 +1,17 @@
+meta {
+  name: updateQuota
+  type: http
+  seq: 5
+}
+
+put {
+  url: {{registry}}/api/v1/protected/projects/acme/web/quota
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "quota_bytes": 53687091200
+  }
+}
