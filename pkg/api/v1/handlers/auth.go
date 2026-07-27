@@ -284,13 +284,18 @@ func unauthorized(w http.ResponseWriter, r *http.Request, realm string, det help
 	l := logrus.WithFields(logrus.Fields{
 		"package": "middleware",
 		"func":    "unauthorized",
+		"host":    r.Host,
+		"method":  r.Method,
+		"oauthErr": string(err),
 	})
-	_ = l
-	_ = fmt.Sprintf(format, v...) // description kept for debugging if needed
+	// Log the internal reason for the 401 (e.g. "inner token invalid: ...").
+	// The HTTP body stays generic per the OCI spec, but silently discarding
+	// this description previously made auth failures undebuggable.
+	reason := fmt.Sprintf(format, v...)
 	authUrl := realm + "/auth"
 	authenticateHeader := fmt.Sprintf("Bearer realm=%q,service=%q", authUrl, r.Host)
 	w.Header().Add(headerContentType, contentTypeJSON)
-	l.Infof("authenticateHeader: %s", authenticateHeader)
+	l.Infof("401 unauthorized (reason=%q) authenticateHeader: %s", reason, authenticateHeader)
 	w.Header().Add("WWW-Authenticate", authenticateHeader)
 	//w.Header().Del("Vary")
 	//w.Header().Add("Docker-Distribution-Api-Version", "registry/2.0")

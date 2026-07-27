@@ -122,7 +122,15 @@ func (h Handlers) verifyOIDCToken(ctx context.Context, rawToken string) ociClaim
 
 // resolveOCIClaims resolves claims from the Bearer token by trying god-mode,
 // envelope, and OIDC paths in order. Returns the first successful result.
+//
+// Each verifier reports "not my kind of token" as a non-nil err with nil claims
+// and reject=false (e.g. god-mode returns "not a god-mode token" for a real
+// OIDC JWT). Such a soft error must NOT short-circuit the loop — otherwise the
+// first verifier (god-mode) would reject every OIDC token before the OIDC path
+// runs. We remember the first soft error only as a fallback message and keep
+// trying the remaining verifiers; a hard reject (reject=true) still stops early.
 func (h Handlers) resolveOCIClaims(r *http.Request, rawToken string) ociClaimsResult {
+	var firstErr error
 	for _, verify := range []func() ociClaimsResult{
 		func() ociClaimsResult { return h.verifyGodModeToken(rawToken) },
 		func() ociClaimsResult { return h.verifyEnvelopeToken(r.Context(), rawToken) },
@@ -132,11 +140,11 @@ func (h Handlers) resolveOCIClaims(r *http.Request, rawToken string) ociClaimsRe
 		if res.claims != nil || res.reject {
 			return res
 		}
-		if res.err != nil {
-			return res // propagate first non-nil error as fallback message
+		if res.err != nil && firstErr == nil {
+			firstErr = res.err // keep as fallback, but keep trying other verifiers
 		}
 	}
-	return ociClaimsResult{}
+	return ociClaimsResult{err: firstErr}
 }
 
 // ociAuthHandleRequest is the per-request core of OCIAuthMiddleware.

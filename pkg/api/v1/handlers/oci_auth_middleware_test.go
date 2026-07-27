@@ -105,6 +105,39 @@ func TestOCIAuthMiddleware_ExpiredToken(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, rr.Code)
 }
 
+// TestOCIAuthMiddleware_ValidToken_GodModeEnabled is a regression test for the
+// resolveOCIClaims short-circuit bug: when god-mode is enabled alongside OIDC
+// (the production/dev config), god-mode runs first and returns a non-nil
+// "not a god-mode token" error for every real OIDC JWT. The loop used to return
+// on that first soft error and never reach the OIDC verifier, so every valid
+// Authentik token was rejected 401 at /v2/ (docker login worked, push/pull did
+// not). With the fix, a soft error is remembered as a fallback but the loop
+// continues to the OIDC path, which authenticates the token.
+func TestOCIAuthMiddleware_ValidToken_GodModeEnabled(t *testing.T) {
+	m := newMockOIDC(t)
+	hh := m.handlers(t)
+	hh.godmode = newTestGodMode() // enable god-mode alongside OIDC (dev config)
+	require.True(t, hh.godmode.IsEnabled())
+
+	token := m.validToken(t, "sub-gm", "alice")
+
+	r := chi.NewRouter()
+	r.Use(hh.OCIAuthMiddleware())
+	r.Get("/v2/test/manifests/latest", func(w http.ResponseWriter, r *http.Request) {
+		auth, ok := OCIUserFromContext(r.Context())
+		require.True(t, ok)
+		assert.Equal(t, "alice", auth.Username)
+		w.WriteHeader(http.StatusOK)
+	})
+
+	req := httptest.NewRequest("GET", "/v2/test/manifests/latest", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusOK, rr.Code,
+		"valid OIDC token must authenticate even when god-mode is enabled")
+}
+
 // ---------------------------------------------------------------------------
 // OCIWriteAuthMiddleware tests — pull-only vs admin authorization
 // ---------------------------------------------------------------------------
