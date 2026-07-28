@@ -1,0 +1,21 @@
+meta {
+  name: updateVisibility
+  type: http
+  seq: 7
+}
+
+put {
+  url: {{registry}}/api/v1/protected/projects/acme/web/visibility
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "visibility": "public"
+  }
+}
+
+settings {
+  encodeUrl: true
+}

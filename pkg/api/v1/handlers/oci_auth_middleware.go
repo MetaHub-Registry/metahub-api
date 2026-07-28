@@ -22,9 +22,10 @@ const (
 
 // OCIAuthContext carries authenticated user identity for OCI registry handlers.
 type OCIAuthContext struct {
-	Username string // parsed from preferred_username (without profile suffix)
-	Profile  string // parsed from "user/profile" convention, defaults to "generic"
-	Role     string // "admin" if user is in groupMetahubAdmin, otherwise "user"
+	Username string   // parsed from preferred_username (without profile suffix)
+	Profile  string   // parsed from "user/profile" convention, defaults to "generic"
+	Role     string   // "admin" if user is in groupMetahubAdmin, otherwise "user"
+	Groups   []string // Authentik groups from the token (namespace-authz role resolution)
 }
 
 // roleFromGroups returns "admin" if groups contains groupMetahubAdmin, otherwise "user".
@@ -181,7 +182,7 @@ func (h Handlers) ociAuthHandleRequest(w http.ResponseWriter, r *http.Request, n
 	}
 
 	username, profile := parseUsernameProfile(result.claims.Username)
-	ociAuth := &OCIAuthContext{Username: username, Profile: profile, Role: result.role}
+	ociAuth := &OCIAuthContext{Username: username, Profile: profile, Role: result.role, Groups: result.claims.Groups}
 	ctx := contextWithOCIAuth(r.Context(), ociAuth)
 	rWithCtx := r.WithContext(ctx)
 
@@ -233,17 +234,39 @@ func isOCIWriteMethod(method string) bool {
 func (h Handlers) OCIWriteAuthMiddleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if isOCIWriteMethod(r.Method) {
-				auth, ok := OCIUserFromContext(r.Context())
-				if !ok || auth.Role != roleAdmin {
-					det := helper.NewDetail("repository", "", r.Method)
-					forbidden(w, r, det, "write access requires the admin role")
-					return
-				}
+			if h.authorizeOCIWrite(w, r) {
+				next.ServeHTTP(w, r)
 			}
-			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// authorizeOCIWrite reports whether the request's write (if any) is allowed. On
+// denial it writes the 403 and returns false; non-write methods always pass.
+// Switch off => legacy admin-only; on => owner / org-admin / project-admin /
+// global-admin (the push column of the namespace-authz matrix).
+func (h Handlers) authorizeOCIWrite(w http.ResponseWriter, r *http.Request) bool {
+	if !isOCIWriteMethod(r.Method) {
+		return true
+	}
+	auth, ok := OCIUserFromContext(r.Context())
+	if !ok {
+		forbidden(w, r, helper.NewDetail("repository", "", r.Method), "write access requires authentication")
+		return false
+	}
+	if !h.registry.EnforceWriteOwnership {
+		if auth.Role != roleAdmin {
+			forbidden(w, r, helper.NewDetail("repository", "", r.Method), "write access requires the admin role")
+			return false
+		}
+		return true
+	}
+	repo := repoFromOCIPath(r.URL.Path)
+	if !canPush(h.classifyNamespace(r.Context(), repo), auth.Username, auth.Role, auth.Groups) {
+		forbidden(w, r, helper.NewDetail("repository", repo, r.Method), "push access denied for this namespace")
+		return false
+	}
+	return true
 }
 
 // OCIHeartbeatHandler handles GET /v2/ — returns 200 per OCI Distribution Spec.

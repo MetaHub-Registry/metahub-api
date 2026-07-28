@@ -90,7 +90,18 @@ func (h Handlers) enforceManifestQuota(ctx context.Context, req types.Request, b
 		return err
 	}
 	if !found {
-		return nil // no :Project node -> exempt
+		// Personal namespace (user/<username>): the first push auto-provisions it
+		// with the default quota, then it is enforced like any project. Only under
+		// write-ownership enforcement; otherwise system/unowned namespaces stay
+		// exempt (legacy behavior).
+		if h.registry.EnforceWriteOwnership && team == types.PersonalTeamSlug && project != "" {
+			proj, err = h.mag.Database.PersonalNamespaceGetOrCreate(ctx, project, h.personalQuotaBytes())
+			if err != nil {
+				return err
+			}
+		} else {
+			return nil // system/unowned -> exempt
+		}
 	}
 	incoming := incomingBlobs(buf)
 	if len(incoming) == 0 {

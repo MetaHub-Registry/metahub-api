@@ -37,7 +37,8 @@ func newFakeProjDB() *fakeProjDB {
 func pkey(team, project string) string { return team + "/" + project }
 
 func (f *fakeProjDB) ProjectCreate(_ context.Context, team, project string, quota int64) (types.Project, error) {
-	p := types.Project{TeamSlug: team, ProjectSlug: project, QuotaBytes: quota, CreatedAt: 1}
+	p := types.Project{TeamSlug: team, ProjectSlug: project, QuotaBytes: quota, CreatedAt: 1,
+		Visibility: types.VisibilityPrivate, Kind: types.KindProject}
 	f.projects[pkey(team, project)] = p
 	return p, nil
 }
@@ -78,6 +79,26 @@ func (f *fakeProjDB) ProjectBlobDigests(_ context.Context, team, project string)
 	return f.digests[pkey(team, project)], nil
 }
 func (f *fakeProjDB) BlobRefCount(_ context.Context, _ string) (int64, error) { return 0, nil }
+func (f *fakeProjDB) ProjectSetVisibility(_ context.Context, team, project, vis string) (bool, error) {
+	k := pkey(team, project)
+	p, ok := f.projects[k]
+	if !ok {
+		return false, nil
+	}
+	p.Visibility = vis
+	f.projects[k] = p
+	return true, nil
+}
+func (f *fakeProjDB) PersonalNamespaceGetOrCreate(_ context.Context, username string, q int64) (types.Project, error) {
+	k := pkey(types.PersonalTeamSlug, username)
+	if p, ok := f.projects[k]; ok {
+		return p, nil
+	}
+	p := types.Project{TeamSlug: types.PersonalTeamSlug, ProjectSlug: username, QuotaBytes: q,
+		Kind: types.KindPersonal, Owner: username, Visibility: types.VisibilityPrivate}
+	f.projects[k] = p
+	return p, nil
+}
 
 func adminCtx(ctx context.Context) context.Context {
 	return contextWithClaims(ctx, &OIDCClaims{Groups: []string{groupMetahubAdmin}})

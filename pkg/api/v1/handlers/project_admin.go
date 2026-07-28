@@ -25,16 +25,23 @@ var poolGrantMu sync.Mutex
 const (
 	msgProjectNotFound  = "project not found"
 	msgFailedGetProject = "failed to get project: %v"
+	msgInvalidBody      = "invalid request body"
 )
 
 type projectCreateRequest struct {
 	TeamSlug    string `json:"team_slug"`
 	ProjectSlug string `json:"project_slug"`
 	QuotaBytes  int64  `json:"quota_bytes"`
+	// Visibility is optional (private|public); empty defaults to private.
+	Visibility string `json:"visibility,omitempty"`
 }
 
 type quotaUpdateRequest struct {
 	QuotaBytes int64 `json:"quota_bytes"`
+}
+
+type visibilityUpdateRequest struct {
+	Visibility string `json:"visibility"`
 }
 
 type projectResponse struct {
@@ -44,6 +51,9 @@ type projectResponse struct {
 	QuotaBytes  int64  `json:"quota_bytes"`
 	UsageBytes  int64  `json:"usage_bytes"`
 	CreatedAt   int64  `json:"created_at"`
+	Visibility  string `json:"visibility"`
+	Kind        string `json:"kind,omitempty"`
+	Owner       string `json:"owner,omitempty"`
 }
 
 // writeJSON writes v as a JSON response with the given status.
@@ -99,6 +109,9 @@ func (h Handlers) projectResp(ctx context.Context, p types.Project) projectRespo
 		QuotaBytes:  p.QuotaBytes,
 		UsageBytes:  usage,
 		CreatedAt:   p.CreatedAt,
+		Visibility:  p.Visibility,
+		Kind:        p.Kind,
+		Owner:       p.Owner,
 	}
 }
 
@@ -125,7 +138,7 @@ func (h Handlers) ProjectCreateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	var req projectCreateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid request body")
+		writeJSONError(w, http.StatusBadRequest, msgInvalidBody)
 		return
 	}
 	if req.TeamSlug == "" || req.ProjectSlug == "" {
@@ -134,6 +147,10 @@ func (h Handlers) ProjectCreateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.QuotaBytes < 0 {
 		writeJSONError(w, http.StatusBadRequest, "quota_bytes must be >= 0")
+		return
+	}
+	if req.Visibility != "" && req.Visibility != types.VisibilityPrivate && req.Visibility != types.VisibilityPublic {
+		writeJSONError(w, http.StatusBadRequest, "visibility must be private or public")
 		return
 	}
 	poolGrantMu.Lock()
@@ -156,7 +173,44 @@ func (h Handlers) ProjectCreateHandler(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("failed to create project: %v", err))
 		return
 	}
+	// Projects are created private by default (metalib); apply an explicit
+	// public visibility from the request so the site-agent can reflect a
+	// Waldur order's visibility at create time.
+	if req.Visibility == types.VisibilityPublic {
+		if _, verr := h.mag.Database.ProjectSetVisibility(ctx, p.TeamSlug, p.ProjectSlug, types.VisibilityPublic); verr != nil {
+			writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("failed to set visibility: %v", verr))
+			return
+		}
+		p.Visibility = types.VisibilityPublic
+	}
 	writeJSON(w, http.StatusCreated, h.projectResp(ctx, p))
+}
+
+// ProjectSetVisibilityHandler handles
+// PUT /api/v1/protected/projects/{team}/{project}/visibility. Admin-role-gated.
+func (h Handlers) ProjectSetVisibilityHandler(w http.ResponseWriter, r *http.Request) {
+	if !h.requireAdmin(w, r) {
+		return
+	}
+	var req visibilityUpdateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, http.StatusBadRequest, msgInvalidBody)
+		return
+	}
+	if req.Visibility != types.VisibilityPrivate && req.Visibility != types.VisibilityPublic {
+		writeJSONError(w, http.StatusBadRequest, "visibility must be private or public")
+		return
+	}
+	cur, ok := h.getProjectParam(w, r)
+	if !ok {
+		return
+	}
+	if _, err := h.mag.Database.ProjectSetVisibility(r.Context(), cur.TeamSlug, cur.ProjectSlug, req.Visibility); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("failed to set visibility: %v", err))
+		return
+	}
+	cur.Visibility = req.Visibility
+	writeJSON(w, http.StatusOK, h.projectResp(r.Context(), cur))
 }
 
 // ProjectListHandler handles GET /api/v1/protected/projects.
@@ -214,7 +268,7 @@ func (h Handlers) ProjectQuotaUpdateHandler(w http.ResponseWriter, r *http.Reque
 	}
 	var req quotaUpdateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid request body")
+		writeJSONError(w, http.StatusBadRequest, msgInvalidBody)
 		return
 	}
 	if req.QuotaBytes < 0 {
