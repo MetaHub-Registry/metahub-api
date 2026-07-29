@@ -252,6 +252,18 @@ func (h Handlers) ProjectUsageHandler(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	// ?by=user returns the per-pusher split (size/N per HAS_PUSHED.user) instead of
+	// the project total. The reserved UnknownUsageBucket key carries bytes with no
+	// attributable pusher (compute-generated/legacy); Σ(usages) == usage_bytes.
+	if r.URL.Query().Get("by") == "user" {
+		usages, err := h.mag.Database.ProjectUserUsageBytes(r.Context(), p.TeamSlug, p.ProjectSlug)
+		if err != nil {
+			writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("failed to compute per-user usage: %v", err))
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"usages": usages, "quota_bytes": p.QuotaBytes})
+		return
+	}
 	usage, err := h.mag.Database.ProjectUsageBytes(r.Context(), p.TeamSlug, p.ProjectSlug)
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("failed to compute usage: %v", err))

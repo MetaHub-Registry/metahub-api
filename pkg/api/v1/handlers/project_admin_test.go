@@ -21,16 +21,18 @@ import (
 // never touch them).
 type fakeProjDB struct {
 	magazine.Database
-	projects map[string]types.Project
-	usage    map[string]int64
-	digests  map[string][]string
+	projects  map[string]types.Project
+	usage     map[string]int64
+	digests   map[string][]string
+	userUsage map[string]map[string]float64
 }
 
 func newFakeProjDB() *fakeProjDB {
 	return &fakeProjDB{
-		projects: map[string]types.Project{},
-		usage:    map[string]int64{},
-		digests:  map[string][]string{},
+		projects:  map[string]types.Project{},
+		usage:     map[string]int64{},
+		digests:   map[string][]string{},
+		userUsage: map[string]map[string]float64{},
 	}
 }
 
@@ -74,6 +76,9 @@ func (f *fakeProjDB) ProjectQuotaSum(_ context.Context) (int64, error) {
 }
 func (f *fakeProjDB) ProjectUsageBytes(_ context.Context, team, project string) (int64, error) {
 	return f.usage[pkey(team, project)], nil
+}
+func (f *fakeProjDB) ProjectUserUsageBytes(_ context.Context, team, project string) (map[string]float64, error) {
+	return f.userUsage[pkey(team, project)], nil
 }
 func (f *fakeProjDB) ProjectBlobDigests(_ context.Context, team, project string) ([]string, error) {
 	return f.digests[pkey(team, project)], nil

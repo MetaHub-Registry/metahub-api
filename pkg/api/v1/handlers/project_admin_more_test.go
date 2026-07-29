@@ -81,6 +81,20 @@ func TestProjectUsageHandler(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	assert.Equal(t, int64(300), resp["usage_bytes"])
 	assert.Equal(t, int64(900), resp["quota_bytes"])
+
+	// admin, ?by=user -> 200 with the per-pusher split + quota
+	fake.userUsage["t/p"] = map[string]float64{"alice": 250, "bob": 250}
+	w = httptest.NewRecorder()
+	h.ProjectUsageHandler(w, adminReq("GET", "/projects/t/p/usage?by=user", "", params))
+	require.Equal(t, http.StatusOK, w.Code)
+	var uresp struct {
+		Usages     map[string]float64 `json:"usages"`
+		QuotaBytes int64              `json:"quota_bytes"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &uresp))
+	assert.Equal(t, 250.0, uresp.Usages["alice"])
+	assert.Equal(t, 250.0, uresp.Usages["bob"])
+	assert.Equal(t, int64(900), uresp.QuotaBytes)
 }
 
 func TestProjectCreateHandler_Validation(t *testing.T) {
