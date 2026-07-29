@@ -59,6 +59,7 @@ vars:
   REPO_PRODSTACK_DIR: "~/src/gitlab.com/qnib-ansible/prod-stack"
   REPO_FLUX_DIR: "~/src/gitlab.com/qnib-ansible/flux/metahub"
   REPO_DOCS_DIR: "~/src/gitlab.com/qshuf-mkdocs/metahub-docs"
+  REPO_SITEAGENT_DIR: "~/src/gitlab.com/qnib-metahub/waldur-site-agent-metahub"
 
 tasks:
   # ===========================================================================
@@ -106,6 +107,8 @@ tasks:
         vars: { DESC: "{{.DESC}}", REPO_NAME: "flux/metahub", REPO_DIR: "{{.REPO_FLUX_DIR}}" }
       - task: _branch-and-mr
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-docs", REPO_DIR: "{{.REPO_DOCS_DIR}}" }
+      - task: _branch-and-mr
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "waldur-site-agent-metahub", REPO_DIR: "{{.REPO_SITEAGENT_DIR}}" }
       - task: _worktree-main
         vars: { DESC: "{{.DESC}}", REPO_NAME: "outfitter", REPO_DIR: "{{.REPO_OUTFITTER_DIR}}", BRANCH: "bootstrap-outfitter" }
       - task: _setup-session-workspace
@@ -1038,6 +1041,10 @@ tasks:
         sh: grep "^community-edition=" "{{.SESSION_DIR}}/{{.DESC}}/.branches" | cut -d= -f2
       DOCS_BRANCH:
         sh: grep "^metahub-docs=" "{{.SESSION_DIR}}/{{.DESC}}/.branches" | cut -d= -f2
+      OUTFITTER_BRANCH:
+        sh: grep "^outfitter=" "{{.SESSION_DIR}}/{{.DESC}}/.branches" | cut -d= -f2
+      SITEAGENT_BRANCH:
+        sh: grep "^waldur-site-agent-metahub=" "{{.SESSION_DIR}}/{{.DESC}}/.branches" | cut -d= -f2
     preconditions:
       - sh: '[ -d "{{.DEV_STACK_EXPANDED}}" ]'
         msg: "Dev-stack directory not found at {{.DEV_STACK_DIR}}"
@@ -1053,6 +1060,8 @@ tasks:
         UI="{{.UI_BRANCH}}"
         CE="{{.CE_BRANCH}}"
         DOCS="{{.DOCS_BRANCH}}"
+        OUTFITTER="{{.OUTFITTER_BRANCH}}"
+        SITEAGENT="{{.SITEAGENT_BRANCH}}"
         DESC="{{.DESC}}"
 
         echo ""
@@ -1063,11 +1072,13 @@ tasks:
         echo "  CE:    ${CE}"
         echo "  UI:    ${UI}"
         echo "  DOCS:  ${DOCS}"
+        echo "  OUTFIT:${OUTFITTER}"
+        echo "  SITEAG:${SITEAGENT}"
 
         cd "${DEV_STACK}"
 
-        # render slots: API:LIB:ADMIN:CE:OCI:UI:DOCS (all 7 required)
-        RENDER_CMD="render:${API}:${LIB}:${ADMIN}:${CE}:dev:${UI}:${DOCS}"
+        # render slots: API:LIB:ADMIN:CE:OCI:UI:DOCS:OUTFITTER:SITEAGENT (all 9 required)
+        RENDER_CMD="render:${API}:${LIB}:${ADMIN}:${CE}:dev:${UI}:${DOCS}:${OUTFITTER}:${SITEAGENT}"
         NEW_LINE="      - task: ${RENDER_CMD}"
         awk -v new="${NEW_LINE}" '
           /- task: render:/ && !/\{\{/ { print new; next }
@@ -1082,7 +1093,7 @@ tasks:
 
         echo "[dev-stack] Committed and pushed"
         echo ""
-        echo "[dev-stack] Render the session pipelines with (all 7 slots incl. DOCS):"
+        echo "[dev-stack] Render the session pipelines with (all 9 slots incl. OUTFITTER + SITEAGENT):"
         echo "             (cd ${DEV_STACK} && task ${RENDER_CMD})"
 
   # ---------------------------------------------------------------------------
