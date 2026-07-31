@@ -11,6 +11,7 @@ import (
 	"github.com/riandyrn/otelchi"
 	"github.com/sirupsen/logrus"
 	"github.com/metahub-registry/metahub-api/pkg/api/v1/handlers"
+	"github.com/metahub-registry/metahub-api/pkg/config"
 	"github.com/metahub-registry/metahub-api/pkg/metrics"
 	"github.com/metahub-registry/metahub-core/pkg/backends/magazine"
 )
@@ -31,7 +32,8 @@ const (
 
 func Initialize(mag magazine.Magazine, oidcProvider *handlers.OIDCProvider, godmode *handlers.GodModeAuth) *chi.Mux {
 	// Handlers
-	h := handlers.NewHandlers("dev", mag, oidcProvider, godmode)
+	h := handlers.NewHandlers("dev", mag, oidcProvider, godmode).
+		WithRegistry(config.RegistryConfigFromViper())
 	// define router
 	router := chi.NewRouter()
 	log := logrus.StandardLogger().WithFields(
@@ -114,6 +116,15 @@ func Initialize(mag magazine.Magazine, oidcProvider *handlers.OIDCProvider, godm
 		r.Post("/registry-token", h.RegistryTokenCreate)
 		r.Get("/registry-tokens", h.RegistryTokenList)
 		r.Delete("/registry-tokens/{identifier}", h.RegistryTokenRevoke)
+		// Registry project + storage-quota admin API (add-registry-project-quotas);
+		// each handler is admin-role-gated.
+		r.Post("/projects", h.ProjectCreateHandler)
+		r.Get("/projects", h.ProjectListHandler)
+		r.Get("/projects/{team}/{project}", h.ProjectGetHandler)
+		r.Get("/projects/{team}/{project}/usage", h.ProjectUsageHandler)
+		r.Put("/projects/{team}/{project}/quota", h.ProjectQuotaUpdateHandler)
+		r.Put("/projects/{team}/{project}/visibility", h.ProjectSetVisibilityHandler)
+		r.Delete("/projects/{team}/{project}", h.ProjectDeleteHandler)
 		r.Get("/user", h.UserGetOne)
 		r.Get("/users/{id}", h.UserGetOne)
 		r.Put("/users/{id}/secrets", h.UserPutSecret)
@@ -133,9 +144,11 @@ func Initialize(mag magazine.Magazine, oidcProvider *handlers.OIDCProvider, godm
 		// 401 with WWW-Authenticate when no valid token is present.
 		r.Group(func(r chi.Router) {
 			r.Use(h.OCIAuthMiddleware())
-			// Authorize writes: any authenticated user may pull, but
-			// push/delete (PUT/POST/PATCH/DELETE) require the admin role.
-			// This makes the demo / pull-only accounts real.
+			// Authorize reads: when registry.enforce_pull_authz is on, gate
+			// GET/HEAD by namespace class + groups (off => ungated, legacy).
+			r.Use(h.OCIReadAuthMiddleware())
+			// Authorize writes: legacy admin-only, or (when
+			// registry.enforce_write_ownership is on) owner/org-admin/project-admin.
 			r.Use(h.OCIWriteAuthMiddleware())
 			r.Get("/", h.OCIHeartbeatHandler)
 			// TODO: Is there no way to match multiple lengh path?

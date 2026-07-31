@@ -1,0 +1,10 @@
+meta {
+  name: listProjects
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{registry}}/api/v1/protected/projects
+  auth: inherit
+}

@@ -1,0 +1,10 @@
+meta {
+  name: getUsage
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{registry}}/api/v1/protected/projects/acme/web/usage
+  auth: inherit
+}

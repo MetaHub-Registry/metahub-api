@@ -1,3 +1,10 @@
+# godmode-auth Specification
+
+## Purpose
+God-mode service accounts that bypass OIDC for administrative access.
+
+## Requirements
+
 ### Requirement: God-mode user configuration
 The system SHALL support an optional `godmode` configuration section defining service accounts that bypass OIDC authentication.
 

@@ -1,4 +1,9 @@
-## MODIFIED Requirements
+# oci-registry-auth Specification
+
+## Purpose
+OCI registry v2 authentication — Bearer token verification and the WWW-Authenticate challenge flow.
+
+## Requirements
 
 ### Requirement: OCI auth middleware token verification (MODIFIED)
 The OCI auth middleware SHALL accept Bearer tokens of three types, checked in order:
