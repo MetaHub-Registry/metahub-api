@@ -1,4 +1,9 @@
-## ADDED Requirements
+# metahub-api-bruno-requests Specification
+
+## Purpose
+Bruno request-collection coverage for the metahub-api HTTP endpoints.
+
+## Requirements
 
 ### Requirement: Bruno request for collections list navigation
 The metahub-api Bruno collection SHALL include a request file for `POST /api/v1/collections` under `misc/bruno/metahub-api/mh-api/`.

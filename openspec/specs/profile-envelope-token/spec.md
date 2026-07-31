@@ -1,4 +1,9 @@
-## ADDED Requirements
+# profile-envelope-token Specification
+
+## Purpose
+Profile-scoped envelope tokens that authorize profile-bound pulls and pushes.
+
+## Requirements
 
 ### Requirement: Envelope token minting after Authentik exchange
 When a Docker client logs in with a username that includes a `/profile` suffix (e.g., `alice/zen2`) and Authentik successfully authenticates the base username (`alice`), the `/auth` endpoint SHALL mint an HMAC-SHA256 signed envelope JWT instead of returning the Authentik JWT directly.

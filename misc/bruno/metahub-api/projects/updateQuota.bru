@@ -1,0 +1,34 @@
+meta {
+  name: updateQuota
+  type: http
+  seq: 5
+}
+
+put {
+  url: {{registry}}/api/v1/protected/projects/acme/web/quota
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "quota_bytes": 21474836480
+  }
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  # Set a project's storage quota (admin only)
+
+  PUT the new quota in bytes. Enforced on push: a manifest whose incoming
+  bytes would push `usage_bytes + incoming > quota_bytes` is rejected with
+  "project <team>/<project> storage quota exceeded".
+
+  - `quota_bytes` here = 20 GiB (21474836480). For the Waldur "100 GB" order
+    use 107374182400 (100 GiB).
+  - Creating/raising a quota is subject to the no-overcommit pool: sum of all
+    project quotas may not exceed the logical pool budget (else 409).
+}

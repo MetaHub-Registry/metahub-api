@@ -1,4 +1,9 @@
-## ADDED Requirements
+# cli-bearer-auth Specification
+
+## Purpose
+Bearer-token authentication for CLI and registry clients against the metahub-api.
+
+## Requirements
 
 ### Requirement: Admin-CLI machine authentication
 The system SHALL accept Bearer tokens issued by Authentik via the Client Credentials grant on all `/api/v1/protected` routes. These tokens MUST be validated by the same OIDC validation middleware used for frontend users (JWKS-based); no separate endpoint or code path is required for CLI callers.

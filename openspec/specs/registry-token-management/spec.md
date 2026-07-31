@@ -1,11 +1,17 @@
-## ADDED Requirements
+# registry-token-management Specification
 
+## Purpose
+Creation, listing, and revocation of registry auth tokens via the WebUI/API, backed by Authentik.
+## Requirements
 ### Requirement: Create registry token via WebUI
 The system SHALL provide `POST /api/v1/protected/registry-token` that creates an Authentik app password for the authenticated user. The endpoint SHALL use the user's own Authentik access token (from the OIDC session) to call Authentik's core API (`POST /api/v3/core/tokens/` with `intent=app_password`), then retrieve the token key via `GET /api/v3/core/tokens/{identifier}/view_key/`. The response SHALL include the app password value and a ready-to-use `docker login` command.
 
-#### Scenario: Successful token creation
+The created app password SHALL be **durable**: by default the request SHALL set `expiring: false` so the token does not inherit Authentik's tenant `default_token_duration` (which is short, e.g. 30 minutes). When a registry-token TTL is configured, the request SHALL instead set `expiring: true` and `expires` to the current time plus the configured TTL. The response SHALL include the token's lifetime (`expiring`, and `expires` when applicable) so the caller knows whether and when the token expires.
+
+#### Scenario: Successful token creation (non-expiring by default)
 - **WHEN** an authenticated user sends `POST /api/v1/protected/registry-token` with `{"description": "my laptop"}`
-- **THEN** the server creates an Authentik app password with identifier `metahub-registry-<timestamp>` and intent `app_password`
+- **AND** no registry-token TTL is configured
+- **THEN** the server creates an Authentik app password with identifier `metahub-registry-<timestamp>`, intent `app_password`, and `expiring: false`
 - **AND** returns HTTP 201 with:
   ```json
   {
@@ -13,9 +19,16 @@ The system SHALL provide `POST /api/v1/protected/registry-token` that creates an
     "description": "my laptop",
     "docker_login": "docker login -u alice -p <app-password-key> registry.example.com",
     "username": "alice",
-    "password": "<app-password-key>"
+    "password": "<app-password-key>",
+    "expiring": false
   }
   ```
+
+#### Scenario: Successful token creation with configured TTL
+- **WHEN** a registry-token TTL (e.g. 1 year) is configured
+- **AND** an authenticated user sends `POST /api/v1/protected/registry-token`
+- **THEN** the server creates the app password with `expiring: true` and `expires` set to now + TTL
+- **AND** the response includes `"expiring": true` and the `expires` timestamp
 
 #### Scenario: Authentik API unreachable
 - **WHEN** the server cannot reach Authentik's core API
@@ -27,12 +40,12 @@ The system SHALL provide `POST /api/v1/protected/registry-token` that creates an
 - **AND** the server responds with HTTP 403 and `{"error": "access token lacks required scope for token management"}`
 
 ### Requirement: List registry tokens
-The system SHALL provide `GET /api/v1/protected/registry-tokens` that lists the authenticated user's Authentik app passwords (filtered to those with the `metahub-registry-` identifier prefix). The endpoint SHALL call `GET /api/v3/core/tokens/?intent=app_password&identifier__startswith=metahub-registry-` using the user's access token.
+The system SHALL provide `GET /api/v1/protected/registry-tokens` that lists the authenticated user's Authentik app passwords (filtered to those with the `metahub-registry-` identifier prefix). The endpoint SHALL call `GET /api/v3/core/tokens/?intent=app_password&identifier__startswith=metahub-registry-` using the user's access token. Each listed token SHALL include its lifetime metadata (`expiring`, and `expires` when the token is expiring) so callers can display whether and when a token expires. The secret key values SHALL NOT be included.
 
 #### Scenario: User has registry tokens
 - **WHEN** an authenticated user sends `GET /api/v1/protected/registry-tokens`
 - **AND** the user has 2 app passwords with `metahub-registry-` prefix
-- **THEN** the server returns HTTP 200 with a JSON array of token metadata (identifier, description, creation date) — excluding the secret key values
+- **THEN** the server returns HTTP 200 with a JSON array of token metadata (identifier, description, `expiring`, and `expires` when applicable) — excluding the secret key values
 
 #### Scenario: User has no registry tokens
 - **WHEN** an authenticated user sends `GET /api/v1/protected/registry-tokens`
@@ -68,3 +81,4 @@ The system SHALL read the Authentik API base URL from `oidc.authentik_api_url` i
 - **WHEN** `oidc.authentik_api_url` is not configured
 - **AND** a user calls `POST /api/v1/protected/registry-token`
 - **THEN** the server returns HTTP 501 with `{"error": "registry token management not configured"}`
+
