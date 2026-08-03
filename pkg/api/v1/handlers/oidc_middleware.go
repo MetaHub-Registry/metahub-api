@@ -22,11 +22,17 @@ func (h Handlers) OIDCAuthMiddleware() func(http.Handler) http.Handler {
 			// Try god-mode verification first, then OIDC
 			var claims *OIDCClaims
 			var err error
+			// God-mode carries its role in the token rather than in Authentik
+			// groups, so it must be propagated explicitly — otherwise the
+			// admin gate downstream re-derives "user" from empty groups and
+			// 403s a legitimately admin machine account.
+			godModeRole := ""
 
 			if h.godmode.IsEnabled() {
 				gmClaims, gmErr := h.godmode.VerifyToken(rawToken)
 				if gmClaims != nil {
 					claims = gmClaims.OIDCClaims
+					godModeRole = gmClaims.Role
 				} else {
 					err = gmErr
 				}
@@ -47,6 +53,9 @@ func (h Handlers) OIDCAuthMiddleware() func(http.Handler) http.Handler {
 
 			ctx := contextWithClaims(r.Context(), claims)
 			ctx = contextWithRawToken(ctx, rawToken)
+			if godModeRole != "" {
+				ctx = contextWithAuthRole(ctx, godModeRole)
+			}
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

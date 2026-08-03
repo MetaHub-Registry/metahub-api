@@ -176,3 +176,57 @@ func TestProjectDeleteHandler_NonAdmin(t *testing.T) {
 func TestAdminFromContext_NoClaims(t *testing.T) {
 	assert.False(t, adminFromContext(context.Background()))
 }
+
+// A god-mode admin has no Authentik groups, so its role must come from the role
+// the middleware stored — otherwise every machine account is denied. This is the
+// regression guard for the site-agent's admin API access.
+func TestAdminFromContext_GodModeAdminRole(t *testing.T) {
+	ctx := contextWithClaims(context.Background(), &OIDCClaims{Username: "oci"})
+	ctx = contextWithAuthRole(ctx, roleAdmin)
+	assert.True(t, adminFromContext(ctx))
+}
+
+// A god-mode account configured as a plain user stays non-admin: the stored role
+// grants access, it does not bypass the check.
+func TestAdminFromContext_GodModeUserRole(t *testing.T) {
+	ctx := contextWithClaims(context.Background(), &OIDCClaims{Username: "demo"})
+	ctx = contextWithAuthRole(ctx, roleUser)
+	assert.False(t, adminFromContext(ctx))
+}
+
+// The stored role takes precedence over group membership, so a god-mode "user"
+// token cannot be escalated by groups it happens to carry.
+func TestAdminFromContext_StoredRoleWinsOverGroups(t *testing.T) {
+	ctx := contextWithClaims(context.Background(), &OIDCClaims{Groups: []string{groupMetahubAdmin}})
+	ctx = contextWithAuthRole(ctx, roleUser)
+	assert.False(t, adminFromContext(ctx))
+}
+
+// Without a stored role (the OIDC path) the decision still comes from groups.
+func TestAdminFromContext_FallsBackToGroups(t *testing.T) {
+	ctx := contextWithClaims(context.Background(), &OIDCClaims{Groups: []string{groupMetahubAdmin}})
+	assert.True(t, adminFromContext(ctx))
+
+	ctx = contextWithClaims(context.Background(), &OIDCClaims{Groups: []string{"other"}})
+	assert.False(t, adminFromContext(ctx))
+}
+
+// End-to-end through the real middleware: a god-mode Bearer token must reach an
+// admin-gated /api/v1/protected handler. Before the role was propagated this
+// returned 403 ("admin role required"), which is what blocked the Waldur
+// site-agent from using the project admin API.
+func TestOIDCAuthMiddleware_GodModeReachesAdminHandler(t *testing.T) {
+	gm := newTestGodMode()
+	h := Handlers{godmode: gm, mag: magazine.Magazine{Database: newFakeProjDB()}}
+
+	token, err := gm.MintToken("oci")
+	require.NoError(t, err)
+
+	srv := h.OIDCAuthMiddleware()(http.HandlerFunc(h.ProjectListHandler))
+	req := httptest.NewRequest("GET", "/api/v1/protected/projects", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code, "god-mode admin must pass the admin gate: %s", w.Body.String())
+}

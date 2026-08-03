@@ -50,6 +50,27 @@ func RawTokenFromContext(ctx context.Context) (string, bool) {
 	return v, ok && v != ""
 }
 
+// authRoleKey is the typed context key holding the role resolved by the
+// authenticating middleware.
+type authRoleKey struct{}
+
+// contextWithAuthRole stores a pre-resolved role in the context.
+//
+// Only god-mode needs this: its role is carried in the token itself
+// (GodModeClaims.Role) rather than in Authentik group membership, so it cannot
+// be recovered from OIDCClaims further down the stack. OIDC requests leave the
+// key unset and are resolved from their groups as before.
+func contextWithAuthRole(ctx context.Context, role string) context.Context {
+	return context.WithValue(ctx, authRoleKey{}, role)
+}
+
+// AuthRoleFromContext retrieves a role stored by the authenticating middleware.
+// Returns ok=false when the caller's role must be derived from claims instead.
+func AuthRoleFromContext(ctx context.Context) (string, bool) {
+	v, ok := ctx.Value(authRoleKey{}).(string)
+	return v, ok && v != ""
+}
+
 // OIDCProvider wraps the go-oidc provider, oauth2 config and ID-token verifier.
 type OIDCProvider struct {
 	Provider        *gooidc.Provider

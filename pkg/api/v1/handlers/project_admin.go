@@ -63,9 +63,16 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-// adminFromContext reports whether the authenticated caller has the admin role
-// (Authentik group membership resolved by roleFromGroups).
+// adminFromContext reports whether the authenticated caller has the admin role.
+//
+// A role stored by the middleware wins: god-mode tokens carry their role in the
+// token (they have no Authentik groups), so deriving it from claims alone would
+// deny every machine account. Otherwise the role comes from Authentik group
+// membership via roleFromGroups.
 func adminFromContext(ctx context.Context) bool {
+	if role, ok := AuthRoleFromContext(ctx); ok {
+		return role == roleAdmin
+	}
 	claims, ok := OIDCClaimsFromContext(ctx)
 	if !ok {
 		return false
