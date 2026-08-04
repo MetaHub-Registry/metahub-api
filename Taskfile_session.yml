@@ -567,7 +567,7 @@ tasks:
           if [ -f .bumpversion.cfg ]; then
             echo "[${REPO_NAME}] Bumping to dev1..."
             bump2version --allow-dirty --no-commit --no-tag dev
-            NEW_VER=$(grep "current_version" .bumpversion.cfg | head -1 | cut -d= -f2 | tr -d ' ')
+            NEW_VER=$(grep -E "^current_version" .bumpversion.cfg | head -1 | cut -d= -f2 | tr -d ' ')
             echo "[${REPO_NAME}] Version: ${NEW_VER}"
             git add -A
             # A no-op bump (new version == on-disk version, or no file matched
@@ -809,7 +809,7 @@ tasks:
         cd "${WT_PATH}"
         if [ -f .bumpversion.cfg ]; then
           bump2version --allow-dirty --no-commit --no-tag dev
-          NEW_VER=$(grep "current_version" .bumpversion.cfg | head -1 | cut -d= -f2 | tr -d ' ')
+          NEW_VER=$(grep -E "^current_version" .bumpversion.cfg | head -1 | cut -d= -f2 | tr -d ' ')
           echo "[${REPO_NAME}] → ${NEW_VER}"
           git add -A
           # Skip the commit when the bump changed nothing, so a no-op
@@ -939,7 +939,7 @@ tasks:
           | grep -vE "^[0-9a-f]+ (Start dev:|Dev iteration:)" \
           | head -20 \
           | sed 's/^/- /')
-        CURRENT_VER=$(grep "current_version" .bumpversion.cfg 2>/dev/null | head -1 | cut -d= -f2 | tr -d ' ')
+        CURRENT_VER=$(grep -E "^current_version" .bumpversion.cfg 2>/dev/null | head -1 | cut -d= -f2 | tr -d ' ')
 
         MR_COMMENT=$(cat <<EOF
         ## Session finalized: ${DESC}
@@ -977,11 +977,11 @@ tasks:
       CURRENT_VERSION:
         sh: |
           WT="$(pwd)/{{.SESSION_DIR}}/{{.DESC}}/{{.REPO_NAME}}"
-          grep "current_version" "${WT}/.bumpversion.cfg" 2>/dev/null | head -1 | cut -d= -f2 | tr -d ' '
+          grep -E "^current_version" "${WT}/.bumpversion.cfg" 2>/dev/null | head -1 | cut -d= -f2 | tr -d ' '
       TARGET_VERSION:
         sh: |
           WT="$(pwd)/{{.SESSION_DIR}}/{{.DESC}}/{{.REPO_NAME}}"
-          CURRENT=$(grep "current_version" "${WT}/.bumpversion.cfg" 2>/dev/null | head -1 | cut -d= -f2 | tr -d ' ')
+          CURRENT=$(grep -E "^current_version" "${WT}/.bumpversion.cfg" 2>/dev/null | head -1 | cut -d= -f2 | tr -d ' ')
           if [ -z "${CURRENT}" ]; then echo "0.0.0"; exit 0; fi
           BASE="${CURRENT%%-dev*}"
           IFS='.' read -r major minor patch <<< "$BASE"
