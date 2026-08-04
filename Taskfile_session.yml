@@ -448,6 +448,161 @@ tasks:
       - task: suspend
 
   # ===========================================================================
+  # session:archive — retire a session for good
+  #
+  # suspend/rm only drop the worktrees and leave the session active; this is the
+  # terminal step: worktrees gone, session out of session:list, OpenSpec clean.
+  #
+  # Worktree removal is `git worktree remove --force`, which discards
+  # uncommitted work without asking, so this refuses to run unless the session
+  # is genuinely finished:
+  #   1. every session-branch repo reached a terminal status (versioned|closed)
+  #   2. no worktree has uncommitted changes
+  #   3. no worktree has commits that were never pushed
+  #   4. no OpenSpec change is still active in the session workspace
+  # Repos tracking main (dev-stack, prod-stack, flux/metahub) never get a
+  # status, so gate 1 skips them — but 2 and 3 still apply, which is exactly
+  # where un-pushed infra edits tend to hide.
+  #
+  # FORCE=1 skips the gates. Only use it when the work really is disposable.
+  # ===========================================================================
+  archive:
+    desc: "Retire a session for good (worktrees removed, session closed): task session:archive -- <description>"
+    requires:
+      vars: [CLI_ARGS]
+    vars:
+      DESC: "{{.CLI_ARGS}}"
+      FORCE: '{{.FORCE | default ""}}'
+    preconditions:
+      - sh: '[ -n "{{.CLI_ARGS}}" ]'
+        msg: "Usage: task session:archive -- <description>"
+      - sh: '[ -f "{{.SESSION_DIR}}/{{.CLI_ARGS}}/.branches" ]'
+        msg: "Session '{{.CLI_ARGS}}' not found"
+    cmds:
+      - |
+        set -uo pipefail
+        S="$(pwd)/{{.SESSION_DIR}}/{{.DESC}}"
+        BRANCHES_FILE="${S}/.branches"
+        FORCE="{{.FORCE}}"
+
+        if [ -n "${FORCE}" ]; then
+          echo "=== FORCE set — skipping the safety gates ==="
+          exit 0
+        fi
+
+        echo "=== Checking session '{{.DESC}}' is safe to archive ==="
+        BLOCKED=0
+
+        while IFS='=' read -r REPO BRANCH; do
+          [ -z "${REPO}" ] && continue
+          # .branches also carries "<repo>.status=", "<repo>.version=" and
+          # "<repo>.mr=" metadata lines — not repos.
+          case "${REPO}" in *.status|*.version|*.mr) continue;; esac
+
+          # 1. terminal status (repos on main have none by design)
+          if [ "${BRANCH}" != "main" ]; then
+            ST=$(grep "^${REPO}\.status=" "${BRANCHES_FILE}" 2>/dev/null | tail -1 | cut -d= -f2)
+            case "${ST}" in
+              versioned|closed) ;;
+              *)
+                echo "  [${REPO}] status is '${ST:-none}' — expected versioned or closed"
+                BLOCKED=1
+                ;;
+            esac
+          fi
+
+          WT="${S}/${REPO}"
+          if [ ! -d "${WT}/.git" ] && [ ! -f "${WT}/.git" ]; then
+            continue
+          fi
+
+          # 2. uncommitted changes
+          DIRT="$(git -C "${WT}" status --porcelain 2>/dev/null)"
+          if [ -n "${DIRT}" ]; then
+            echo "  [${REPO}] uncommitted changes:"
+            echo "${DIRT}" | sed 's/^/      /'
+            BLOCKED=1
+          fi
+
+          # 3. commits never pushed
+          git -C "${WT}" fetch -q origin "${BRANCH}" 2>/dev/null || true
+          AHEAD="$(git -C "${WT}" rev-list --count "origin/${BRANCH}..HEAD" 2>/dev/null || echo 0)"
+          if [ "${AHEAD}" != "0" ]; then
+            echo "  [${REPO}] ${AHEAD} commit(s) not pushed to origin/${BRANCH}:"
+            git -C "${WT}" log --oneline "origin/${BRANCH}..HEAD" 2>/dev/null | sed 's/^/      /'
+            BLOCKED=1
+          fi
+        done < "${BRANCHES_FILE}"
+
+        # 4. OpenSpec changes still active in the session workspace
+        if [ -d "${S}/openspec/changes" ]; then
+          ACTIVE=$(find "${S}/openspec/changes" -mindepth 1 -maxdepth 1 -type d ! -name archive 2>/dev/null)
+          if [ -n "${ACTIVE}" ]; then
+            echo "  [openspec] change(s) still active — run session:finish to archive them:"
+            echo "${ACTIVE}" | sed 's|.*/|      |'
+            BLOCKED=1
+          fi
+        fi
+
+        if [ "${BLOCKED}" -ne 0 ]; then
+          echo ""
+          echo "ABORT: the session is not finished — nothing was removed." >&2
+          echo "Commit and push the work above (or re-run with FORCE=1 to discard it)." >&2
+          exit 1
+        fi
+        echo "All checks passed."
+      - task: _worktree-rm
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-api", REPO_DIR: "{{.REPO_API_DIR}}" }
+      - task: _worktree-rm
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metalib", REPO_DIR: "{{.REPO_LIB_DIR}}" }
+      - task: _worktree-rm
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-admin", REPO_DIR: "{{.REPO_ADMIN_DIR}}" }
+      - task: _worktree-rm
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-ui", REPO_DIR: "{{.REPO_UI_DIR}}" }
+      - task: _worktree-rm
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "community-edition", REPO_DIR: "{{.REPO_CE_DIR}}" }
+      - task: _worktree-rm
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "dev-stack", REPO_DIR: "{{.REPO_DEVSTACK_DIR}}" }
+      - task: _worktree-rm
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "prod-stack", REPO_DIR: "{{.REPO_PRODSTACK_DIR}}" }
+      - task: _worktree-rm
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "flux/metahub", REPO_DIR: "{{.REPO_FLUX_DIR}}" }
+      - task: _worktree-rm
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-docs", REPO_DIR: "{{.REPO_DOCS_DIR}}" }
+      - task: _worktree-rm
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "waldur-site-agent-metahub", REPO_DIR: "{{.REPO_SITEAGENT_DIR}}" }
+      - task: _worktree-rm
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "outfitter", REPO_DIR: "{{.REPO_OUTFITTER_DIR}}" }
+      - |
+        set -euo pipefail
+        S="$(pwd)/{{.SESSION_DIR}}/{{.DESC}}"
+        ARCHIVE="$(pwd)/{{.SESSION_DIR}}/.archive"
+
+        # Any leftover directory here is a worktree that _worktree-rm could not
+        # remove (source repo gone, say). Report rather than rm -rf it.
+        LEFT=$(find "${S}" -mindepth 1 -maxdepth 1 -type d ! -name openspec -exec test -e '{}/.git' ';' -print 2>/dev/null)
+        if [ -n "${LEFT}" ]; then
+          echo ""
+          echo "WARNING: worktree(s) still present, leaving the session in place:" >&2
+          echo "${LEFT}" | sed 's|.*/|  |' >&2
+          exit 1
+        fi
+
+        # Keep the record (.branches, CONTEXT.md, archived openspec) but move it
+        # out of sessions/*/ so session:list no longer reports it as active.
+        mkdir -p "${ARCHIVE}"
+        if [ -e "${ARCHIVE}/{{.DESC}}" ]; then
+          echo "ERROR: ${ARCHIVE}/{{.DESC}} already exists" >&2
+          exit 1
+        fi
+        mv "${S}" "${ARCHIVE}/{{.DESC}}"
+
+        echo ""
+        echo "=== Session '{{.DESC}}' archived ==="
+        echo "Worktrees removed; branches and tags remain on the remotes."
+        echo "Record kept at {{.SESSION_DIR}}/.archive/{{.DESC}}/"
+
+  # ===========================================================================
   # session:list — show active sessions
   # ===========================================================================
   list:
