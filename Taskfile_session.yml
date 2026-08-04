@@ -267,6 +267,8 @@ tasks:
             prod-stack)        eval echo "{{.REPO_PRODSTACK_DIR}}" ;;
             flux/metahub)      eval echo "{{.REPO_FLUX_DIR}}" ;;
             metahub-docs)      eval echo "{{.REPO_DOCS_DIR}}" ;;
+            waldur-site-agent-metahub) eval echo "{{.REPO_SITEAGENT_DIR}}" ;;
+            outfitter)         eval echo "{{.REPO_OUTFITTER_DIR}}" ;;
             *) echo "" ;;
           esac
     preconditions:
@@ -279,7 +281,7 @@ tasks:
       - sh: 'grep -q "^{{.REPO_NAME}}=" "{{.SESSION_DIR}}/{{.CLI_ARGS}}/.branches"'
         msg: "Repo '{{.REPO_NAME}}' not found in session '{{.CLI_ARGS}}'"
       - sh: '[ -n "{{.REPO_DIR}}" ]'
-        msg: "Unknown repo '{{.REPO_NAME}}'. Must be one of: metahub-api, metalib, metahub-admin, metahub-ui, community-edition, dev-stack, prod-stack, flux/metahub, metahub-docs"
+        msg: "Unknown repo '{{.REPO_NAME}}'. Must be one of: metahub-api, metalib, metahub-admin, metahub-ui, community-edition, dev-stack, prod-stack, flux/metahub, metahub-docs, waldur-site-agent-metahub, outfitter"
     cmds:
       - task: _version-repo
         vars:
@@ -310,6 +312,8 @@ tasks:
             prod-stack)        eval echo "{{.REPO_PRODSTACK_DIR}}" ;;
             flux/metahub)      eval echo "{{.REPO_FLUX_DIR}}" ;;
             metahub-docs)      eval echo "{{.REPO_DOCS_DIR}}" ;;
+            waldur-site-agent-metahub) eval echo "{{.REPO_SITEAGENT_DIR}}" ;;
+            outfitter)         eval echo "{{.REPO_OUTFITTER_DIR}}" ;;
             *) echo "" ;;
           esac
     preconditions:
