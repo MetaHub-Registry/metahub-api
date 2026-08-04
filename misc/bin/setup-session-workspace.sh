@@ -85,7 +85,7 @@ cat > "${S}/.opencode/opencode.json" <<'EOF'
     },
     "gocd": {
       "type": "remote",
-      "url": "http://localhost:3003/mcp",
+      "url": "http://gocd-mcp.example.com/mcp",
       "headers": {
         "Authorization": "Bearer 92b6c82f98aedd51e3878e619fa4deb1c2a93429"
       },

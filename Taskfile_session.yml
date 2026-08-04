@@ -511,12 +511,17 @@ tasks:
             esac
           fi
 
-          WT="${S}/${REPO}"
-          if [ ! -d "${WT}/.git" ] && [ ! -f "${WT}/.git" ]; then
-            continue
-          fi
+        done < "${BRANCHES_FILE}"
 
-          # 2. uncommitted changes
+        # 2+3. Dirty / unpushed, for EVERY worktree found under the session dir
+        # rather than only those named in .branches. Nested ones (flux/devops,
+        # flux/observability) are created outside the tracked list, so trusting
+        # .branches here would walk straight past uncommitted work in them.
+        for GITF in $(find "${S}" -maxdepth 4 -name .git 2>/dev/null); do
+          WT="$(dirname "${GITF}")"
+          REPO="${WT#${S}/}"
+          CUR="$(git -C "${WT}" rev-parse --abbrev-ref HEAD 2>/dev/null)"
+
           DIRT="$(git -C "${WT}" status --porcelain 2>/dev/null)"
           if [ -n "${DIRT}" ]; then
             echo "  [${REPO}] uncommitted changes:"
@@ -524,15 +529,14 @@ tasks:
             BLOCKED=1
           fi
 
-          # 3. commits never pushed
-          git -C "${WT}" fetch -q origin "${BRANCH}" 2>/dev/null || true
-          AHEAD="$(git -C "${WT}" rev-list --count "origin/${BRANCH}..HEAD" 2>/dev/null || echo 0)"
+          git -C "${WT}" fetch -q origin "${CUR}" 2>/dev/null || true
+          AHEAD="$(git -C "${WT}" rev-list --count "origin/${CUR}..HEAD" 2>/dev/null || echo 0)"
           if [ "${AHEAD}" != "0" ]; then
-            echo "  [${REPO}] ${AHEAD} commit(s) not pushed to origin/${BRANCH}:"
-            git -C "${WT}" log --oneline "origin/${BRANCH}..HEAD" 2>/dev/null | sed 's/^/      /'
+            echo "  [${REPO}] ${AHEAD} commit(s) not pushed to origin/${CUR}:"
+            git -C "${WT}" log --oneline "origin/${CUR}..HEAD" 2>/dev/null | sed 's/^/      /'
             BLOCKED=1
           fi
-        done < "${BRANCHES_FILE}"
+        done
 
         # 4. OpenSpec changes still active in the session workspace
         if [ -d "${S}/openspec/changes" ]; then
@@ -578,13 +582,26 @@ tasks:
         S="$(pwd)/{{.SESSION_DIR}}/{{.DESC}}"
         ARCHIVE="$(pwd)/{{.SESSION_DIR}}/.archive"
 
-        # Any leftover directory here is a worktree that _worktree-rm could not
-        # remove (source repo gone, say). Report rather than rm -rf it.
-        LEFT=$(find "${S}" -mindepth 1 -maxdepth 1 -type d ! -name openspec -exec test -e '{}/.git' ';' -print 2>/dev/null)
+        # Sweep worktrees the fixed list above does not cover — nested ones like
+        # flux/devops and flux/observability are session worktrees that .branches
+        # never tracked. Moving them would leave a stale registration behind in
+        # their source repo, so deregister each through its own main checkout,
+        # which the .git file points at.
+        for GITF in $(find "${S}" -maxdepth 4 -name .git 2>/dev/null); do
+          WT="$(dirname "${GITF}")"
+          MAIN="$(sed -n 's|^gitdir: \(.*\)/\.git/worktrees/.*|\1|p' "${GITF}" 2>/dev/null)"
+          if [ -n "${MAIN}" ] && [ -d "${MAIN}" ]; then
+            echo "[${WT#${S}/}] removing untracked session worktree"
+            git -C "${MAIN}" worktree remove --force "${WT}" 2>/dev/null || true
+            git -C "${MAIN}" worktree prune 2>/dev/null || true
+          fi
+        done
+
+        LEFT=$(find "${S}" -maxdepth 4 -name .git 2>/dev/null)
         if [ -n "${LEFT}" ]; then
           echo ""
           echo "WARNING: worktree(s) still present, leaving the session in place:" >&2
-          echo "${LEFT}" | sed 's|.*/|  |' >&2
+          echo "${LEFT}" | sed "s|^${S}/|  |; s|/\.git$||" >&2
           exit 1
         fi
 
