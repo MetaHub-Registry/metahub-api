@@ -171,6 +171,10 @@ tasks:
         vars: { DESC: "{{.DESC}}", REPOS: "{{.REPOS}}", REPO_NAME: "flux/metahub", REPO_DIR: "{{.REPO_FLUX_DIR}}" }
       - task: _bump-dev
         vars: { DESC: "{{.DESC}}", REPOS: "{{.REPOS}}", REPO_NAME: "metahub-docs", REPO_DIR: "{{.REPO_DOCS_DIR}}" }
+      - task: _bump-dev
+        vars: { DESC: "{{.DESC}}", REPOS: "{{.REPOS}}", REPO_NAME: "waldur-site-agent-metahub", REPO_DIR: "{{.REPO_SITEAGENT_DIR}}" }
+      - task: _bump-dev
+        vars: { DESC: "{{.DESC}}", REPOS: "{{.REPOS}}", REPO_NAME: "outfitter", REPO_DIR: "{{.REPO_OUTFITTER_DIR}}" }
       - echo ""
       - echo "=== Dev iteration complete ==="
 
@@ -217,6 +221,11 @@ tasks:
       # session-branch logic; their edits are pushed to main directly.
       - task: _finalize-repo
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-docs", REPO_DIR: "{{.REPO_DOCS_DIR}}" }
+      - task: _finalize-repo
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "waldur-site-agent-metahub", REPO_DIR: "{{.REPO_SITEAGENT_DIR}}" }
+      # outfitter is a _worktree-main repo (like dev-stack/prod-stack/flux/metahub):
+      # it tracks its own branch directly rather than a session branch + MR, so it
+      # is not finalized through the session-branch logic.
       # Archive the session-level OpenSpec proposal(s) so they are no longer
       # active: a session may pose a session-scoped change, refined here and then
       # broken down into per-repo changes for the actual sub-repositories.
@@ -374,6 +383,10 @@ tasks:
         vars: { DESC: "{{.DESC}}", REPO_NAME: "flux/metahub", REPO_DIR: "{{.REPO_FLUX_DIR}}" }
       - task: _worktree-rm
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-docs", REPO_DIR: "{{.REPO_DOCS_DIR}}" }
+      - task: _worktree-rm
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "waldur-site-agent-metahub", REPO_DIR: "{{.REPO_SITEAGENT_DIR}}" }
+      - task: _worktree-rm
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "outfitter", REPO_DIR: "{{.REPO_OUTFITTER_DIR}}" }
       - echo ""
       - echo "=== Session '{{.DESC}}' suspended ==="
       - 'echo "Resume with: task session:resume -- {{.DESC}}"'
@@ -411,6 +424,10 @@ tasks:
         vars: { DESC: "{{.DESC}}", REPO_NAME: "flux/metahub", REPO_DIR: "{{.REPO_FLUX_DIR}}" }
       - task: _worktree-resume
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-docs", REPO_DIR: "{{.REPO_DOCS_DIR}}" }
+      - task: _worktree-resume
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "waldur-site-agent-metahub", REPO_DIR: "{{.REPO_SITEAGENT_DIR}}" }
+      - task: _worktree-resume
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "outfitter", REPO_DIR: "{{.REPO_OUTFITTER_DIR}}" }
       - echo ""
       - echo "=== Session '{{.DESC}}' resumed ==="
       - ls -1 "{{.SESSION_DIR}}/{{.DESC}}/" | grep -v '^\.'
