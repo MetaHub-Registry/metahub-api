@@ -515,10 +515,27 @@ func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 		"body-length": len(buf),
 	})
 	span.SetAttributes(attribute.Key("body-length").Int(len(buf)))
-	_, e = h.mag.Database.ProfileAuthorizedPushHandler(ctx, req)
-	if e != nil {
-		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", e, "DENIED", failedAuthPushPrfFMT, req.Profile)
-		return
+	// Legacy push authz, superseded by the namespace-authz matrix.
+	//
+	// ProfileAuthorizedPushHandler applies a much cruder rule than canPush():
+	// a non-admin may only push to a repo whose path starts with their own
+	// USERNAME, everyone else must be a global admin. That predates namespaces,
+	// and it silently overrode them -- with enforce_write_ownership on,
+	// OCIWriteAuthMiddleware would correctly authorise a project admin against
+	// mh-<org>-<project>-admin, and then this check would refuse the same push
+	// because "acme/quali/..." does not begin with "alice". The result was a
+	// namespace matrix that could never actually grant a non-admin anything,
+	// reported as a 500 rather than a denial.
+	//
+	// So when ownership enforcement is on, the middleware is authoritative and
+	// this is skipped. Profile EXISTENCE is unaffected: resolvePushProfile below
+	// resolves the same profile (by label, falling back to tag) and fails the
+	// request if it is missing, which is the other half of what this call did.
+	if !h.registry.EnforceWriteOwnership {
+		if _, e = h.mag.Database.ProfileAuthorizedPushHandler(ctx, req); e != nil {
+			utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", e, "DENIED", failedAuthPushPrfFMT, req.Profile)
+			return
+		}
 	}
 	prf, ok := h.resolvePushProfile(ctx, w, req)
 	if !ok {

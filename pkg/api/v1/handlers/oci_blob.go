@@ -35,6 +35,34 @@ const (
 	FailedAuthPushPrfFMT    = "failed to authorize push for profile '%s'"
 )
 
+// legacyPushAuthz applies the pre-namespace push rule, and reports nothing when
+// the namespace-authz matrix is authoritative.
+//
+// ProfileAuthorizedPushHandler applies a much cruder rule than canPush(): a
+// non-admin may only push to a repo whose path starts with their own USERNAME.
+// oci_manifest.go already skipped it under enforce_write_ownership (93878c2),
+// but every blob handler here still called it unconditionally -- and
+// POST /blobs/uploads/ is the first call of any push carrying new content. A
+// project admin whom OCIWriteAuthMiddleware had just authorised via
+// mh-<org>-<project>-admin was therefore refused immediately after, so the
+// namespace matrix could never actually grant a non-admin a push.
+//
+// It went unnoticed because re-pushing an image whose blobs already exist skips
+// the uploads entirely and only PUTs the manifest -- the one path that was
+// gated. The per-user usage e2e (alice pushes, then bob pushes THE SAME image)
+// passed for exactly that reason.
+//
+// Returning an error rather than writing the response keeps each call site's
+// existing single-branch handling, which differs between them (some write an
+// OCI payload directly, others go through ErrorHandlerWithWWW).
+func (h Handlers) legacyPushAuthz(ctx context.Context, req types.Request) error {
+	if h.registry.EnforceWriteOwnership {
+		return nil
+	}
+	_, err := h.mag.Database.ProfileAuthorizedPushHandler(ctx, req)
+	return err
+}
+
 func (h Handlers) BlobUploadPutHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
@@ -53,13 +81,12 @@ func (h Handlers) BlobUploadPutHandler(w http.ResponseWriter, r *http.Request) {
 	)
 	// Complete the upload specified by uuid, optionally appending the body as the final chunk.
 	logrus.Infof("%-5s BlobUploadPutHandler(%s, %s)", r.Method, req.Repo, req.UUID)
-	_, e := h.mag.Database.ProfileAuthorizedPushHandler(ctx, req)
-	if e != nil {
+	if e := h.legacyPushAuthz(ctx, req); e != nil {
 		err := errors.Wrapf(e, FailedAuthPushPrfFMT, req.Profile)
 		span.RecordError(err)
 		det := helper.NewDetailFromReq(req)
-		e := helper.NewErrPayload("DENIED", e.Error(), det)
-		helper.WriteOCIErrror(w, http.StatusBadRequest, e)
+		payload := helper.NewErrPayload("DENIED", e.Error(), det)
+		helper.WriteOCIErrror(w, http.StatusBadRequest, payload)
 		return
 	}
 	bu, found, err := h.mag.Database.BlobUploadGetOCIByUUID(ctx, req.UUID)
@@ -307,13 +334,12 @@ func (h Handlers) BlobUploadPatchHandler(w http.ResponseWriter, r *http.Request)
 		attribute.Key("uuid").String(req.UUID),
 	)
 	logrus.Infof("%-5s BlobUploadPatchHandler(%s, %s) Len:%d", r.Method, req.Repo, req.UUID, req.Length)
-	_, e := h.mag.Database.ProfileAuthorizedPushHandler(ctx, req)
-	if e != nil {
+	if e := h.legacyPushAuthz(ctx, req); e != nil {
 		err := errors.Wrapf(e, FailedAuthPushPrfFMT, req.Profile)
 		span.RecordError(err)
 		det := helper.NewDetailFromReq(req)
-		e := helper.NewErrPayload("DENIED", e.Error(), det)
-		helper.WriteOCIErrror(w, http.StatusBadRequest, e)
+		payload := helper.NewErrPayload("DENIED", e.Error(), det)
+		helper.WriteOCIErrror(w, http.StatusBadRequest, payload)
 		return
 	}
 	dumpedReq, _ := httputil.DumpRequest(r, false)
@@ -419,7 +445,8 @@ func (h Handlers) BlobUploadPostHandler(w http.ResponseWriter, r *http.Request) 
 	defer span.End()
 	mt := "NONE"
 	msg := fmt.Sprintf("%-5s BlobUploadPostHandler(%s, Type:%s, Len:%d", r.Method, mt, req.Repo, req.Length)
-	_, e := h.mag.Database.ProfileAuthorizedPushHandler(ctx, req)
+	// `e` stays at function scope because later branches still reference it.
+	e := h.legacyPushAuthz(ctx, req)
 	if e != nil {
 		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", e, "DENIED", FailedAuthPushPrfFMT, req.Profile)
 		return
@@ -732,7 +759,9 @@ func (h Handlers) BlobDelHandler(w http.ResponseWriter, r *http.Request) {
 		"role":    req.UserRole,
 	})
 	defer span.End()
-	_, e := h.mag.Database.ProfileAuthorizedPushHandler(ctx, req)
+	// `e` stays at function scope because the delete-failure branch below
+	// still references it.
+	e := h.legacyPushAuthz(ctx, req)
 	if e != nil {
 		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", e, "DENIED", "failed to authorize profile '%s'", req.Profile)
 		return

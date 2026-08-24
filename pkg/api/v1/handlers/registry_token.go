@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -15,7 +16,26 @@ const (
 	errTokenNotConfigured = "registry token management not configured"
 	errMissingAccessToken = "missing access token"
 	errInsufficientScope  = "access token lacks required scope for token management"
+	// A registry token IS an Authentik app-password, so managing one requires an
+	// Authentik-issued access token to act with. God-mode sessions are
+	// authenticated by metahub-api against its own signing key and have no
+	// Authentik identity at all, so forwarding that token upstream can only ever
+	// be rejected — which surfaced as the misleading errInsufficientScope above.
+	// Fail early with something actionable instead.
+	errGodModeNoAuthentik = "registry token management requires signing in with Authentik (SSO); " +
+		"a god-mode session has no Authentik identity to manage tokens for"
 )
+
+// godModeSession reports whether the request was authenticated by god-mode
+// rather than by OIDC.
+//
+// OIDCAuthMiddleware accepts both, but stores a pre-resolved role in the context
+// only on the god-mode branch (god-mode carries its role in the token rather
+// than in Authentik groups), so the presence of that role is the marker.
+func godModeSession(ctx context.Context) bool {
+	_, ok := AuthRoleFromContext(ctx)
+	return ok
+}
 
 // RegistryTokenCreateRequest is the request body for creating a registry token.
 type RegistryTokenCreateRequest struct {
@@ -49,6 +69,11 @@ func (h Handlers) RegistryTokenCreate(w http.ResponseWriter, r *http.Request) {
 
 	if h.oidc == nil || h.oidc.AuthentikAPIURL == "" {
 		writeJSONError(w, http.StatusNotImplemented, errTokenNotConfigured)
+		return
+	}
+
+	if godModeSession(ctx) {
+		writeJSONError(w, http.StatusForbidden, errGodModeNoAuthentik)
 		return
 	}
 
@@ -123,6 +148,11 @@ func (h Handlers) RegistryTokenList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if godModeSession(ctx) {
+		writeJSONError(w, http.StatusForbidden, errGodModeNoAuthentik)
+		return
+	}
+
 	rawToken, ok := RawTokenFromContext(ctx)
 	if !ok {
 		writeJSONError(w, http.StatusUnauthorized, errMissingAccessToken)
@@ -167,6 +197,11 @@ func (h Handlers) RegistryTokenRevoke(w http.ResponseWriter, r *http.Request) {
 	identifier := chi.URLParam(r, "identifier")
 	if !strings.HasPrefix(identifier, registryTokenPrefix) {
 		writeJSONError(w, http.StatusBadRequest, "invalid registry token identifier")
+		return
+	}
+
+	if godModeSession(ctx) {
+		writeJSONError(w, http.StatusForbidden, errGodModeNoAuthentik)
 		return
 	}
 
