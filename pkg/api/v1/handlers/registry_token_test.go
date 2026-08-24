@@ -313,3 +313,68 @@ func TestRegistryTokenRevoke_NotFound(t *testing.T) {
 	r.ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusNotFound, rr.Code)
 }
+
+// ---------------------------------------------------------------------------
+// God-mode sessions have no Authentik identity
+// ---------------------------------------------------------------------------
+//
+// OIDCAuthMiddleware accepts god-mode tokens as well as OIDC ones, so a
+// god-mode session reaches these handlers and used to have its metahub-signed
+// JWT forwarded to Authentik — which has never seen it and answers 403. That
+// surfaced to the user as "access token lacks required scope for token
+// management", sending debugging after a scope problem that does not exist.
+
+func injectGodModeSession(r *http.Request) *http.Request {
+	ctx := contextWithClaims(r.Context(), &OIDCClaims{Username: "oci"})
+	ctx = contextWithRawToken(ctx, "godmode-signed-token")
+	// Only the god-mode branch of the middleware stores a pre-resolved role.
+	ctx = contextWithAuthRole(ctx, roleAdmin)
+	return r.WithContext(ctx)
+}
+
+func TestGodModeSession(t *testing.T) {
+	r := httptest.NewRequest("GET", "/", nil)
+	assert.False(t, godModeSession(r.Context()),
+		"an OIDC session carries no pre-resolved role")
+	assert.True(t, godModeSession(contextWithAuthRole(r.Context(), roleAdmin)),
+		"a pre-resolved role in the context marks a god-mode session")
+}
+
+func TestRegistryTokenCreate_GodModeRejected(t *testing.T) {
+	hh, _ := registryTokenTestHandler(t)
+	req := httptest.NewRequest("POST", "/api/v1/protected/registry-token", nil)
+	req = injectGodModeSession(req)
+
+	rr := httptest.NewRecorder()
+	hh.RegistryTokenCreate(rr, req)
+
+	assert.Equal(t, http.StatusForbidden, rr.Code)
+	assert.Contains(t, rr.Body.String(), "Authentik (SSO)",
+		"the error must point at the real fix (sign in via SSO), not at scopes")
+	assert.NotContains(t, rr.Body.String(), "lacks required scope")
+}
+
+func TestRegistryTokenList_GodModeRejected(t *testing.T) {
+	hh, _ := registryTokenTestHandler(t)
+	req := httptest.NewRequest("GET", "/api/v1/protected/registry-tokens", nil)
+	req = injectGodModeSession(req)
+
+	rr := httptest.NewRecorder()
+	hh.RegistryTokenList(rr, req)
+
+	assert.Equal(t, http.StatusForbidden, rr.Code)
+	assert.Contains(t, rr.Body.String(), "Authentik (SSO)")
+	assert.NotContains(t, rr.Body.String(), "lacks required scope")
+}
+
+// An OIDC session must still work — the guard keys on the god-mode marker only.
+func TestRegistryTokenList_OIDCSessionStillAllowed(t *testing.T) {
+	hh, _ := registryTokenTestHandler(t)
+	req := httptest.NewRequest("GET", "/api/v1/protected/registry-tokens", nil)
+	req = injectClaimsAndToken(req, &OIDCClaims{Username: "alice"}, "valid-user-token")
+
+	rr := httptest.NewRecorder()
+	hh.RegistryTokenList(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+}

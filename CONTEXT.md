@@ -2,6 +2,24 @@
 
 > This file helps AI agents understand the repo quickly.
 
+## Session: waldur-outfitter-integration — gate-model-serving-on-model-centric (2026-08-24)
+
+No code changes in this repo — the existing handlers already pass/set context
+correctly for the new gate:
+
+- `resolveModelCentricRuntime` (`oci_manifest.go:394-403`) sets
+  `ctx = types.WithRequestedQuant(ctx, quant)` + `ctx = types.WithRequestedModel(ctx, modelName)`.
+- `manipulateSingleIndex` (line 216) passes `ctx` through to
+  `ApplyManipulationsToManifests`.
+- `manipulateIndexInPlace` (`oci_index.go:75`) also passes `ctx` through.
+
+The gate in metalib (`applyManipulationsToCandidate`) now checks
+`RequestedModelFromContext(ctx) != ""`, so these paths are sufficient — collection
+pulls are served un-injected, model-centric pulls compose runtime + weights +
+config. No metahub-api code change needed.
+
+The `836a20e` empty commit on this branch is a CI retrigger (TLS timeout, pre-dind-MTU-fix); it carries no code change.
+
 ## model-centric-pull (session isc-session-v2, 2026-07-07) — branch `109-isc-session-v2`
 
 **Done:**
@@ -249,3 +267,60 @@ SonarQube project key is in `.env`.
   (`migrate-wrapper-read-cypher`); no further metahub-api work expected for it.
 - `fix-profile-label-lookup` is a separate OpenSpec change (pre-existing bug,
   orthogonal to the wrapper work).
+
+---
+
+## Session: waldur-outfitter-integration (2026-08-04)
+
+### There are TWO push-authorization layers
+
+This bit hard. `registry.enforce_write_ownership` switches on the namespace
+matrix in `OCIWriteAuthMiddleware` (`canPush`: personal → owner, project →
+`mh-<org>-admin`/`mh-<org>-<project>-admin`, system → global admin only). But
+`ManifestPutHandler` **also** called `ProfileAuthorizedPushHandler`, which
+applies a far older rule:
+
+```go
+// metalib pkg/backends/neo/profiles.go
+if !strings.HasPrefix(req.Repo+"/", req.User) && req.UserRole != "admin" { deny }
+```
+
+i.e. a non-admin may push only to a repo whose path starts with their own
+**username**. So the middleware would authorise a project admin via their tier
+group and the handler refused the same push — the groups were consulted and then
+overruled, and **no non-admin could ever push to a project namespace**. Fixed by
+skipping the legacy call when enforcement is on; `resolvePushProfile` right
+after still validates that the profile exists, which was the other half of what
+that call did. With enforcement off, behaviour is unchanged.
+
+If you add a third authz check, put it in the middleware, not the handler.
+
+### Registry-token management is Authentik-backed
+
+`RegistryToken{Create,List,Revoke}` forward the caller's **own bearer** to
+Authentik's `/core/tokens/`. `OIDCAuthMiddleware` accepts god-mode tokens too, so
+a god-mode session reaches those handlers and hands Authentik a JWT metahub
+signed itself → 403 → the old code reported "access token lacks required scope",
+sending you after a scope problem that cannot exist. God-mode sessions are now
+rejected up front with an actionable message. Detect them via
+`AuthRoleFromContext`, which only the god-mode branch sets.
+
+Related symptom: the UI stores the bearer in `sessionStorage`, so a stale token
+in one browser and a fresh SSO login in another produce different results for
+the same user.
+
+### Dev OIDC points at auth.dev.example.com
+
+Dev Authentik moved into ns `metahub-dev`. `secret-config.yaml` (SOPS) carries
+the issuer and `authentik_api_url`; the deployment's `hostAlias` pins that
+hostname to the **gateway LB `192.168.5.204`**, not a ClusterIP — a ClusterIP
+does not survive recreating the release. metahub-api treats failed OIDC
+discovery at startup as fatal, so it crash-loops with `503 authentik starting`
+while Authentik boots. That is expected and self-correcting.
+
+### Testing
+
+`./pkg/api/v1/handlers/` is **flaky as a whole package** under testcontainers
+contention — `TestIndexPullAfterTwoArchPushes` failed twice and passed twice on
+identical code, including one CI red that cleared on rerun. Re-run before
+believing a failure; run the single test to confirm.
