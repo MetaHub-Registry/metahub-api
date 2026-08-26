@@ -33,6 +33,37 @@ SKILL_COUNT=$(find "${S}/.opencode/skills" -mindepth 1 -maxdepth 1 -type d 2>/de
 CMD_COUNT=$(find "${S}/.opencode/command" -maxdepth 1 -type f 2>/dev/null | wc -l | tr -d ' ')
 echo "[workspace] Harness composed: ${SKILL_COUNT} skills, ${CMD_COUNT} commands"
 
+# --- Env-var references — warn, never fail ---
+# Outfitter passes {env:VAR} through verbatim and never resolves it, so an unset
+# token breaks the harness at runtime, not at build. Surface it here rather than
+# mid-session. The list is read back out of the rendered config, so it cannot go
+# stale when the manifest changes.
+ENV_REFS=$(grep -oh '{env:[A-Za-z_][A-Za-z0-9_]*}' "${S}/opencode.json" 2>/dev/null \
+  | sed 's/^{env:\(.*\)}$/\1/' | sort -u)
+ENV_REFS_LINE=$(echo ${ENV_REFS})
+ENV_MISSING=""
+for VAR in ${ENV_REFS}; do
+  if [ -z "${!VAR:-}" ]; then
+    ENV_MISSING="${ENV_MISSING} ${VAR}"
+  fi
+done
+
+if [ -n "${ENV_REFS_LINE}" ]; then
+  echo "[workspace] Harness reads env refs: ${ENV_REFS_LINE}"
+  ENV_DOC="The composed harness reads these environment variables. They are passed"$'\n'"through as \`{env:VAR}\` references and never baked into the config, so"$'\n'"rotating a token causes no drift:"$'\n'
+  for VAR in ${ENV_REFS}; do
+    ENV_DOC="${ENV_DOC}"$'\n'"- \`${VAR}\`"
+  done
+else
+  ENV_DOC="The composed harness reads no environment variables."
+fi
+
+if [ -n "${ENV_MISSING}" ]; then
+  echo "[workspace] WARNING: unset in this shell:${ENV_MISSING}"
+  echo "[workspace]          Export them before ./opencode.sh, or those MCP"
+  echo "[workspace]          servers will fail to authenticate at runtime."
+fi
+
 # --- .opencode/.gitignore ---
 cat > "${S}/.opencode/.gitignore" <<'EOF'
 node_modules
@@ -351,6 +382,15 @@ record of a shipped spec — that belongs in the relevant repo's \`openspec/\`.
 | metalib | \`${LIB_BRANCH}\` | \`metalib/\` |
 | metahub-admin | \`${ADMIN_BRANCH}\` | \`metahub-admin/\` |
 | metahub-ui | \`${UI_BRANCH}\` | \`metahub-ui/\` |
+
+## Harness Environment Variables
+
+${ENV_DOC}
+
+Outfitter never resolves these at build time — a missing one only breaks the
+matching MCP server at runtime, not the build. Re-run
+\`./misc/bin/setup-session-workspace.sh\` (or check \`opencode.json\`) to see the
+current set.
 
 ## Session Tasks
 
