@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 set -e
 
-# Usage: setup-session-workspace.sh <session-path> <session-desc> <api-root> <lib-opencode> <api-opencode>
+# Usage: setup-session-workspace.sh <session-path> <session-desc> <api-root> [<lib-opencode> [<api-opencode>]]
+# The last two args are retained for backward compatibility but are unused —
+# outfitter reads paths from the manifest in the api root.
 S="$1"
 DESC="$2"
 API_ROOT="$3"
-LIB_OC="$4"
-API_OC="$5"
+# $4 (LIB_OC) and $5 (API_OC) are no longer used; outfitter resolves paths from the manifest.
 BRANCHES_FILE="${S}/.branches"
 
 # Relative path from session dir back to metahub-api root
@@ -16,120 +17,23 @@ REL_API_ROOT="../.."
 echo ""
 echo "=== Setting up session workspace ==="
 
-# --- opencode.json (root) — strict session-scoped permissions ---
-cat > "${S}/opencode.json" <<'EOF'
-{
-  "$schema": "https://opencode.ai/config.json",
-  "permission": {
-    "external_directory": {
-      "/tmp": "allow"
-    }
-  },
-  "agent": {
-    "build": {
-      "permission": {
-        "edit": {
-          "./**": "allow"
-        },
-        "external_directory": {
-          "/tmp": "allow"
-        }
-      }
-    },
-    "plan": {
-      "permission": {
-        "edit": {
-          "./**": "deny"
-        }
-      }
-    }
-  }
+# --- Harness composition via outfitter ---
+OUTFIT_BIN="${OUTFIT_BIN:-outfit}"
+echo "[workspace] Composing harness from ${API_ROOT}/agent.compose.yaml..."
+if ! command -v "${OUTFIT_BIN}" >/dev/null 2>&1; then
+  echo "ERROR: '${OUTFIT_BIN}' not found on PATH. Set OUTFIT_BIN or install outfitter." >&2
+  exit 2
+fi
+(cd "${API_ROOT}" && "${OUTFIT_BIN}" build -o "${S}") || {
+  echo "ERROR: outfitter build failed. Is ${API_ROOT}/agent.compose.yaml valid?" >&2
+  exit 2
 }
-EOF
 
-# --- .opencode/ directory ---
-mkdir -p "${S}/.opencode"
+SKILL_COUNT=$(find "${S}/.opencode/skills" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
+CMD_COUNT=$(find "${S}/.opencode/command" -maxdepth 1 -type f 2>/dev/null | wc -l | tr -d ' ')
+echo "[workspace] Harness composed: ${SKILL_COUNT} skills, ${CMD_COUNT} commands"
 
-# .opencode/opencode.json — MCP servers + plugins (no external dirs)
-cat > "${S}/.opencode/opencode.json" <<'EOF'
-{
-  "$schema": "https://opencode.ai/config.json",
-  "mcp": {
-    "neo4j-main": {
-      "type": "remote",
-      "url": "https://api.dev.example.com/mcp/",
-      "headers": {
-        "Host": "neo4j-mcp.dev.example.com"
-      },
-      "enabled": true
-    },
-    "sonarqube": {
-      "type": "remote",
-      "url": "https://sonar-mcp.example.com/mcp",
-      "headers": {
-        "Authorization": "Bearer squ_f9a42283681ee2e9fb08b615d220775252d67074"
-      },
-      "enabled": true
-    },
-    "gocd": {
-      "type": "remote",
-      "url": "https://gocd.example.com/mcp",
-      "headers": {
-        "Host": "gocd-mcp.example.com",
-        "Authorization": "Bearer 92b6c82f98aedd51e3878e619fa4deb1c2a93429"
-      },
-      "enabled": true
-    },
-    "victoriametrics": {
-      "type": "remote",
-      "url": "https://vm-mcp.example.com/mcp",
-      "enabled": true
-    },
-    "victorialogs": {
-      "type": "remote",
-      "url": "https://vl-mcp.example.com/mcp",
-      "enabled": true
-    },
-    "victoriatraces": {
-      "type": "remote",
-      "url": "https://vt-mcp.example.com/mcp",
-      "enabled": true
-    }
-  }
-}
-EOF
-
-# .opencode/package.json
-cat > "${S}/.opencode/package.json" <<'EOF'
-{
-  "dependencies": {
-    "@opencode-ai/plugin": "1.4.3"
-  }
-}
-EOF
-
-# --- Copy skills (metalib full set + propose + excalidraw from api) ---
-mkdir -p "${S}/.opencode/skills"
-if [ -d "${LIB_OC}/skills" ]; then
-  cp -R "${LIB_OC}/skills/"* "${S}/.opencode/skills/" 2>/dev/null || true
-fi
-if [ -d "${API_OC}/skills/openspec-propose" ]; then
-  cp -R "${API_OC}/skills/openspec-propose" "${S}/.opencode/skills/"
-fi
-if [ -d "${API_OC}/skills/excalidraw-diagram-skill" ]; then
-  cp -R "${API_OC}/skills/excalidraw-diagram-skill" "${S}/.opencode/skills/"
-fi
-
-# --- Copy commands (metalib full set + propose from api) ---
-mkdir -p "${S}/.opencode/command"
-if [ -d "${LIB_OC}/command" ]; then
-  cp -R "${LIB_OC}/command/"* "${S}/.opencode/command/" 2>/dev/null || true
-fi
-if [ -f "${API_OC}/command/opsx-propose.md" ]; then
-  cp "${API_OC}/command/opsx-propose.md" "${S}/.opencode/command/"
-fi
-
-# .opencode/.gitignore
+# --- .opencode/.gitignore ---
 cat > "${S}/.opencode/.gitignore" <<'EOF'
 node_modules
 package-lock.json
@@ -144,9 +48,6 @@ elif command -v npm >/dev/null 2>&1; then
   npm install --silent 2>/dev/null || true
 fi
 cd "${S}"
-
-echo "[workspace] Skills: $(ls -1 .opencode/skills/ | wc -l | tr -d ' ') copied"
-echo "[workspace] Commands: $(ls -1 .opencode/command/ | wc -l | tr -d ' ') copied"
 
 # --- .opencodeignore — copy from metahub-api if it exists ---
 if [ -f "${API_ROOT}/.opencodeignore" ] && [ ! -f "${S}/.opencodeignore" ]; then
