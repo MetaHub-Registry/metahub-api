@@ -12,6 +12,7 @@ version: '3'
 #   task session:suspend -- <description>            # remove worktrees
 #   task session:resume  -- <description>            # recreate worktrees
 #   task session:list                                # list active sessions
+#   task session:check   -- <description>            # verify worktree branches
 #
 # Workflow:
 #
@@ -644,6 +645,85 @@ tasks:
         else
           echo "No active sessions."
         fi
+
+  # ===========================================================================
+  # session:check — verify each mapped worktree is on its expected branch
+  #
+  # The session's .branches file is the source of truth for the expected
+  # branch per repo: session-branch repos (<repo>=<iid>-<desc>) must sit on
+  # their session branch, while repos that track main directly (dev-stack,
+  # prod-stack, flux/metahub) must sit on the branch recorded for them
+  # (usually main; outfitter pins its own branch). Fails when a mapped
+  # worktree is missing, detached, or on the wrong branch — useful before
+  # committing, finishing, or archiving a session.
+  # ===========================================================================
+  check:
+    desc: "Check worktree branches: task session:check -- <description>"
+    requires:
+      vars: [CLI_ARGS]
+    vars:
+      DESC: "{{.CLI_ARGS}}"
+    preconditions:
+      - sh: '[ -n "{{.CLI_ARGS}}" ]'
+        msg: "Usage: task session:check -- <description>"
+      - sh: '[ -f "{{.SESSION_DIR}}/{{.CLI_ARGS}}/.branches" ]'
+        msg: "Session '{{.CLI_ARGS}}' not found"
+    cmds:
+      - |
+        set -uo pipefail
+        S="$(pwd)/{{.SESSION_DIR}}/{{.DESC}}"
+        BRANCHES_FILE="${S}/.branches"
+        FAILED=0
+
+        echo "=== Checking worktree branches for session '{{.DESC}}' ==="
+
+        while IFS='=' read -r REPO EXPECTED; do
+          [ -z "${REPO}" ] && continue
+          # .branches also carries "<repo>.status=", "<repo>.version=" and
+          # "<repo>.mr=" metadata lines — not repos.
+          case "${REPO}" in *.status|*.version|*.mr) continue;; esac
+
+          WT="${S}/${REPO}"
+          if [ ! -d "${WT}" ]; then
+            echo "  [${REPO}] MISSING worktree (suspended?) — expected branch '${EXPECTED}'"
+            FAILED=1
+            continue
+          fi
+
+          CURRENT=$(git -C "${WT}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+          if [ "${CURRENT}" = "${EXPECTED}" ]; then
+            echo "  [${REPO}] OK — on '${CURRENT}'"
+          elif [ -z "${CURRENT}" ]; then
+            echo "  [${REPO}] NOT a git worktree at ${WT}"
+            FAILED=1
+          elif [ "${CURRENT}" = "HEAD" ]; then
+            echo "  [${REPO}] DETACHED HEAD — expected branch '${EXPECTED}'"
+            FAILED=1
+          else
+            echo "  [${REPO}] WRONG branch — on '${CURRENT}', expected '${EXPECTED}'"
+            FAILED=1
+          fi
+        done < "${BRANCHES_FILE}"
+
+        # Worktrees on disk that .branches does not map (e.g. nested
+        # flux/devops, flux/observability) — informational only, since no
+        # expected branch is recorded for them.
+        for GITF in $(find "${S}" -maxdepth 4 -name .git 2>/dev/null); do
+          WT="$(dirname "${GITF}")"
+          REPO="${WT#${S}/}"
+          if ! grep -q "^${REPO}=" "${BRANCHES_FILE}" 2>/dev/null; then
+            CUR="$(git -C "${WT}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "?")"
+            echo "  [${REPO}] UNMAPPED worktree — on '${CUR}' (not in .branches)"
+          fi
+        done
+
+        if [ "${FAILED}" -ne 0 ]; then
+          echo ""
+          echo "ABORT: worktree branch check failed." >&2
+          echo "Fix the worktrees above, e.g.: git -C <worktree> switch <expected-branch>" >&2
+          exit 1
+        fi
+        echo "All mapped worktrees are on their expected branches."
 
   # ===========================================================================
   # Internal helpers

@@ -56,70 +56,43 @@ cat > "${S}/.opencode/opencode.json" <<'EOF'
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
     "neo4j-main": {
-      "type": "local",
-      "command": [
-        "neo4j-mcp", "--neo4j-uri", "bolt://neo4j.dev.example.com:7687",
-        "--neo4j-username", "neo4j",
-        "--neo4j-password", "neo4j123",
-        "--neo4j-database", "neo4j",
-        "--neo4j-read-only", "false",
-        "--neo4j-telemetry", "false"
-      ]
+      "type": "remote",
+      "url": "https://api.dev.example.com/mcp/",
+      "headers": {
+        "Host": "neo4j-mcp.dev.example.com"
+      },
+      "enabled": true
     },
     "sonarqube": {
-      "type": "local",
-      "command": [
-        "docker",
-        "run",
-        "--init",
-        "--pull=always",
-        "-i",
-        "--rm",
-        "-e",
-        "SONARQUBE_TOKEN=squ_f9a42283681ee2e9fb08b615d220775252d67074",
-        "-e",
-        "SONARQUBE_URL=http://sonar.example.com",
-        "sonarsource/sonarqube-mcp"
-      ],
+      "type": "remote",
+      "url": "https://sonar-mcp.example.com/mcp",
+      "headers": {
+        "Authorization": "Bearer squ_f9a42283681ee2e9fb08b615d220775252d67074"
+      },
       "enabled": true
     },
     "gocd": {
       "type": "remote",
-      "url": "http://gocd-mcp.example.com/mcp",
+      "url": "https://gocd.example.com/mcp",
       "headers": {
+        "Host": "gocd-mcp.example.com",
         "Authorization": "Bearer 92b6c82f98aedd51e3878e619fa4deb1c2a93429"
       },
       "enabled": true
     },
     "victoriametrics": {
-      "type": "local",
-      "command": [
-        "docker", "run", "-i", "--rm",
-        "--add-host", "vm.example.com:192.168.5.201",
-        "-e", "VM_INSTANCE_ENTRYPOINT=http://vm.example.com",
-        "-e", "VM_INSTANCE_TYPE=single",
-        "ghcr.io/victoriametrics/mcp-victoriametrics"
-      ],
+      "type": "remote",
+      "url": "https://vm-mcp.example.com/mcp",
       "enabled": true
     },
     "victorialogs": {
-      "type": "local",
-      "command": [
-        "docker", "run", "-i", "--rm",
-        "--add-host", "vl.example.com:192.168.5.201",
-        "-e", "VL_INSTANCE_ENTRYPOINT=http://vl.example.com",
-        "ghcr.io/victoriametrics/mcp-victorialogs"
-      ],
+      "type": "remote",
+      "url": "https://vl-mcp.example.com/mcp",
       "enabled": true
     },
     "victoriatraces": {
-      "type": "local",
-      "command": [
-        "docker", "run", "-i", "--rm",
-        "--add-host", "vt.example.com:192.168.5.201",
-        "-e", "VT_INSTANCE_ENTRYPOINT=http://vt.example.com",
-        "ghcr.io/victoriametrics-community/mcp-victoriatraces"
-      ],
+      "type": "remote",
+      "url": "https://vt-mcp.example.com/mcp",
       "enabled": true
     }
   }
