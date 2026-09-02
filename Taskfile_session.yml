@@ -13,6 +13,7 @@ version: '3'
 #   task session:resume  -- <description>            # recreate worktrees
 #   task session:list                                # list active sessions
 #   task session:check   -- <description>            # verify worktree branches
+#   task session:push    -- <description>            # push (dependency order)
 #
 # Workflow:
 #
@@ -848,6 +849,125 @@ tasks:
           echo "=== prod-stack restored to main branches ==="
           echo "Now merge the session MRs."
         fi
+
+  # ===========================================================================
+  # session:push — push all session branches in dependency order
+  #
+  # The dev-stack render line (`_update-dev-stack` → dev-stack Taskfile.yml)
+  # fixes the pipeline slot order:
+  #
+  #     API : LIB : ADMIN : CE : dev : UI : DOCS : OUTFITTER : SITEAGENT
+  #
+  # but the render line is a slot listing, not a dependency order. Pushing
+  # follows the DEPENDENCY order — a resource lands on origin before the
+  # repos that consume it, so their MR pipelines build against the new code:
+  #
+  #     metalib → metahub-api → metahub-admin → community-edition →
+  #     dev-stack → metahub-ui → metahub-docs → outfitter →
+  #     waldur-site-agent-metahub
+  #
+  # metalib is the Go library both metahub-api and metahub-admin consume
+  # (`replace ../metahub-core`), and the harness manifest sources skills/commands
+  # from `metalib/.opencode` — so it goes first. dev-stack sits at its "dev"
+  # slot so its re-render sees the branches pushed just before it.
+  #
+  # Two phases (mirrors the session workspace `push` task):
+  #   1. verify: every mapped worktree exists, sits on its .branches branch,
+  #      and is fully committed — any violation aborts BEFORE the first push.
+  #   2. push: only branches that are ahead of origin, in the defined order.
+  #
+  # Repos tracking main (dev-stack, prod-stack, flux/metahub) push their
+  # worktree HEAD:main; the unmapped metahub-pipelines/e2e-dev worktree (not
+  # in .branches, e.g. the drift-gate stage) is appended last and pushes its
+  # current branch.
+  # ===========================================================================
+  push:
+    desc: "Push session branches (dependency order): task session:push -- <description>"
+    requires:
+      vars: [CLI_ARGS]
+    vars:
+      DESC: "{{.CLI_ARGS}}"
+    preconditions:
+      - sh: '[ -n "{{.CLI_ARGS}}" ]'
+        msg: "Usage: task session:push -- <description>"
+      - sh: '[ -f "{{.SESSION_DIR}}/{{.CLI_ARGS}}/.branches" ]'
+        msg: "Session '{{.CLI_ARGS}}' not found"
+    cmds:
+      - |
+        set -uo pipefail
+        S="$(pwd)/{{.SESSION_DIR}}/{{.DESC}}"
+        BRANCHES_FILE="${S}/.branches"
+
+        # Dependency order: metalib (the shared library — go.mod `replace` in
+        # metahub-api/metahub-admin, plus the harness `.opencode` source) lands
+        # before its consumers; dev-stack at its "dev" render slot. The raw
+        # dev-stack render line is API:LIB:ADMIN:CE:dev:UI:DOCS:OUTFITTER:
+        # SITEAGENT — a slot listing, not a dependency order.
+        ORDERED="metalib metahub-api metahub-admin community-edition dev-stack metahub-ui metahub-docs outfitter waldur-site-agent-metahub"
+        # Not part of the render line — pushed after; order not load-bearing.
+        TAIL="prod-stack flux/metahub metahub-pipelines/e2e-dev"
+
+        echo "=== Pushing session '{{.DESC}}' (dependency order: lib → api → admin → …) ==="
+
+        # --- Phase 1: verify before pushing anything -----------------------
+        FAILED=0
+        for REPO in ${ORDERED} ${TAIL}; do
+          WT="${S}/${REPO}"
+          if [ ! -d "${WT}" ]; then
+            echo "  [${REPO}] worktree missing (suspended/closed?) — skipping"
+            continue
+          fi
+          # `|| true` matters: task runs cmds with `-e -o pipefail`, and the
+          # grep misses for unmapped repos (metahub-pipelines/e2e-dev) — the
+          # failed pipeline must not kill the loop.
+          EXPECTED=$(grep "^${REPO}=" "${BRANCHES_FILE}" 2>/dev/null | head -1 | cut -d= -f2 || true)
+          CURRENT=$(git -C "${WT}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+          if [ -n "${EXPECTED}" ] && [ "${CURRENT}" != "${EXPECTED}" ]; then
+            echo "  [${REPO}] ABORT: on '${CURRENT}' but .branches expects '${EXPECTED}'" >&2
+            echo "         fix first: task session:check -- {{.DESC}}" >&2
+            FAILED=1
+            continue
+          fi
+          DIRT=$(git -C "${WT}" status --porcelain 2>/dev/null)
+          if [ -n "${DIRT}" ]; then
+            echo "  [${REPO}] ABORT: uncommitted changes:" >&2
+            echo "${DIRT}" | sed 's/^/      /' >&2
+            FAILED=1
+          fi
+        done
+        if [ "${FAILED}" -ne 0 ]; then
+          echo "" >&2
+          echo "ABORT: nothing was pushed — resolve the worktrees above first." >&2
+          exit 1
+        fi
+        echo "All worktrees committed and on their expected branches."
+
+        # --- Phase 2: push in order, only what is ahead ---------------------
+        echo ""
+        PUSH_FAILED=0
+        for REPO in ${ORDERED} ${TAIL}; do
+          WT="${S}/${REPO}"
+          [ -d "${WT}" ] || continue
+          BRANCH=$(git -C "${WT}" rev-parse --abbrev-ref HEAD 2>/dev/null) || continue
+          git -C "${WT}" fetch -q origin "${BRANCH}" 2>/dev/null || true
+          AHEAD=$(git -C "${WT}" rev-list --count "origin/${BRANCH}..HEAD" 2>/dev/null || echo "?")
+          if [ "${AHEAD}" = "0" ]; then
+            echo "  [${REPO}] ${BRANCH} already up to date — nothing to push"
+            continue
+          fi
+          echo "  [${REPO}] pushing ${BRANCH} → origin/${BRANCH} (${AHEAD} commit(s))"
+          if ! git -C "${WT}" push origin "HEAD:${BRANCH}"; then
+            echo "  [${REPO}] PUSH FAILED" >&2
+            PUSH_FAILED=1
+          fi
+        done
+
+        echo ""
+        if [ "${PUSH_FAILED}" -ne 0 ]; then
+          echo "DONE with errors: one or more pushes failed (see above)." >&2
+          exit 1
+        fi
+        echo "DONE: session branches pushed in dependency order (metalib first)."
 
   # ===========================================================================
   # Internal helpers
