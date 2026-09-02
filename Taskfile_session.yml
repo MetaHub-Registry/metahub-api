@@ -726,6 +726,130 @@ tasks:
         echo "All mapped worktrees are on their expected branches."
 
   # ===========================================================================
+  # session:prod-test — switch prod-stack pipelines to session branches
+  #
+  # Before merging MRs, validate the full prod pipeline against the session
+  # branches. Replaces `branch: main` with the session branch in every
+  # *.gocd.yaml that references a session-branch repo, commits, and pushes
+  # prod-stack (which tracks main directly).
+  #
+  # After GoCD validates, run session:prod-restore → then merge the MRs.
+  # ===========================================================================
+  prod-test:
+    desc: "Switch prod-stack to session branches for pre-merge validation: task session:prod-test -- <description>"
+    requires:
+      vars: [CLI_ARGS]
+    vars:
+      DESC: "{{.CLI_ARGS}}"
+    preconditions:
+      - sh: '[ -n "{{.CLI_ARGS}}" ]'
+        msg: "Usage: task session:prod-test -- <description>"
+      - sh: '[ -f "{{.SESSION_DIR}}/{{.CLI_ARGS}}/.branches" ]'
+        msg: "Session '{{.CLI_ARGS}}' not found"
+      - sh: '[ -d "{{.SESSION_DIR}}/{{.CLI_ARGS}}/prod-stack" ]'
+        msg: "prod-stack worktree not found — run session:resume first"
+    cmds:
+      - |
+        set -e
+        S="$(pwd)/{{.SESSION_DIR}}/{{.DESC}}"
+        BRANCHES_FILE="${S}/.branches"
+        PS_WT="${S}/prod-stack"
+
+        echo "=== [prod-test] Switching prod-stack to session branches ==="
+
+        while IFS='=' read -r REPO BRANCH; do
+          [ -z "${REPO}" ] && continue
+          case "${REPO}" in *.status|*.version|*.mr) continue;; esac
+          # Only act on session-branch repos (skip _worktree-main repos on main)
+          [ "${BRANCH}" = "main" ] && continue
+
+          # Find *.gocd.yaml files that reference this repo's git URL
+          FILES=$(grep -rl "${REPO}\.git" "${PS_WT}/"*.gocd.yaml 2>/dev/null || true)
+          if [ -z "${FILES}" ]; then
+            echo "  [${REPO}] No prod-stack pipeline found — skipping"
+            continue
+          fi
+
+          for F in ${FILES}; do
+            FNAME=$(basename "${F}")
+            echo "  [${REPO}] ${FNAME}: branch: main → ${BRANCH}"
+            sed -i '' "s/^\([ ]*branch: \)main$/\1${BRANCH}/" "${F}"
+          done
+        done < "${BRANCHES_FILE}"
+
+        cd "${PS_WT}"
+        git add -A
+        if git diff --cached --quiet; then
+          echo ""
+          echo "No changes to prod-stack — all session repos may already be on non-main branches or have no prod pipelines."
+        else
+          git commit -m "session:prod-test: switch to session branches for {{.DESC}}"
+          git push
+          echo ""
+          echo "=== prod-stack switched to session branches ==="
+          echo "Trigger GoCD prod pipelines and validate, then run:"
+          echo "  task session:prod-restore -- {{.DESC}}"
+        fi
+
+  # ===========================================================================
+  # session:prod-restore — revert prod-stack back to main branches
+  #
+  # Run after GoCD validation succeeds. Restores all *.gocd.yaml files to
+  # `branch: main`, commits, and pushes. Then merge the session MRs.
+  # ===========================================================================
+  prod-restore:
+    desc: "Restore prod-stack to main branches after pre-merge validation: task session:prod-restore -- <description>"
+    requires:
+      vars: [CLI_ARGS]
+    vars:
+      DESC: "{{.CLI_ARGS}}"
+    preconditions:
+      - sh: '[ -n "{{.CLI_ARGS}}" ]'
+        msg: "Usage: task session:prod-restore -- <description>"
+      - sh: '[ -f "{{.SESSION_DIR}}/{{.CLI_ARGS}}/.branches" ]'
+        msg: "Session '{{.CLI_ARGS}}' not found"
+      - sh: '[ -d "{{.SESSION_DIR}}/{{.CLI_ARGS}}/prod-stack" ]'
+        msg: "prod-stack worktree not found — run session:resume first"
+    cmds:
+      - |
+        set -e
+        S="$(pwd)/{{.SESSION_DIR}}/{{.DESC}}"
+        BRANCHES_FILE="${S}/.branches"
+        PS_WT="${S}/prod-stack"
+
+        echo "=== [prod-restore] Restoring prod-stack to main branches ==="
+
+        while IFS='=' read -r REPO BRANCH; do
+          [ -z "${REPO}" ] && continue
+          case "${REPO}" in *.status|*.version|*.mr) continue;; esac
+          [ "${BRANCH}" = "main" ] && continue
+
+          FILES=$(grep -rl "${REPO}\.git" "${PS_WT}/"*.gocd.yaml 2>/dev/null || true)
+          if [ -z "${FILES}" ]; then
+            continue
+          fi
+
+          for F in ${FILES}; do
+            FNAME=$(basename "${F}")
+            echo "  [${REPO}] ${FNAME}: ${BRANCH} → main"
+            sed -i '' "s/^\([ ]*branch: \)${BRANCH}$/\1main/" "${F}"
+          done
+        done < "${BRANCHES_FILE}"
+
+        cd "${PS_WT}"
+        git add -A
+        if git diff --cached --quiet; then
+          echo ""
+          echo "No changes — prod-stack already on main branches (prod-test was never run or already restored)."
+        else
+          git commit -m "session:prod-restore: revert to main branches after {{.DESC}}"
+          git push
+          echo ""
+          echo "=== prod-stack restored to main branches ==="
+          echo "Now merge the session MRs."
+        fi
+
+  # ===========================================================================
   # Internal helpers
   # ===========================================================================
 
