@@ -266,72 +266,9 @@ cat >> "${S}/Taskfile.yml" <<'EOF'
           echo "All worktrees are committed."
         fi
   push:
-    desc: "Verify every worktree is committed, then push all branches"
-    silent: true
+    desc: "Verify committed + push all branches (delegates to session:push — dev-stack slot order)"
     cmds:
-      - |
-        set -euo pipefail
-        SESSION_DIR="$(pwd)"
-        BRANCHES_FILE="${SESSION_DIR}/.branches"
-        if [ ! -f "${BRANCHES_FILE}" ]; then
-          echo "ERROR: .branches file not found in ${SESSION_DIR}" >&2
-          exit 1
-        fi
-
-        # --- Phase 1: verify all worktrees are fully committed -----------
-        DIRTY=0
-        while IFS='=' read -r REPO BRANCH; do
-          [ -z "${REPO}" ] && continue
-          case "${REPO}" in *.status|*.version) continue;; esac
-          WT="${SESSION_DIR}/${REPO}"
-          if [ ! -d "${WT}/.git" ] && [ ! -f "${WT}/.git" ]; then
-            echo "[${REPO}] worktree missing (suspended?) — skipping"
-            continue
-          fi
-          STATUS="$(git -C "${WT}" status --porcelain)"
-          if [ -n "${STATUS}" ]; then
-            echo "[${REPO}] UNCOMMITTED changes:"
-            echo "${STATUS}" | sed 's/^/    /'
-            DIRTY=1
-          fi
-        done < "${BRANCHES_FILE}"
-
-        if [ "${DIRTY}" -ne 0 ]; then
-          echo ""
-          echo "ABORT: commit (or stash) the changes above before pushing." >&2
-          exit 1
-        fi
-        echo "All worktrees are committed."
-
-        # --- Phase 2: push each branch ----------------------------------
-        echo ""
-        FAILED=0
-        while IFS='=' read -r REPO BRANCH; do
-          [ -z "${REPO}" ] && continue
-          case "${REPO}" in *.status|*.version) continue;; esac
-          WT="${SESSION_DIR}/${REPO}"
-          if [ ! -d "${WT}/.git" ] && [ ! -f "${WT}/.git" ]; then
-            continue
-          fi
-          CUR="$(git -C "${WT}" rev-parse --abbrev-ref HEAD)"
-          AHEAD="$(git -C "${WT}" rev-list --count "origin/${BRANCH}..HEAD" 2>/dev/null || echo "?")"
-          if [ "${AHEAD}" = "0" ]; then
-            echo "[${REPO}] ${BRANCH} already up to date — nothing to push"
-            continue
-          fi
-          echo "[${REPO}] pushing ${CUR} -> origin/${BRANCH} (${AHEAD} commit(s))"
-          if ! git -C "${WT}" push origin "HEAD:${BRANCH}"; then
-            echo "[${REPO}] PUSH FAILED" >&2
-            FAILED=1
-          fi
-        done < "${BRANCHES_FILE}"
-
-        echo ""
-        if [ "${FAILED}" -ne 0 ]; then
-          echo "DONE with errors: one or more pushes failed (see above)." >&2
-          exit 1
-        fi
-        echo "DONE: all branches pushed."
+      - task -d "${REL_API_ROOT}" session:push -- ${DESC}
 EOF
 
 # --- AGENTS.md — auto-generated with session context ---
