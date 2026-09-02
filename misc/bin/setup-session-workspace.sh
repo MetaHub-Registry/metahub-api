@@ -266,7 +266,7 @@ cat >> "${S}/Taskfile.yml" <<'EOF'
           echo "All worktrees are committed."
         fi
   push:
-    desc: "Verify committed + push all branches (delegates to session:push — dev-stack slot order)"
+    desc: "Verify committed + push all branches (delegates to session:push — dependency order, metalib first)"
     cmds:
       - task -d "${REL_API_ROOT}" session:push -- ${DESC}
 EOF
