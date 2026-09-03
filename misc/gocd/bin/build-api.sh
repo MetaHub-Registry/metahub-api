@@ -89,13 +89,22 @@ docker login registry.gitlab.com \
 
 NEW_IMAGE=$(echo ${NEW_IMAGE_NAME}:${TAG} |tr '[:upper:]' '[:lower:]')
 set -x
+# --- multi-arch (linux/amd64 + linux/arm64) via buildx ----------------------
+# binfmt registers QEMU handlers so buildkit can execute foreign-arch RUN
+# stages (apk/mkdir in the final image). The Go build itself is cross-compiled
+# natively with zig cc ($BUILDPLATFORM pattern in the Dockerfile) — no QEMU.
+docker run --privileged --rm tonistiigi/binfmt --install arm64 >/dev/null 2>&1 \
+   || echo "> WARNING: could not register binfmt handlers (QEMU stages may fail)"
+docker buildx inspect multiarch >/dev/null 2>&1 \
+   || docker buildx create --name multiarch --driver docker-container --use
+docker buildx use multiarch
+docker buildx inspect --bootstrap >/dev/null
+BUILD_PUSH=(--platform linux/amd64,linux/arm64 -f ${DOCKERFILE} -t ${NEW_IMAGE} --push)
 if [[ ! -z ${METALIB_IMAGE} ]];then
-   docker build --build-arg=METALIB_IMAGE=${METALIB_IMAGE} -f ${DOCKERFILE} -t ${NEW_IMAGE} .
-else 
-   docker build -f ${DOCKERFILE} -t ${NEW_IMAGE} .
+   docker buildx build --build-arg=METALIB_IMAGE=${METALIB_IMAGE} "${BUILD_PUSH[@]}" .
+else
+   docker buildx build "${BUILD_PUSH[@]}" .
 fi
-docker push ${NEW_IMAGE}
-docker rmi ${NEW_IMAGE}
 gdh patch -f result.yaml \
    --add=metahub.image.reg=${REGISTRY} \
    --add=metahub.image.name=${NEW_IMAGE_NAME} \
