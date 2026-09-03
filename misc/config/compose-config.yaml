@@ -46,6 +46,15 @@ godmode:
 # in the local alias (see pullthrough-repo-handler D5/D6), so these repos
 # live in their own namespace region and cannot collide with local pushes.
 registries:
+  # harbor.example.com is the lab's primary registry (zot→harbor migration).
+  # Plain HTTP: pods don't trust the example.com CA, and harbor advertises its
+  # token realm as http:// — regclient's anonymous token dance works over
+  # plain HTTP for public projects (library/*).
+  - name: harbor.example.com
+    allow_anon: true
+    tls: false
+  # Legacy zot upstream — kept until prod-stack and remaining consumers are
+  # migrated; remove afterwards.
   - name: zot.example.com
     allow_anon: true
     tls: false

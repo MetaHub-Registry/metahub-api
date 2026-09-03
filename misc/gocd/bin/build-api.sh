@@ -47,12 +47,15 @@ fi
 go mod edit -replace github.com/metahub-registry/metahub-core=/go/metahub-api/exp/metalib
 
 REGISTRY=""
-if [[ ! -z ${ZOT_REGISTRY_URL} ]];then
-   REGISTRY=${ZOT_REGISTRY_URL}
-elif [[ ! -z ${HARBOR_REG} ]];then
+if [[ ! -z ${HARBOR_REG} ]];then
    REGISTRY=${HARBOR_REG}
+elif [[ ! -z ${ZOT_REGISTRY_URL} ]];then
+   # DEPRECATED zot fallback — only prod-stack pipelines still set
+   # ZOT_REGISTRY_URL; dev pipelines are harbor-first since the zot→harbor
+   # migration. Remove once prod-stack is migrated.
+   REGISTRY=${ZOT_REGISTRY_URL}
 else
-   echo "No ZOT_REGISTRY_URL defined"
+   echo "No HARBOR_REG (or legacy ZOT_REGISTRY_URL) defined"
    exit 1
 fi
 
