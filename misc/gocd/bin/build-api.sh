@@ -95,10 +95,23 @@ set -x
 # natively with zig cc ($BUILDPLATFORM pattern in the Dockerfile) — no QEMU.
 docker run --privileged --rm tonistiigi/binfmt --install arm64 >/dev/null 2>&1 \
    || echo "> WARNING: could not register binfmt handlers (QEMU stages may fail)"
-docker buildx inspect multiarch >/dev/null 2>&1 \
-   || docker buildx create --name multiarch --driver docker-container --use
+# The buildkitd sidecar (docker-container driver) does NOT inherit dockerd's
+# insecure-registry config: harbor is served with the lab-CA certificate,
+# which buildkitd does not trust. Point it at plain HTTP instead — the same
+# posture as the dockerd INSECURE_REGISTRIES entries (harbor's token realm is
+# advertised as http:// too).
+cat > /tmp/buildkitd-multiarch.toml <<EOF
+[registry."harbor.example.com"]
+  http = true
+EOF
+if [[ -n "${REGISTRY}" && "${REGISTRY}" != "harbor.example.com" ]];then
+   printf '[registry."%s"]\n  http = true\n' "${REGISTRY}" >> /tmp/buildkitd-multiarch.toml
+fi
+# Recreate the builder every run: elastic agents are ephemeral (one pod per
+# job) and the buildkitd config only applies at create time.
+docker buildx rm multiarch >/dev/null 2>&1 || true
+docker buildx create --name multiarch --driver docker-container --buildkitd-config /tmp/buildkitd-multiarch.toml --use
 docker buildx use multiarch
-docker buildx inspect --bootstrap >/dev/null
 BUILD_PUSH=(--platform linux/amd64,linux/arm64 -f ${DOCKERFILE} -t ${NEW_IMAGE} --push)
 if [[ ! -z ${METALIB_IMAGE} ]];then
    docker buildx build --build-arg=METALIB_IMAGE=${METALIB_IMAGE} "${BUILD_PUSH[@]}" .
