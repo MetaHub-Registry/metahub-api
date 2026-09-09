@@ -26,7 +26,11 @@ ENV CGO_ENABLED=1 GOOS=linux
 # not link the ubsan runtime as a pure linker (undefined __ubsan_handle_*).
 ENV CGO_CFLAGS="-DSQLITE_DISABLE_PREAD -DSQLITE_DISABLE_MREAD -fno-sanitize=undefined"
 RUN --mount=type=cache,target=/go/pkg/mod go mod tidy
-RUN case "${TARGETARCH}" in \
+# The build step needs the same cache mount as the tidy step: `go build -a`
+# re-populates the module cache, and regclient's testdata ships `.wh.*` names
+# (overlayfs whiteout markers) that overlayfs rejects with EINVAL when extracted
+# onto the container's overlay rootfs. The cache backend is a plain volume.
+RUN --mount=type=cache,target=/go/pkg/mod case "${TARGETARCH}" in \
       amd64) ZTARGET="x86_64-linux-musl" ;; \
       arm64) ZTARGET="aarch64-linux-musl" ;; \
       *) echo "unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
