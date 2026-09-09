@@ -2,6 +2,21 @@
 
 > This file helps AI agents understand the repo quickly.
 
+## Session: waldur-outfitter-improvements — fix-digest-manifest-existence handler test (2026-09-08)
+
+**Change:** `fix-digest-manifest-existence`, commit `99620ed`.
+
+Handler-level regression test (`oci_manifest_digest_unlinked_test.go`,
+`TestManifestDigest_UnlinkedNeverFiveHundred`) asserts that `HEAD` or `GET`
+by digest of an **unlinked** manifest (pushed but no profile REF edge) returns
+**200 + `Docker-Content-Digest`**, never 5xx. The fix is entirely metalib-side
+(`ManifestFromResult` returns `ok=false, nil` for unlinked manifests); the
+handler's `err→500` path remains for genuine DB errors. The test exercises
+Path Z (`resolveMissingManifest` → `handleManifest` → `ManifestGetByDigest`).
+
+**Sonar gate:** 0 new violations, 0.0% duplication — passed in GoCD
+`metahub-api_MR115_dev` run 20.
+
 ## Session: waldur-outfitter-integration — gate-model-serving-on-model-centric (2026-08-24)
 
 No code changes in this repo — the existing handlers already pass/set context
@@ -324,3 +339,21 @@ while Authentik boots. That is expected and self-correcting.
 contention — `TestIndexPullAfterTwoArchPushes` failed twice and passed twice on
 identical code, including one CI red that cleared on rerun. Re-run before
 believing a failure; run the single test to confirm.
+
+## Update 2026-09-09 — session close: two OpenSpec changes carried forward
+
+Two proposal-stage OpenSpec changes were carried from the session level into
+this repo at session close (both validated with `openspec validate`):
+
+- `openspec/changes/hostname-profile-resolution/` — profile resolution from
+  network identity (DNS PTR → hostname regex → profile) at `GET /auth`.
+  Proposal + design (D1–D5) + delta spec (6 requirements / 11 scenarios) +
+  tasks are complete and ready to implement; nothing is implemented yet.
+  Full research incl. deferred CIDR/Netbox resolver designs:
+  Obsidian `Metahub/docs/research/profile-resolution-from-network-identity.md`
+  (OpenProject WP #47).
+- `openspec/changes/add-pull-through-manifest-intercept/` — metahub-api slice
+  of the archived session change `pull-through-with-manipulation`
+  (OpenProject WP #48). Proposal + intent-level delta spec; `design.md`
+  (blob-delivery strategy matrix) is the next artifact. Depends on the metalib
+  change `add-upstream-registry-categories`.

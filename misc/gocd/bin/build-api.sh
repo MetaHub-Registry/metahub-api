@@ -47,12 +47,15 @@ fi
 go mod edit -replace github.com/metahub-registry/metahub-core=/go/metahub-api/exp/metalib
 
 REGISTRY=""
-if [[ ! -z ${ZOT_REGISTRY_URL} ]];then
-   REGISTRY=${ZOT_REGISTRY_URL}
-elif [[ ! -z ${HARBOR_REG} ]];then
+if [[ ! -z ${HARBOR_REG} ]];then
    REGISTRY=${HARBOR_REG}
+elif [[ ! -z ${ZOT_REGISTRY_URL} ]];then
+   # DEPRECATED zot fallback — only prod-stack pipelines still set
+   # ZOT_REGISTRY_URL; dev pipelines are harbor-first since the zot→harbor
+   # migration. Remove once prod-stack is migrated.
+   REGISTRY=${ZOT_REGISTRY_URL}
 else
-   echo "No ZOT_REGISTRY_URL defined"
+   echo "No HARBOR_REG (or legacy ZOT_REGISTRY_URL) defined"
    exit 1
 fi
 
@@ -86,13 +89,35 @@ docker login registry.gitlab.com \
 
 NEW_IMAGE=$(echo ${NEW_IMAGE_NAME}:${TAG} |tr '[:upper:]' '[:lower:]')
 set -x
-if [[ ! -z ${METALIB_IMAGE} ]];then
-   docker build --build-arg=METALIB_IMAGE=${METALIB_IMAGE} -f ${DOCKERFILE} -t ${NEW_IMAGE} .
-else 
-   docker build -f ${DOCKERFILE} -t ${NEW_IMAGE} .
+# --- multi-arch (linux/amd64 + linux/arm64) via buildx ----------------------
+# binfmt registers QEMU handlers so buildkit can execute foreign-arch RUN
+# stages (apk/mkdir in the final image). The Go build itself is cross-compiled
+# natively with zig cc ($BUILDPLATFORM pattern in the Dockerfile) — no QEMU.
+docker run --privileged --rm tonistiigi/binfmt --install arm64 >/dev/null 2>&1 \
+   || echo "> WARNING: could not register binfmt handlers (QEMU stages may fail)"
+# The buildkitd sidecar (docker-container driver) does NOT inherit dockerd's
+# insecure-registry config: harbor is served with the lab-CA certificate,
+# which buildkitd does not trust. Point it at plain HTTP instead — the same
+# posture as the dockerd INSECURE_REGISTRIES entries (harbor's token realm is
+# advertised as http:// too).
+cat > /tmp/buildkitd-multiarch.toml <<EOF
+[registry."harbor.example.com"]
+  http = true
+EOF
+if [[ -n "${REGISTRY}" && "${REGISTRY}" != "harbor.example.com" ]];then
+   printf '[registry."%s"]\n  http = true\n' "${REGISTRY}" >> /tmp/buildkitd-multiarch.toml
 fi
-docker push ${NEW_IMAGE}
-docker rmi ${NEW_IMAGE}
+# Recreate the builder every run: elastic agents are ephemeral (one pod per
+# job) and the buildkitd config only applies at create time.
+docker buildx rm multiarch >/dev/null 2>&1 || true
+docker buildx create --name multiarch --driver docker-container --buildkitd-config /tmp/buildkitd-multiarch.toml --use
+docker buildx use multiarch
+BUILD_PUSH=(--platform linux/amd64,linux/arm64 -f ${DOCKERFILE} -t ${NEW_IMAGE} --push)
+if [[ ! -z ${METALIB_IMAGE} ]];then
+   docker buildx build --build-arg=METALIB_IMAGE=${METALIB_IMAGE} "${BUILD_PUSH[@]}" .
+else
+   docker buildx build "${BUILD_PUSH[@]}" .
+fi
 gdh patch -f result.yaml \
    --add=metahub.image.reg=${REGISTRY} \
    --add=metahub.image.name=${NEW_IMAGE_NAME} \

@@ -17,10 +17,15 @@ cat go.mod|awk '!/^replace/' > go.mod.tmp
 mv go.mod.tmp go.mod
 
 REGISTRY=""
-if [[ ! -z ${ZOT_REGISTRY_URL} ]];then
+if [[ ! -z ${HARBOR_REG} ]];then
+   REGISTRY=${HARBOR_REG}
+elif [[ ! -z ${ZOT_REGISTRY_URL} ]];then
+   # DEPRECATED zot fallback — only prod-stack pipelines still set
+   # ZOT_REGISTRY_URL; dev pipelines are harbor-first since the zot→harbor
+   # migration. Remove once prod-stack is migrated.
    REGISTRY=${ZOT_REGISTRY_URL}
 else
-   echo "No ZOT_REGISTRY_URL defined"
+   echo "No HARBOR_REG (or legacy ZOT_REGISTRY_URL) defined"
    exit 1
 fi
 
@@ -32,7 +37,10 @@ else
    TAG="$(echo ${GO_PIPELINE_LABEL}|tr '[:upper:]' '[:lower:]')"
    NEW_IMAGE_NAME=$(echo ${NEW_IMAGE_NAME}/${GO_PIPELINE_GROUP_NAME}/${GO_PIPELINE_NAME}|tr '[:upper:]' '[:lower:]')
 fi
-if [[ ! -z "${ZOT_REGISTRY_URL}" ]];then
+if [[ ! -z "${HARBOR_REG}" ]];then
+   REGISTRY=${HARBOR_REG}
+elif [[ ! -z "${ZOT_REGISTRY_URL}" ]];then
+   # DEPRECATED zot fallback (see above) — remove once prod-stack is migrated.
    REGISTRY=${ZOT_REGISTRY_URL}
 else 
    REGISTRY=registry.gitlab.com

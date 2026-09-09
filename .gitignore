@@ -25,3 +25,4 @@ junit.xml
 sonar.log
 test.log
 .understand-anything/.trash-*
+metahub.db

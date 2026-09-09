@@ -1,23 +1,47 @@
 # syntax=docker/dockerfile:1.4
+#
+# Multi-arch build (linux/amd64 + linux/arm64) — built via buildx:
+#   * Every stage that EXECUTES commands is pinned to --platform=$BUILDPLATFORM,
+#     so it always runs natively on the build agent (no QEMU for the heavy work).
+#   * The Go build cross-compiles for TARGETARCH. cgo (mattn/go-sqlite3) is
+#     cross-built with zig cc (alpine package) — no QEMU for the compile either.
+#   * The final stage stays unpinned (alpine is multi-arch) so buildkit emits a
+#     real per-arch image. Its single RUN (mkdir) is trivial and may run under
+#     QEMU for the foreign leg (binfmt installed by the CI build script).
 ARG METALIB_IMAGE
-FROM $METALIB_IMAGE AS metalib
+FROM --platform=$BUILDPLATFORM $METALIB_IMAGE AS metalib
 
-FROM harbor.example.com/qnib-container/golang:2026-04-14.1 AS go
-#RUN apk add --no-cache build-base gcc git musl-dev
-
+# --- Go build: runs natively on the builder, cross-compiles to TARGETARCH ---
+FROM --platform=$BUILDPLATFORM harbor.example.com/qnib-container/golang:2026-04-14.1 AS go
+ARG TARGETOS TARGETARCH
+# zig cc serves as the cgo cross-compiler for non-native targets:
+#   amd64 -> x86_64-linux-musl, arm64 -> aarch64-linux-musl
+RUN apk add --no-cache zig
 WORKDIR /go/metahub-api
 COPY . ./
 COPY --from=metalib /pkg exp/metalib/pkg
 COPY --from=metalib /go.sum /go.mod exp/metalib/
 ENV CGO_ENABLED=1 GOOS=linux
-ENV CGO_CFLAGS="-DSQLITE_DISABLE_PREAD -DSQLITE_DISABLE_MREAD"
+# -fno-sanitize=undefined: zig cc instruments C with UBSan by default but does
+# not link the ubsan runtime as a pure linker (undefined __ubsan_handle_*).
+ENV CGO_CFLAGS="-DSQLITE_DISABLE_PREAD -DSQLITE_DISABLE_MREAD -fno-sanitize=undefined"
 RUN --mount=type=cache,target=/go/pkg/mod go mod tidy
-RUN --mount=type=cache,target=/go/pkg/mod go build -a -ldflags '-extldflags "-static"' .
+RUN case "${TARGETARCH}" in \
+      amd64) ZTARGET="x86_64-linux-musl" ;; \
+      arm64) ZTARGET="aarch64-linux-musl" ;; \
+      *) echo "unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac \
+ && CC="zig cc -target ${ZTARGET}" \
+    CGO_ENABLED=1 GOOS="${TARGETOS:-linux}" GOARCH="${TARGETARCH}" \
+    go build -a -ldflags '-extldflags "-static"' .
 
-FROM alpine:3.21 AS gonja
+# --- gonja-cli: fetched for the TARGET arch (fetch runs natively) ----------
+FROM --platform=$BUILDPLATFORM alpine:3.21 AS gonja
+ARG TARGETARCH
 RUN apk add --no-cache wget \
- && wget -qO- https://gitlab.com/qnib-golang/gonja-cli/-/releases/v0.0.2/downloads/gonja-cli_0.0.2_linux_amd64.tar.gz |tar xfz - -C /usr/local/bin
+ && wget -qO- https://gitlab.com/qnib-golang/gonja-cli/-/releases/v0.0.2/downloads/gonja-cli_0.0.2_linux_${TARGETARCH}.tar.gz |tar xfz - -C /usr/local/bin
 
+# --- runtime (per-arch) ----------------------------------------------------
 FROM alpine:3.21
 ENV METAHUB_API_PORT=80 \
     METAHUB_DB=/var/lib/metahub/metahub.db \
