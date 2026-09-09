@@ -2,6 +2,21 @@
 
 > This file helps AI agents understand the repo quickly.
 
+## Session: waldur-outfitter-improvements — fix-digest-manifest-existence handler test (2026-09-08)
+
+**Change:** `fix-digest-manifest-existence`, commit `99620ed`.
+
+Handler-level regression test (`oci_manifest_digest_unlinked_test.go`,
+`TestManifestDigest_UnlinkedNeverFiveHundred`) asserts that `HEAD` or `GET`
+by digest of an **unlinked** manifest (pushed but no profile REF edge) returns
+**200 + `Docker-Content-Digest`**, never 5xx. The fix is entirely metalib-side
+(`ManifestFromResult` returns `ok=false, nil` for unlinked manifests); the
+handler's `err→500` path remains for genuine DB errors. The test exercises
+Path Z (`resolveMissingManifest` → `handleManifest` → `ManifestGetByDigest`).
+
+**Sonar gate:** 0 new violations, 0.0% duplication — passed in GoCD
+`metahub-api_MR115_dev` run 20.
+
 ## Session: waldur-outfitter-integration — gate-model-serving-on-model-centric (2026-08-24)
 
 No code changes in this repo — the existing handlers already pass/set context
