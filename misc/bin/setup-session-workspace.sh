@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 set -e
 
-# Usage: setup-session-workspace.sh <session-path> <session-desc> <api-root> <lib-opencode> <api-opencode>
+# Usage: setup-session-workspace.sh <session-path> <session-desc> <api-root> [<lib-opencode> [<api-opencode>]]
+# The last two args are retained for backward compatibility but are unused —
+# outfitter reads paths from the manifest in the api root.
 S="$1"
 DESC="$2"
 API_ROOT="$3"
-LIB_OC="$4"
-API_OC="$5"
+# $4 (LIB_OC) and $5 (API_OC) are no longer used; outfitter resolves paths from the manifest.
 BRANCHES_FILE="${S}/.branches"
 
 # Relative path from session dir back to metahub-api root
@@ -16,120 +17,54 @@ REL_API_ROOT="../.."
 echo ""
 echo "=== Setting up session workspace ==="
 
-# --- opencode.json (root) — strict session-scoped permissions ---
-cat > "${S}/opencode.json" <<'EOF'
-{
-  "$schema": "https://opencode.ai/config.json",
-  "permission": {
-    "external_directory": {
-      "/tmp": "allow"
-    }
-  },
-  "agent": {
-    "build": {
-      "permission": {
-        "edit": {
-          "./**": "allow"
-        },
-        "external_directory": {
-          "/tmp": "allow"
-        }
-      }
-    },
-    "plan": {
-      "permission": {
-        "edit": {
-          "./**": "deny"
-        }
-      }
-    }
-  }
+# --- Harness composition via outfitter ---
+OUTFIT_BIN="${OUTFIT_BIN:-outfit}"
+echo "[workspace] Composing harness from ${API_ROOT}/agent.compose.yaml..."
+if ! command -v "${OUTFIT_BIN}" >/dev/null 2>&1; then
+  echo "ERROR: '${OUTFIT_BIN}' not found on PATH. Set OUTFIT_BIN or install outfitter." >&2
+  exit 2
+fi
+(cd "${API_ROOT}" && "${OUTFIT_BIN}" build -o "${S}") || {
+  echo "ERROR: outfitter build failed. Is ${API_ROOT}/agent.compose.yaml valid?" >&2
+  exit 2
 }
-EOF
 
-# --- .opencode/ directory ---
-mkdir -p "${S}/.opencode"
+SKILL_COUNT=$(find "${S}/.opencode/skills" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
+CMD_COUNT=$(find "${S}/.opencode/command" -maxdepth 1 -type f 2>/dev/null | wc -l | tr -d ' ')
+echo "[workspace] Harness composed: ${SKILL_COUNT} skills, ${CMD_COUNT} commands"
 
-# .opencode/opencode.json — MCP servers + plugins (no external dirs)
-cat > "${S}/.opencode/opencode.json" <<'EOF'
-{
-  "$schema": "https://opencode.ai/config.json",
-  "mcp": {
-    "neo4j-main": {
-      "type": "remote",
-      "url": "https://api.dev.example.com/mcp/",
-      "headers": {
-        "Host": "neo4j-mcp.dev.example.com"
-      },
-      "enabled": true
-    },
-    "sonarqube": {
-      "type": "remote",
-      "url": "https://sonar-mcp.example.com/mcp",
-      "headers": {
-        "Authorization": "Bearer squ_f9a42283681ee2e9fb08b615d220775252d67074"
-      },
-      "enabled": true
-    },
-    "gocd": {
-      "type": "remote",
-      "url": "https://gocd.example.com/mcp",
-      "headers": {
-        "Host": "gocd-mcp.example.com",
-        "Authorization": "Bearer 92b6c82f98aedd51e3878e619fa4deb1c2a93429"
-      },
-      "enabled": true
-    },
-    "victoriametrics": {
-      "type": "remote",
-      "url": "https://vm-mcp.example.com/mcp",
-      "enabled": true
-    },
-    "victorialogs": {
-      "type": "remote",
-      "url": "https://vl-mcp.example.com/mcp",
-      "enabled": true
-    },
-    "victoriatraces": {
-      "type": "remote",
-      "url": "https://vt-mcp.example.com/mcp",
-      "enabled": true
-    }
-  }
-}
-EOF
+# --- Env-var references — warn, never fail ---
+# Outfitter passes {env:VAR} through verbatim and never resolves it, so an unset
+# token breaks the harness at runtime, not at build. Surface it here rather than
+# mid-session. The list is read back out of the rendered config, so it cannot go
+# stale when the manifest changes.
+ENV_REFS=$(grep -oh '{env:[A-Za-z_][A-Za-z0-9_]*}' "${S}/opencode.json" 2>/dev/null \
+  | sed 's/^{env:\(.*\)}$/\1/' | sort -u)
+ENV_REFS_LINE=$(echo ${ENV_REFS})
+ENV_MISSING=""
+for VAR in ${ENV_REFS}; do
+  if [ -z "${!VAR:-}" ]; then
+    ENV_MISSING="${ENV_MISSING} ${VAR}"
+  fi
+done
 
-# .opencode/package.json
-cat > "${S}/.opencode/package.json" <<'EOF'
-{
-  "dependencies": {
-    "@opencode-ai/plugin": "1.4.3"
-  }
-}
-EOF
-
-# --- Copy skills (metalib full set + propose + excalidraw from api) ---
-mkdir -p "${S}/.opencode/skills"
-if [ -d "${LIB_OC}/skills" ]; then
-  cp -R "${LIB_OC}/skills/"* "${S}/.opencode/skills/" 2>/dev/null || true
-fi
-if [ -d "${API_OC}/skills/openspec-propose" ]; then
-  cp -R "${API_OC}/skills/openspec-propose" "${S}/.opencode/skills/"
-fi
-if [ -d "${API_OC}/skills/excalidraw-diagram-skill" ]; then
-  cp -R "${API_OC}/skills/excalidraw-diagram-skill" "${S}/.opencode/skills/"
+if [ -n "${ENV_REFS_LINE}" ]; then
+  echo "[workspace] Harness reads env refs: ${ENV_REFS_LINE}"
+  ENV_DOC="The composed harness reads these environment variables. They are passed"$'\n'"through as \`{env:VAR}\` references and never baked into the config, so"$'\n'"rotating a token causes no drift:"$'\n'
+  for VAR in ${ENV_REFS}; do
+    ENV_DOC="${ENV_DOC}"$'\n'"- \`${VAR}\`"
+  done
+else
+  ENV_DOC="The composed harness reads no environment variables."
 fi
 
-# --- Copy commands (metalib full set + propose from api) ---
-mkdir -p "${S}/.opencode/command"
-if [ -d "${LIB_OC}/command" ]; then
-  cp -R "${LIB_OC}/command/"* "${S}/.opencode/command/" 2>/dev/null || true
-fi
-if [ -f "${API_OC}/command/opsx-propose.md" ]; then
-  cp "${API_OC}/command/opsx-propose.md" "${S}/.opencode/command/"
+if [ -n "${ENV_MISSING}" ]; then
+  echo "[workspace] WARNING: unset in this shell:${ENV_MISSING}"
+  echo "[workspace]          Export them before ./opencode.sh, or those MCP"
+  echo "[workspace]          servers will fail to authenticate at runtime."
 fi
 
-# .opencode/.gitignore
+# --- .opencode/.gitignore ---
 cat > "${S}/.opencode/.gitignore" <<'EOF'
 node_modules
 package-lock.json
@@ -144,9 +79,6 @@ elif command -v npm >/dev/null 2>&1; then
   npm install --silent 2>/dev/null || true
 fi
 cd "${S}"
-
-echo "[workspace] Skills: $(ls -1 .opencode/skills/ | wc -l | tr -d ' ') copied"
-echo "[workspace] Commands: $(ls -1 .opencode/command/ | wc -l | tr -d ' ') copied"
 
 # --- .opencodeignore — copy from metahub-api if it exists ---
 if [ -f "${API_ROOT}/.opencodeignore" ] && [ ! -f "${S}/.opencodeignore" ]; then
@@ -216,14 +148,15 @@ CTXEOF
 fi
 
 # --- opencode.sh launch wrapper ---
-cat > "${S}/opencode.sh" <<'EOF'
-#!/usr/bin/env bash
-export TMPDIR=/tmp/metahub
-export SAFEHOUSE_TRUST_WORKDIR_CONFIG=1
-cd "$(dirname "$0")"
-safehouse opencode
-EOF
-chmod +x "${S}/opencode.sh"
+# Composed by outfitter from misc/scaffold/opencode.sh (pinned in
+# agent.compose.lock with dest "."); mode bits travel through the build, so the
+# 0755 exec bit needs no chmod. Assert rather than generate: a missing or
+# non-executable wrapper means the manifest/lock drifted from the scaffold.
+if [ ! -x "${S}/opencode.sh" ]; then
+  echo "ERROR: ${S}/opencode.sh missing or not executable after outfitter build." >&2
+  echo "       Check the 'scaffold' component in ${API_ROOT}/agent.compose.yaml." >&2
+  exit 2
+fi
 
 # --- Read branch mapping for render line (also used by AGENTS.md below) ---
 API_BRANCH=$(grep "^metahub-api=" "${BRANCHES_FILE}" | cut -d= -f2)
@@ -333,72 +266,9 @@ cat >> "${S}/Taskfile.yml" <<'EOF'
           echo "All worktrees are committed."
         fi
   push:
-    desc: "Verify every worktree is committed, then push all branches"
-    silent: true
+    desc: "Verify committed + push all branches (delegates to session:push — dependency order, metalib first)"
     cmds:
-      - |
-        set -euo pipefail
-        SESSION_DIR="$(pwd)"
-        BRANCHES_FILE="${SESSION_DIR}/.branches"
-        if [ ! -f "${BRANCHES_FILE}" ]; then
-          echo "ERROR: .branches file not found in ${SESSION_DIR}" >&2
-          exit 1
-        fi
-
-        # --- Phase 1: verify all worktrees are fully committed -----------
-        DIRTY=0
-        while IFS='=' read -r REPO BRANCH; do
-          [ -z "${REPO}" ] && continue
-          case "${REPO}" in *.status|*.version) continue;; esac
-          WT="${SESSION_DIR}/${REPO}"
-          if [ ! -d "${WT}/.git" ] && [ ! -f "${WT}/.git" ]; then
-            echo "[${REPO}] worktree missing (suspended?) — skipping"
-            continue
-          fi
-          STATUS="$(git -C "${WT}" status --porcelain)"
-          if [ -n "${STATUS}" ]; then
-            echo "[${REPO}] UNCOMMITTED changes:"
-            echo "${STATUS}" | sed 's/^/    /'
-            DIRTY=1
-          fi
-        done < "${BRANCHES_FILE}"
-
-        if [ "${DIRTY}" -ne 0 ]; then
-          echo ""
-          echo "ABORT: commit (or stash) the changes above before pushing." >&2
-          exit 1
-        fi
-        echo "All worktrees are committed."
-
-        # --- Phase 2: push each branch ----------------------------------
-        echo ""
-        FAILED=0
-        while IFS='=' read -r REPO BRANCH; do
-          [ -z "${REPO}" ] && continue
-          case "${REPO}" in *.status|*.version) continue;; esac
-          WT="${SESSION_DIR}/${REPO}"
-          if [ ! -d "${WT}/.git" ] && [ ! -f "${WT}/.git" ]; then
-            continue
-          fi
-          CUR="$(git -C "${WT}" rev-parse --abbrev-ref HEAD)"
-          AHEAD="$(git -C "${WT}" rev-list --count "origin/${BRANCH}..HEAD" 2>/dev/null || echo "?")"
-          if [ "${AHEAD}" = "0" ]; then
-            echo "[${REPO}] ${BRANCH} already up to date — nothing to push"
-            continue
-          fi
-          echo "[${REPO}] pushing ${CUR} -> origin/${BRANCH} (${AHEAD} commit(s))"
-          if ! git -C "${WT}" push origin "HEAD:${BRANCH}"; then
-            echo "[${REPO}] PUSH FAILED" >&2
-            FAILED=1
-          fi
-        done < "${BRANCHES_FILE}"
-
-        echo ""
-        if [ "${FAILED}" -ne 0 ]; then
-          echo "DONE with errors: one or more pushes failed (see above)." >&2
-          exit 1
-        fi
-        echo "DONE: all branches pushed."
+      - task -d "${REL_API_ROOT}" session:push -- ${DESC}
 EOF
 
 # --- AGENTS.md — auto-generated with session context ---
@@ -450,6 +320,15 @@ record of a shipped spec — that belongs in the relevant repo's \`openspec/\`.
 | metalib | \`${LIB_BRANCH}\` | \`metalib/\` |
 | metahub-admin | \`${ADMIN_BRANCH}\` | \`metahub-admin/\` |
 | metahub-ui | \`${UI_BRANCH}\` | \`metahub-ui/\` |
+
+## Harness Environment Variables
+
+${ENV_DOC}
+
+Outfitter never resolves these at build time — a missing one only breaks the
+matching MCP server at runtime, not the build. Re-run
+\`./misc/bin/setup-session-workspace.sh\` (or check \`opencode.json\`) to see the
+current set.
 
 ## Session Tasks
 
@@ -581,5 +460,5 @@ VL_AGENT="claude-opus-4-6" ${REL_API_ROOT}/misc/bin/vl-event.sh <event_type> <ph
 EOF
 
 echo "[workspace] AGENTS.md generated"
-echo "[workspace] opencode.sh generated"
+echo "[workspace] opencode.sh composed by outfitter"
 echo "[workspace] Taskfile.yml generated"
