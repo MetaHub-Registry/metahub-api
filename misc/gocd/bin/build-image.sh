@@ -36,9 +36,15 @@ fi
 source ${FUNC_SRC}
 dumpEnv
 
-# strip any local `replace` directive (CI wires metalib via --build-arg)
+# strip any local `replace` directive, then re-point metalib at the directory
+# the Docker build populates from METALIB_IMAGE (same two-step as build-api.sh):
+# Dockerfile.result copies the workspace go.mod into WORKDIR /go/metahub-api and
+# fills exp/metalib/ from the metalib image, so the replace must target that
+# container path — otherwise `go mod tidy` tries to fetch the placeholder
+# pseudo-version from the private gitlab repo and fails.
 cat go.mod | awk '!/^replace/' > go.mod.tmp
 mv go.mod.tmp go.mod
+go mod edit -replace github.com/metahub-registry/metahub-core=/go/metahub-api/exp/metalib
 
 # metalib base image (FROM $METALIB_IMAGE) from the upstream metalib pipeline.
 if [[ -f metalib_result/result.yaml ]]; then
