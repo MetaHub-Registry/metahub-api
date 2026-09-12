@@ -58,6 +58,10 @@ vars:
   REPO_CE_DIR: "~/src/gitlab.com/qnib-metahub/community-edition"
   REPO_STACK_DIR: "~/src/gitlab.com/qnib-gocd/yaml-config/metahub/stack"
   REPO_FLUX_DIR: "~/src/gitlab.com/qnib-ansible/flux/metahub"
+  REPO_E2E_DEV_DIR: "~/src/gitlab.com/qnib-gocd/metahub-pipelines/e2e-dev"
+  REPO_MH_POPULATE_PROD_DIR: "~/src/gitlab.com/qnib-gocd/metahub-pipelines/mh-populate-prod"
+  REPO_OCI_CONFORMANCE_DIR: "~/src/gitlab.com/qnib-gocd/metahub-pipelines/oci-conformance"
+  REPO_ORAS_CONFORMANCE_DIR: "~/src/gitlab.com/qnib-gocd/metahub-pipelines/oras-conformance"
   REPO_DOCS_DIR: "~/src/gitlab.com/qshuf-mkdocs/metahub-docs"
   REPO_SITEAGENT_DIR: "~/src/gitlab.com/qnib-metahub/waldur-site-agent-metahub"
 
@@ -104,6 +108,16 @@ tasks:
         vars: { DESC: "{{.DESC}}", REPO_NAME: "stack", REPO_DIR: "{{.REPO_STACK_DIR}}" }
       - task: _worktree-main
         vars: { DESC: "{{.DESC}}", REPO_NAME: "flux/metahub", REPO_DIR: "{{.REPO_FLUX_DIR}}" }
+      # metahub-pipelines/* are the GoCD pipeline-support repos (consumed on
+      # main by the dev pipelines), so they track main directly like flux/metahub.
+      - task: _worktree-main
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-pipelines/e2e-dev", REPO_DIR: "{{.REPO_E2E_DEV_DIR}}" }
+      - task: _worktree-main
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-pipelines/mh-populate-prod", REPO_DIR: "{{.REPO_MH_POPULATE_PROD_DIR}}" }
+      - task: _worktree-main
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-pipelines/oci-conformance", REPO_DIR: "{{.REPO_OCI_CONFORMANCE_DIR}}" }
+      - task: _worktree-main
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-pipelines/oras-conformance", REPO_DIR: "{{.REPO_ORAS_CONFORMANCE_DIR}}" }
       - task: _branch-and-mr
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-docs", REPO_DIR: "{{.REPO_DOCS_DIR}}" }
       - task: _branch-and-mr
@@ -166,6 +180,14 @@ tasks:
         vars: { DESC: "{{.DESC}}", REPOS: "{{.REPOS}}", REPO_NAME: "stack", REPO_DIR: "{{.REPO_STACK_DIR}}" }
       - task: _bump-dev
         vars: { DESC: "{{.DESC}}", REPOS: "{{.REPOS}}", REPO_NAME: "flux/metahub", REPO_DIR: "{{.REPO_FLUX_DIR}}" }
+      - task: _bump-dev
+        vars: { DESC: "{{.DESC}}", REPOS: "{{.REPOS}}", REPO_NAME: "metahub-pipelines/e2e-dev", REPO_DIR: "{{.REPO_E2E_DEV_DIR}}" }
+      - task: _bump-dev
+        vars: { DESC: "{{.DESC}}", REPOS: "{{.REPOS}}", REPO_NAME: "metahub-pipelines/mh-populate-prod", REPO_DIR: "{{.REPO_MH_POPULATE_PROD_DIR}}" }
+      - task: _bump-dev
+        vars: { DESC: "{{.DESC}}", REPOS: "{{.REPOS}}", REPO_NAME: "metahub-pipelines/oci-conformance", REPO_DIR: "{{.REPO_OCI_CONFORMANCE_DIR}}" }
+      - task: _bump-dev
+        vars: { DESC: "{{.DESC}}", REPOS: "{{.REPOS}}", REPO_NAME: "metahub-pipelines/oras-conformance", REPO_DIR: "{{.REPO_ORAS_CONFORMANCE_DIR}}" }
       - task: _bump-dev
         vars: { DESC: "{{.DESC}}", REPOS: "{{.REPOS}}", REPO_NAME: "metahub-docs", REPO_DIR: "{{.REPO_DOCS_DIR}}" }
       - task: _bump-dev
@@ -271,6 +293,10 @@ tasks:
             community-edition) eval echo "{{.REPO_CE_DIR}}" ;;
             stack)             eval echo "{{.REPO_STACK_DIR}}" ;;
             flux/metahub)      eval echo "{{.REPO_FLUX_DIR}}" ;;
+            metahub-pipelines/e2e-dev)          eval echo "{{.REPO_E2E_DEV_DIR}}" ;;
+            metahub-pipelines/mh-populate-prod) eval echo "{{.REPO_MH_POPULATE_PROD_DIR}}" ;;
+            metahub-pipelines/oci-conformance)  eval echo "{{.REPO_OCI_CONFORMANCE_DIR}}" ;;
+            metahub-pipelines/oras-conformance) eval echo "{{.REPO_ORAS_CONFORMANCE_DIR}}" ;;
             metahub-docs)      eval echo "{{.REPO_DOCS_DIR}}" ;;
             waldur-site-agent-metahub) eval echo "{{.REPO_SITEAGENT_DIR}}" ;;
             outfitter)         eval echo "{{.REPO_OUTFITTER_DIR}}" ;;
@@ -315,6 +341,10 @@ tasks:
             community-edition) eval echo "{{.REPO_CE_DIR}}" ;;
             stack)             eval echo "{{.REPO_STACK_DIR}}" ;;
             flux/metahub)      eval echo "{{.REPO_FLUX_DIR}}" ;;
+            metahub-pipelines/e2e-dev)          eval echo "{{.REPO_E2E_DEV_DIR}}" ;;
+            metahub-pipelines/mh-populate-prod) eval echo "{{.REPO_MH_POPULATE_PROD_DIR}}" ;;
+            metahub-pipelines/oci-conformance)  eval echo "{{.REPO_OCI_CONFORMANCE_DIR}}" ;;
+            metahub-pipelines/oras-conformance) eval echo "{{.REPO_ORAS_CONFORMANCE_DIR}}" ;;
             metahub-docs)      eval echo "{{.REPO_DOCS_DIR}}" ;;
             waldur-site-agent-metahub) eval echo "{{.REPO_SITEAGENT_DIR}}" ;;
             outfitter)         eval echo "{{.REPO_OUTFITTER_DIR}}" ;;
@@ -375,6 +405,14 @@ tasks:
       - task: _worktree-rm
         vars: { DESC: "{{.DESC}}", REPO_NAME: "flux/metahub", REPO_DIR: "{{.REPO_FLUX_DIR}}" }
       - task: _worktree-rm
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-pipelines/e2e-dev", REPO_DIR: "{{.REPO_E2E_DEV_DIR}}" }
+      - task: _worktree-rm
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-pipelines/mh-populate-prod", REPO_DIR: "{{.REPO_MH_POPULATE_PROD_DIR}}" }
+      - task: _worktree-rm
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-pipelines/oci-conformance", REPO_DIR: "{{.REPO_OCI_CONFORMANCE_DIR}}" }
+      - task: _worktree-rm
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-pipelines/oras-conformance", REPO_DIR: "{{.REPO_ORAS_CONFORMANCE_DIR}}" }
+      - task: _worktree-rm
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-docs", REPO_DIR: "{{.REPO_DOCS_DIR}}" }
       - task: _worktree-rm
         vars: { DESC: "{{.DESC}}", REPO_NAME: "waldur-site-agent-metahub", REPO_DIR: "{{.REPO_SITEAGENT_DIR}}" }
@@ -414,6 +452,14 @@ tasks:
       - task: _worktree-resume
         vars: { DESC: "{{.DESC}}", REPO_NAME: "flux/metahub", REPO_DIR: "{{.REPO_FLUX_DIR}}" }
       - task: _worktree-resume
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-pipelines/e2e-dev", REPO_DIR: "{{.REPO_E2E_DEV_DIR}}" }
+      - task: _worktree-resume
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-pipelines/mh-populate-prod", REPO_DIR: "{{.REPO_MH_POPULATE_PROD_DIR}}" }
+      - task: _worktree-resume
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-pipelines/oci-conformance", REPO_DIR: "{{.REPO_OCI_CONFORMANCE_DIR}}" }
+      - task: _worktree-resume
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-pipelines/oras-conformance", REPO_DIR: "{{.REPO_ORAS_CONFORMANCE_DIR}}" }
+      - task: _worktree-resume
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-docs", REPO_DIR: "{{.REPO_DOCS_DIR}}" }
       - task: _worktree-resume
         vars: { DESC: "{{.DESC}}", REPO_NAME: "waldur-site-agent-metahub", REPO_DIR: "{{.REPO_SITEAGENT_DIR}}" }
@@ -451,7 +497,7 @@ tasks:
   #   2. no worktree has uncommitted changes
   #   3. no worktree has commits that were never pushed
   #   4. no OpenSpec change is still active in the session workspace
-  # Repos tracking main (stack, flux/metahub) never get a status, so gate 1
+  # Repos tracking main (stack, flux/metahub, metahub-pipelines/*) never get a status, so gate 1
   # skips them — but 2 and 3 still apply, which is exactly where un-pushed
   # infra edits tend to hide.
   #
@@ -561,6 +607,14 @@ tasks:
       - task: _worktree-rm
         vars: { DESC: "{{.DESC}}", REPO_NAME: "flux/metahub", REPO_DIR: "{{.REPO_FLUX_DIR}}" }
       - task: _worktree-rm
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-pipelines/e2e-dev", REPO_DIR: "{{.REPO_E2E_DEV_DIR}}" }
+      - task: _worktree-rm
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-pipelines/mh-populate-prod", REPO_DIR: "{{.REPO_MH_POPULATE_PROD_DIR}}" }
+      - task: _worktree-rm
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-pipelines/oci-conformance", REPO_DIR: "{{.REPO_OCI_CONFORMANCE_DIR}}" }
+      - task: _worktree-rm
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-pipelines/oras-conformance", REPO_DIR: "{{.REPO_ORAS_CONFORMANCE_DIR}}" }
+      - task: _worktree-rm
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-docs", REPO_DIR: "{{.REPO_DOCS_DIR}}" }
       - task: _worktree-rm
         vars: { DESC: "{{.DESC}}", REPO_NAME: "waldur-site-agent-metahub", REPO_DIR: "{{.REPO_SITEAGENT_DIR}}" }
@@ -640,7 +694,7 @@ tasks:
   # The session's .branches file is the source of truth for the expected
   # branch per repo: session-branch repos (<repo>=<iid>-<desc>) must sit on
   # their session branch, while repos that track main directly (stack,
-  # flux/metahub) must sit on the branch recorded for them
+  # flux/metahub, metahub-pipelines/*) must sit on the branch recorded for them
   # (usually main; outfitter pins its own branch). Fails when a mapped
   # worktree is missing, detached, or on the wrong branch — useful before
   # committing, finishing, or archiving a session.
@@ -685,8 +739,14 @@ tasks:
             echo "  [${REPO}] NOT a git worktree at ${WT}"
             FAILED=1
           elif [ "${CURRENT}" = "HEAD" ]; then
-            echo "  [${REPO}] DETACHED HEAD — expected branch '${EXPECTED}'"
-            FAILED=1
+            # main-tracking repos whose source checkout holds the branch are
+            # created detached at origin/<branch> — that is fine.
+            if [ "$(git -C "${WT}" rev-parse HEAD 2>/dev/null)" = "$(git -C "${WT}" rev-parse "origin/${EXPECTED}" 2>/dev/null)" ]; then
+              echo "  [${REPO}] OK — detached at origin/${EXPECTED}"
+            else
+              echo "  [${REPO}] DETACHED HEAD — expected branch '${EXPECTED}'"
+              FAILED=1
+            fi
           else
             echo "  [${REPO}] WRONG branch — on '${CURRENT}', expected '${EXPECTED}'"
             FAILED=1
@@ -861,9 +921,8 @@ tasks:
   #      and is fully committed — any violation aborts BEFORE the first push.
   #   2. push: only branches that are ahead of origin, in the defined order.
   #
-  # Repos tracking main (stack, flux/metahub) push their worktree HEAD:main;
-  # the unmapped metahub-pipelines/e2e-dev worktree (not in .branches, e.g.
-  # the drift-gate stage) is appended last and pushes its current branch.
+  # Repos tracking main (stack, flux/metahub, metahub-pipelines/*) push their
+  # worktree HEAD:main; they are appended after the dependency-ordered repos.
   # ===========================================================================
   push:
     desc: "Push session branches (dependency order): task session:push -- <description>"
@@ -889,7 +948,7 @@ tasks:
         # a dependency order.
         ORDERED="metalib metahub-api metahub-admin community-edition metahub-ui metahub-docs outfitter waldur-site-agent-metahub"
         # Not part of the render line — pushed after; order not load-bearing.
-        TAIL="stack flux/metahub metahub-pipelines/e2e-dev"
+        TAIL="stack flux/metahub metahub-pipelines/e2e-dev metahub-pipelines/mh-populate-prod metahub-pipelines/oci-conformance metahub-pipelines/oras-conformance"
 
         echo "=== Pushing session '{{.DESC}}' (dependency order: lib → api → admin → …) ==="
 
@@ -902,15 +961,21 @@ tasks:
             continue
           fi
           # `|| true` matters: task runs cmds with `-e -o pipefail`, and the
-          # grep misses for unmapped repos (metahub-pipelines/e2e-dev) — the
-          # failed pipeline must not kill the loop.
+          # grep misses for unmapped repos (e.g. a nested flux/* worktree that
+          # is not in .branches) — the failed pipeline must not kill the loop.
           EXPECTED=$(grep "^${REPO}=" "${BRANCHES_FILE}" 2>/dev/null | head -1 | cut -d= -f2 || true)
           CURRENT=$(git -C "${WT}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
           if [ -n "${EXPECTED}" ] && [ "${CURRENT}" != "${EXPECTED}" ]; then
-            echo "  [${REPO}] ABORT: on '${CURRENT}' but .branches expects '${EXPECTED}'" >&2
-            echo "         fix first: task session:check -- {{.DESC}}" >&2
-            FAILED=1
-            continue
+            # Accept the detached-at-origin/<branch> shape for main-tracking
+            # repos whose source checkout holds the branch.
+            if [ "${CURRENT}" = "HEAD" ] && [ "$(git -C "${WT}" rev-parse HEAD 2>/dev/null)" = "$(git -C "${WT}" rev-parse "origin/${EXPECTED}" 2>/dev/null)" ]; then
+              :
+            else
+              echo "  [${REPO}] ABORT: on '${CURRENT}' but .branches expects '${EXPECTED}'" >&2
+              echo "         fix first: task session:check -- {{.DESC}}" >&2
+              FAILED=1
+              continue
+            fi
           fi
           DIRT=$(git -C "${WT}" status --porcelain 2>/dev/null)
           if [ -n "${DIRT}" ]; then
@@ -932,7 +997,13 @@ tasks:
         for REPO in ${ORDERED} ${TAIL}; do
           WT="${S}/${REPO}"
           [ -d "${WT}" ] || continue
-          BRANCH=$(git -C "${WT}" rev-parse --abbrev-ref HEAD 2>/dev/null) || continue
+          CURRENT=$(git -C "${WT}" rev-parse --abbrev-ref HEAD 2>/dev/null) || continue
+          # Detached worktrees push to the .branches branch (main-tracking repos).
+          BRANCH="${CURRENT}"
+          if [ "${CURRENT}" = "HEAD" ]; then
+            BRANCH=$(grep "^${REPO}=" "${BRANCHES_FILE}" 2>/dev/null | head -1 | cut -d= -f2 || true)
+            BRANCH="${BRANCH:-main}"
+          fi
           git -C "${WT}" fetch -q origin "${BRANCH}" 2>/dev/null || true
           AHEAD=$(git -C "${WT}" rev-list --count "origin/${BRANCH}..HEAD" 2>/dev/null || echo "?")
           if [ "${AHEAD}" = "0" ]; then
