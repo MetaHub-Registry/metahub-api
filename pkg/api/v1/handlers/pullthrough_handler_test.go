@@ -149,6 +149,24 @@ func TestMaybeRefreshManifest_EnqueuesWhenExpired(t *testing.T) {
 		"expired TTL must enqueue an async refresh")
 }
 
+// TestMaybeRefreshManifest_WithinTTLIsNoop covers the fresh-cache branch: a
+// last_refreshed within the interval enqueues nothing.
+func TestMaybeRefreshManifest_WithinTTLIsNoop(t *testing.T) {
+	mag := ptMagazine(ptFakeDB{last: time.Now().Unix(), lastFound: true})
+	rf := &countingRefresher{}
+	c := pullthrough.New(nil, pullthrough.MagazinePolicies{Mag: mag}, nil, pullthrough.Options{Workers: 1, QueueSize: 4}).
+		WithRefresher(rf)
+	ctx, cancel := context.WithCancel(context.Background())
+	c.Start(ctx)
+	defer func() { cancel(); c.Stop() }()
+
+	h := NewHandlers("test", mag, nil, nil).WithPullThrough(c)
+	h.maybeRefreshManifest(ctx, logrus.NewEntry(logrus.New()), trace.SpanFromContext(ctx),
+		mhtypes.Request{Repo: "harbor.example.com/library/alpine", Tag: "3.24", Profile: "generic"})
+
+	time.Sleep(100 * time.Millisecond)
+	require.Zero(t, rf.count(), "fresh cache must not enqueue a refresh")
+}
 // TestMaybeRefreshManifest_Guards covers the no-op guards.
 func TestMaybeRefreshManifest_Guards(t *testing.T) {
 	ctx := context.Background()

@@ -1,11 +1,13 @@
 package pullthrough
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/metahub-registry/metahub-core/pkg/backends/magazine"
+	mhtypes "github.com/metahub-registry/metahub-core/pkg/types"
 )
 
 func testMagazine() magazine.Magazine {
@@ -70,4 +72,22 @@ func TestMagazinePolicies_MaxWorkers(t *testing.T) {
 
 	empty := MagazinePolicies{Mag: magazine.Magazine{}}
 	assert.Equal(t, 0, empty.MaxWorkers())
+}
+
+// fakeRefreshDB embeds the magazine.Database interface and reports a missing
+// collection, so HeadManifestNotFound fails fast without network/DB.
+type fakeRefreshDB struct {
+	magazine.Database
+}
+
+func (fakeRefreshDB) CollectionGetByRepoTagWoManifests(_ context.Context, _, _ string) (mhtypes.Repo, bool, error) {
+	return mhtypes.Repo{}, false, nil
+}
+
+// TestMagazineRefresher_CollectionMissing covers the Refresher adapter: a missing
+// collection surfaces as an error (the caller logs and keeps serving stale).
+func TestMagazineRefresher_CollectionMissing(t *testing.T) {
+	r := MagazineRefresher{Mag: magazine.Magazine{Database: fakeRefreshDB{}}}
+	err := r.Refresh(context.Background(), RefreshJob{Registry: "reg", Repo: "harbor.example.com/library/alpine", Tag: "3.24"})
+	require.Error(t, err)
 }
