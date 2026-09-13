@@ -11,7 +11,11 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 )
+
+var tracer = otel.Tracer("metahub-api/pullthrough")
 
 // CacheModeAsync is the only mode that enqueues cache jobs. "off" (and the
 // empty string, which config normalisation should have defaulted) disables.
@@ -72,6 +76,7 @@ type Metrics interface {
 	Completed(bytes int64)
 	Failed()
 	QueueDepth(n int)
+	RefreshOutcome(outcome string)
 }
 
 // Options configures the pool. Zero values fall back to the package defaults.
@@ -245,6 +250,9 @@ func (c *Cache) worker(ctx context.Context) {
 // run executes a single cache job, always releasing the dedup claim.
 func (c *Cache) run(ctx context.Context, job Job) {
 	defer c.release(job.Digest)
+	ctx, span := tracer.Start(ctx, "pullthrough.cache_job")
+	span.SetAttributes(attribute.String("digest", job.Digest), attribute.String("registry", job.Registry))
+	defer span.End()
 	c.metrics.Started()
 	if exists, err := c.store.Exists(ctx, job.Digest); err == nil && exists {
 		logrus.WithField("pull_through", true).Debugf("cache skip (already stored): %s", job.Digest)
@@ -265,9 +273,10 @@ func (c *Cache) run(ctx context.Context, job Job) {
 // nopMetrics is the default Metrics sink.
 type nopMetrics struct{}
 
-func (nopMetrics) Enqueued()            {}
-func (nopMetrics) Dropped(string)       {}
-func (nopMetrics) Started()             {}
-func (nopMetrics) Completed(int64)      {}
-func (nopMetrics) Failed()              {}
-func (nopMetrics) QueueDepth(int)       {}
+func (nopMetrics) Enqueued()               {}
+func (nopMetrics) Dropped(string)          {}
+func (nopMetrics) Started()                {}
+func (nopMetrics) Completed(int64)         {}
+func (nopMetrics) Failed()                 {}
+func (nopMetrics) QueueDepth(int)          {}
+func (nopMetrics) RefreshOutcome(string)   {}

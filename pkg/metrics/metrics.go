@@ -97,7 +97,101 @@ var (
 		Name:      "auth_requests_total",
 		Help:      "OCI auth decisions by auth method, profile and result (allow|deny).",
 	}, []string{"auth_method", "profile", "result"})
+
+	// Pull-through cache + delivery metrics (add-pull-through-manifest-intercept).
+	pullThroughCacheJobsTotal = factory.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "pull_through_cache_jobs_total",
+		Help:      "Pull-through cache jobs by event (enqueued|started|completed|failed|dropped) and reason.",
+	}, []string{"event", "reason"})
+
+	pullThroughBytesCachedTotal = factory.NewCounter(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "pull_through_cache_bytes_total",
+		Help:      "Bytes of upstream layers streamed into MetaHub storage by the pull-through cache.",
+	})
+
+	pullThroughBlobTotal = factory.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "pull_through_blob_total",
+		Help:      "Pull-through blob routing outcomes (hit|redirect|proxy).",
+	}, []string{"outcome"})
+
+	pullThroughRefreshTotal = factory.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Name:      "pull_through_refresh_total",
+		Help:      "Pull-through manifest refresh outcomes (enqueued|ok|failed).",
+	}, []string{"outcome"})
+
+	pullThroughQueueDepth = factory.NewGauge(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Name:      "pull_through_cache_queue_depth",
+		Help:      "Pending pull-through cache jobs.",
+	})
 )
+
+// PullThroughCacheEvent records a cache job lifecycle event.
+func PullThroughCacheEvent(event, reason string) {
+	if Enabled() {
+		pullThroughCacheJobsTotal.WithLabelValues(event, reason).Inc()
+	}
+}
+
+// PullThroughBytesCached adds n bytes to the cache throughput counter.
+func PullThroughBytesCached(n int64) {
+	if Enabled() {
+		pullThroughBytesCachedTotal.Add(float64(n))
+	}
+}
+
+// PullThroughBlobOutcome records a blob routing decision (hit|redirect|proxy).
+func PullThroughBlobOutcome(outcome string) {
+	if Enabled() {
+		pullThroughBlobTotal.WithLabelValues(outcome).Inc()
+	}
+}
+
+// PullThroughRefreshOutcome records a manifest refresh outcome (enqueued|ok|failed).
+func PullThroughRefreshOutcome(outcome string) {
+	if Enabled() {
+		pullThroughRefreshTotal.WithLabelValues(outcome).Inc()
+	}
+}
+
+// PullThroughQueueDepth sets the pending cache-job gauge.
+func PullThroughQueueDepth(n int) {
+	if Enabled() {
+		pullThroughQueueDepth.Set(float64(n))
+	}
+}
+
+// PullThroughMetrics satisfies the pull-through cache's Metrics sink (structural
+// interface) using the package registry.
+type PullThroughMetrics struct{}
+
+// Enqueued records a queued cache job.
+func (PullThroughMetrics) Enqueued() { PullThroughCacheEvent("enqueued", "") }
+
+// Dropped records a dropped cache job with its reason.
+func (PullThroughMetrics) Dropped(reason string) { PullThroughCacheEvent("dropped", reason) }
+
+// Started records a cache job starting.
+func (PullThroughMetrics) Started() { PullThroughCacheEvent("started", "") }
+
+// Completed records a finished cache job and its byte count.
+func (PullThroughMetrics) Completed(n int64) {
+	PullThroughCacheEvent("completed", "")
+	PullThroughBytesCached(n)
+}
+
+// Failed records a failed cache job.
+func (PullThroughMetrics) Failed() { PullThroughCacheEvent("failed", "") }
+
+// QueueDepth records the pending-job gauge.
+func (PullThroughMetrics) QueueDepth(n int) { PullThroughQueueDepth(n) }
+
+// RefreshOutcome records a manifest refresh outcome.
+func (PullThroughMetrics) RefreshOutcome(outcome string) { PullThroughRefreshOutcome(outcome) }
 
 // enabled gates HTTP instrumentation. It defaults to true and is set once at
 // startup from config before any request is served.

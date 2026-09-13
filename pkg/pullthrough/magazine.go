@@ -100,6 +100,8 @@ type MagazineRefresher struct {
 
 // Refresh re-checks the upstream for job's (repo, tag).
 func (r MagazineRefresher) Refresh(ctx context.Context, job RefreshJob) error {
+	ctx, span := tracer.Start(ctx, "pullthrough.refresh.upstream")
+	defer span.End()
 	req := mhtypes.Request{Repo: job.Repo, Tag: job.Tag, Profile: job.Profile}
 	if _, _, err := r.Mag.HeadManifestNotFound(ctx, req, job.Registry); err != nil {
 		return err

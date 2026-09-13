@@ -282,6 +282,9 @@ func (h Handlers) maybeRefreshManifest(ctx context.Context, l *logrus.Entry, spa
 	if h.pullThrough == nil || req.Digest != "" || req.Tag == "" {
 		return
 	}
+	ctx, rspan := tracer.Start(ctx, "ManifestHandler.maybeRefreshManifest")
+	defer rspan.End()
+	rspan.SetAttributes(attribute.Key("repo").String(req.Repo), attribute.Key("tag").String(req.Tag))
 	regURL, _, ok := h.mag.ResolveUpstreamRegistry(req.Repo)
 	if !ok {
 		return

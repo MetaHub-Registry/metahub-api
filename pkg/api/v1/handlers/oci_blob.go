@@ -574,6 +574,9 @@ func (h Handlers) tryPullThroughBlobMiss(ctx context.Context, w http.ResponseWri
 	if h.pullThrough == nil || r.Method != http.MethodGet {
 		return false
 	}
+	ctx, ispan := tracer.Start(ctx, "BlobHandler.tryPullThroughBlobMiss")
+	defer ispan.End()
+	ispan.SetAttributes(attribute.Key("blob.digest").String(req.Digest), attribute.Key("repo").String(req.Repo))
 	// Resolve the upstream registry from the request repo prefix (D6: no
 	// Blob.upstream_registries; the alias carries the registry).
 	regURL, strippedRepo, ok := h.mag.ResolveUpstreamRegistry(req.Repo)
@@ -598,6 +601,7 @@ func (h Handlers) tryPullThroughBlobMiss(ctx context.Context, w http.ResponseWri
 	})
 	if pol.ClientRedirect {
 		redURL := h.mag.GetBlobRedirectURL(lyrUp, req.Digest)
+		metrics.PullThroughBlobOutcome("redirect")
 		utils.Info(l, span, "pull-through: 307 %s to upstream %s", utils.ShortenDigest(req.Digest), redURL)
 		w.Header().Set(dockerContentDigestKey, req.Digest)
 		w.Header().Set(Location, redURL)
@@ -620,6 +624,7 @@ func (h Handlers) tryPullThroughBlobMiss(ctx context.Context, w http.ResponseWri
 		return false
 	}
 	defer rc.Close()
+	metrics.PullThroughBlobOutcome("proxy")
 	utils.Info(l, span, "pull-through: proxying %s from upstream", utils.ShortenDigest(req.Digest))
 	w.Header().Set(dockerContentDigestKey, req.Digest)
 	w.Header().Set("Content-Type", "application/octet-stream")

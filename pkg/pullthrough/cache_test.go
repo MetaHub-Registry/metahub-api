@@ -19,10 +19,11 @@ type recordingMetrics struct {
 	completed int
 	failed    int
 	bytes     int64
+	refresh   map[string]int
 }
 
 func newRecordingMetrics() *recordingMetrics {
-	return &recordingMetrics{dropped: map[string]int{}}
+	return &recordingMetrics{dropped: map[string]int{}, refresh: map[string]int{}}
 }
 
 func (m *recordingMetrics) Enqueued() {
@@ -52,6 +53,12 @@ func (m *recordingMetrics) Failed() {
 	m.mu.Unlock()
 }
 func (m *recordingMetrics) QueueDepth(int) {}
+
+func (m *recordingMetrics) RefreshOutcome(outcome string) {
+	m.mu.Lock()
+	m.refresh[outcome]++
+	m.mu.Unlock()
+}
 
 func (m *recordingMetrics) bytesCached() int64 {
 	m.mu.Lock()

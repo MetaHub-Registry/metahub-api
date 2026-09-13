@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // refreshWorkers bounds the manifest-refresh pool, kept separate from the layer
@@ -58,6 +59,7 @@ func (c *Cache) EnqueueRefresh(job RefreshJob) bool {
 	}
 	select {
 	case c.refreshes <- job:
+		c.metrics.RefreshOutcome("enqueued")
 		return true
 	default:
 		c.releaseRefresh(key)
@@ -82,9 +84,18 @@ func (c *Cache) releaseRefresh(key string) {
 	c.mu.Unlock()
 }
 
-// refreshWorker consumes refresh jobs until the context is cancelled. It always
-// releases the dedup claim, and on error logs (the client was already served
-// stale by the intercept).
+// refreshOne runs a single refresh job and records its outcome, always
+// releasing the dedup claim.
+func (c *Cache) refreshOne(ctx context.Context, job RefreshJob) {
+	defer c.releaseRefresh(job.Repo + ":" + job.Tag)
+	if err := c.refresher.Refresh(ctx, job); err != nil {
+		c.metrics.RefreshOutcome("failed")
+		logrus.WithField("pull_through", true).Warnf("manifest refresh failed for %s:%s: %v", job.Repo, job.Tag, err)
+		return
+	}
+	c.metrics.RefreshOutcome("ok")
+	logrus.WithField("pull_through", true).Debugf("manifest refresh done for %s:%s", job.Repo, job.Tag)
+}
 func (c *Cache) refreshWorker(ctx context.Context) {
 	defer c.wg.Done()
 	for {
@@ -92,12 +103,10 @@ func (c *Cache) refreshWorker(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case job := <-c.refreshes:
-			if err := c.refresher.Refresh(ctx, job); err != nil {
-				logrus.WithField("pull_through", true).Warnf("manifest refresh failed for %s:%s: %v", job.Repo, job.Tag, err)
-			} else {
-				logrus.WithField("pull_through", true).Debugf("manifest refresh done for %s:%s", job.Repo, job.Tag)
-			}
-			c.releaseRefresh(job.Repo + ":" + job.Tag)
+			rctx, span := tracer.Start(ctx, "pullthrough.refresh")
+			span.SetAttributes(attribute.String("repo", job.Repo), attribute.String("tag", job.Tag))
+			c.refreshOne(rctx, job)
+			span.End()
 		}
 	}
 }

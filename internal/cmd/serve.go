@@ -138,7 +138,7 @@ func sCmd(cmd *cobra.Command, args []string) {
 	pullCache := pullthrough.New(
 		pullthrough.MagazineStore{Mag: mag},
 		policies,
-		nil,
+		metrics.PullThroughMetrics{},
 		pullthrough.Options{Workers: policies.MaxWorkers()},
 	).WithRefresher(pullthrough.MagazineRefresher{Mag: mag})
 	pullCache.Start(cmd.Context())
