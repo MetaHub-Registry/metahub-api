@@ -620,7 +620,7 @@ func (h Handlers) tryPullThroughBlobMiss(ctx context.Context, w http.ResponseWri
 		Digest:    digest.Digest(req.Digest),
 		MediaType: lyrUp.MediaType,
 	}
-	rc, _, err := h.mag.GetBlobReaderByUpstreamTripleByDigest(ctx, up, req.Digest)
+	rc, err := h.openUpstreamBlob(ctx, up, req.Digest)
 	if err != nil {
 		utils.Warn(l, span, "pull-through proxy: upstream fetch failed for %s: %v", utils.ShortenDigest(req.Digest), err)
 		return false
@@ -694,8 +694,8 @@ func (h Handlers) tryBlobGetRedirect(ctx context.Context, w http.ResponseWriter,
 // enqueue a cache job) or write the 404. Returns stop=true once a response has
 // been written.
 func (h Handlers) resolveBlobOnMiss(ctx context.Context, w http.ResponseWriter, r *http.Request, l *logrus.Entry, span trace.Span, req types.Request) (blob *types.Blob, stop bool) {
-	obj, statErr := h.mag.Minio.BlobStatObj(ctx, req.Digest)
-	if statErr != nil {
+	size, exists, statErr := h.statBlob(ctx, req.Digest)
+	if statErr != nil || !exists {
 		// Pull-through delivery: a base layer that was never cached still has an
 		// upstream source. Route the client (redirect or proxy) and enqueue an
 		// async cache job before falling through to the 404.
@@ -711,8 +711,8 @@ func (h Handlers) resolveBlobOnMiss(ctx context.Context, w http.ResponseWriter, 
 		return nil, true
 	}
 	utils.Info(l, span, "blob graph-miss but object present — content-addressed serve method=%s repo=%s digest=%s size=%d",
-		r.Method, req.Repo, req.Digest, obj.Size)
-	return &types.Blob{Digest: req.Digest, MediaType: octetStreamMediaType, Size: obj.Size}, false
+		r.Method, req.Repo, req.Digest, size)
+	return &types.Blob{Digest: req.Digest, MediaType: octetStreamMediaType, Size: size}, false
 }
 
 func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
