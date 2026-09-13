@@ -5,6 +5,7 @@ import (
 
 	"github.com/opencontainers/go-digest"
 	"github.com/metahub-registry/metahub-core/pkg/backends/magazine"
+	mhtypes "github.com/metahub-registry/metahub-core/pkg/types"
 	"github.com/metahub-registry/metahub-core/pkg/upstream"
 )
 
@@ -61,11 +62,12 @@ func (p MagazinePolicies) PolicyFor(registry string) (RegistryPolicy, bool) {
 			continue
 		}
 		return RegistryPolicy{
-			Enabled:        reg.AllowAnon && reg.PullThrough.Enabled,
-			Cache:          reg.PullThrough.Cache,
-			MaxCacheBytes:  reg.PullThrough.MaxCacheBytes,
-			Workers:        reg.PullThrough.Workers,
-			ClientRedirect: reg.PullThrough.ClientRedirect,
+			Enabled:         reg.AllowAnon && reg.PullThrough.Enabled,
+			Cache:           reg.PullThrough.Cache,
+			MaxCacheBytes:   reg.PullThrough.MaxCacheBytes,
+			Workers:         reg.PullThrough.Workers,
+			ClientRedirect:  reg.PullThrough.ClientRedirect,
+			RefreshInterval: reg.PullThrough.RefreshInterval,
 		}, true
 	}
 	return RegistryPolicy{}, false
@@ -85,4 +87,22 @@ func (p MagazinePolicies) MaxWorkers() int {
 		}
 	}
 	return max
+}
+
+// MagazineRefresher adapts magazine.Magazine to the cache's Refresher seam: it
+// re-discovers the upstream (repo, tag) via HeadManifestNotFound, which is
+// idempotent, rewires the Slot when the upstream digest moved, and re-stamps
+// last_refreshed. An unreachable upstream returns an error (the client was
+// already served stale by the intercept).
+type MagazineRefresher struct {
+	Mag magazine.Magazine
+}
+
+// Refresh re-checks the upstream for job's (repo, tag).
+func (r MagazineRefresher) Refresh(ctx context.Context, job RefreshJob) error {
+	req := mhtypes.Request{Repo: job.Repo, Tag: job.Tag, Profile: job.Profile}
+	if _, _, err := r.Mag.HeadManifestNotFound(ctx, req, job.Registry); err != nil {
+		return err
+	}
+	return nil
 }

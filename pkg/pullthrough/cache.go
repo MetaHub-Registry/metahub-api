@@ -8,6 +8,7 @@ package pullthrough
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/sirupsen/logrus"
 )
@@ -52,6 +53,8 @@ type RegistryPolicy struct {
 	// ClientRedirect selects the blob delivery mode on a local miss:
 	// true → 307 the client to the upstream URL; false → proxy the bytes.
 	ClientRedirect bool
+	// RefreshInterval is the cached-manifest TTL; 0 means always re-check.
+	RefreshInterval time.Duration
 }
 
 // PolicyResolver resolves the pull-through policy for a registry key. ok is
@@ -80,16 +83,19 @@ type Options struct {
 // Cache is a bounded, in-process worker pool. The zero value is not usable;
 // construct with New and drive with Start/Stop.
 type Cache struct {
-	store    Store
-	policies PolicyResolver
-	metrics  Metrics
-	opts     Options
+	store     Store
+	policies  PolicyResolver
+	metrics   Metrics
+	refresher Refresher
+	opts      Options
 
-	jobs chan Job
+	jobs     chan Job
+	refreshes chan RefreshJob
 
-	mu          sync.Mutex
-	inflight    map[string]struct{} // dedup: queued or running digests
-	cachedBytes map[string]int64    // per-registry running total
+	mu              sync.Mutex
+	inflight        map[string]struct{} // dedup: queued or running digests
+	refreshInflight map[string]struct{} // dedup: queued or running (repo:tag)
+	cachedBytes     map[string]int64    // per-registry running total
 
 	startOnce sync.Once
 	stopOnce  sync.Once
@@ -109,13 +115,15 @@ func New(store Store, policies PolicyResolver, metrics Metrics, opts Options) *C
 		metrics = nopMetrics{}
 	}
 	return &Cache{
-		store:       store,
-		policies:    policies,
-		metrics:     metrics,
-		opts:        opts,
-		jobs:        make(chan Job, opts.QueueSize),
-		inflight:    map[string]struct{}{},
-		cachedBytes: map[string]int64{},
+		store:           store,
+		policies:        policies,
+		metrics:         metrics,
+		opts:            opts,
+		jobs:            make(chan Job, opts.QueueSize),
+		refreshes:       make(chan RefreshJob, opts.QueueSize),
+		inflight:        map[string]struct{}{},
+		refreshInflight: map[string]struct{}{},
+		cachedBytes:     map[string]int64{},
 	}
 }
 
@@ -130,7 +138,13 @@ func (c *Cache) Start(ctx context.Context) {
 			c.wg.Add(1)
 			go c.worker(runCtx)
 		}
-		logrus.WithField("pull_through", true).Infof("pull-through cache started (workers=%d queue=%d)", workers, c.opts.QueueSize)
+		if c.refresher != nil {
+			for i := 0; i < refreshWorkers; i++ {
+				c.wg.Add(1)
+				go c.refreshWorker(runCtx)
+			}
+		}
+		logrus.WithField("pull_through", true).Infof("pull-through cache started (workers=%d queue=%d refresh=%t)", workers, c.opts.QueueSize, c.refresher != nil)
 	})
 }
 

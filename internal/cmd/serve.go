@@ -140,7 +140,7 @@ func sCmd(cmd *cobra.Command, args []string) {
 		policies,
 		nil,
 		pullthrough.Options{Workers: policies.MaxWorkers()},
-	)
+	).WithRefresher(pullthrough.MagazineRefresher{Mag: mag})
 	pullCache.Start(cmd.Context())
 	defer pullCache.Stop()
 
