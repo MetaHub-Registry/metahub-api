@@ -270,13 +270,27 @@ func (c *Cache) run(ctx context.Context, job Job) {
 	c.metrics.Completed(n)
 }
 
-// nopMetrics is the default Metrics sink.
+// nopMetrics is the default Metrics sink used when none is supplied.
 type nopMetrics struct{}
 
-func (nopMetrics) Enqueued()               {}
-func (nopMetrics) Dropped(string)          {}
-func (nopMetrics) Started()                {}
-func (nopMetrics) Completed(int64)         {}
-func (nopMetrics) Failed()                 {}
-func (nopMetrics) QueueDepth(int)          {}
-func (nopMetrics) RefreshOutcome(string)   {}
+func (nopMetrics) Enqueued() {
+	// no-op: metrics sink not configured
+}
+func (nopMetrics) Dropped(string) {
+	// no-op: metrics sink not configured
+}
+func (nopMetrics) Started() {
+	// no-op: metrics sink not configured
+}
+func (nopMetrics) Completed(int64) {
+	// no-op: metrics sink not configured
+}
+func (nopMetrics) Failed() {
+	// no-op: metrics sink not configured
+}
+func (nopMetrics) QueueDepth(int) {
+	// no-op: metrics sink not configured
+}
+func (nopMetrics) RefreshOutcome(string) {
+	// no-op: metrics sink not configured
+}
