@@ -16,6 +16,7 @@ import (
 	"github.com/metahub-registry/metahub-api/pkg/api/v1/router"
 	"github.com/metahub-registry/metahub-api/pkg/config"
 	"github.com/metahub-registry/metahub-api/pkg/metrics"
+	"github.com/metahub-registry/metahub-api/pkg/pullthrough"
 	"github.com/metahub-registry/metahub-core/pkg/backends/magazine"
 	mlver "github.com/metahub-registry/metahub-core/pkg/version"
 )
@@ -130,7 +131,20 @@ func sCmd(cmd *cobra.Command, args []string) {
 	// Metrics live on a dedicated listener; see startMetricsServer.
 	startMetricsServer(cmd)
 
-	r := router.Initialize(mag, oidcProvider, godmodeAuth)
+	// Async pull-through cache: streams upstream base layers into MetaHub storage
+	// off the client request path (add-pull-through-manifest-intercept). Inert
+	// unless a registry opts in via pull_through.enabled.
+	policies := pullthrough.MagazinePolicies{Mag: mag}
+	pullCache := pullthrough.New(
+		pullthrough.MagazineStore{Mag: mag},
+		policies,
+		nil,
+		pullthrough.Options{Workers: policies.MaxWorkers()},
+	)
+	pullCache.Start(cmd.Context())
+	defer pullCache.Stop()
+
+	r := router.Initialize(mag, oidcProvider, godmodeAuth, pullCache)
 	addr := fmt.Sprintf(":%d", port)
 	logrus.Infof("Start serving on %s", addr)
 	err = http.ListenAndServe(addr, r)

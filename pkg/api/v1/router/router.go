@@ -13,6 +13,7 @@ import (
 	"github.com/metahub-registry/metahub-api/pkg/api/v1/handlers"
 	"github.com/metahub-registry/metahub-api/pkg/config"
 	"github.com/metahub-registry/metahub-api/pkg/metrics"
+	"github.com/metahub-registry/metahub-api/pkg/pullthrough"
 	"github.com/metahub-registry/metahub-core/pkg/backends/magazine"
 )
 
@@ -30,10 +31,11 @@ const (
 	repoImgBlobRefPath         = "/{repo}/{image}/blobs/{reference}"
 )
 
-func Initialize(mag magazine.Magazine, oidcProvider *handlers.OIDCProvider, godmode *handlers.GodModeAuth) *chi.Mux {
+func Initialize(mag magazine.Magazine, oidcProvider *handlers.OIDCProvider, godmode *handlers.GodModeAuth, pullCache *pullthrough.Cache) *chi.Mux {
 	// Handlers
 	h := handlers.NewHandlers("dev", mag, oidcProvider, godmode).
-		WithRegistry(config.RegistryConfigFromViper())
+		WithRegistry(config.RegistryConfigFromViper()).
+		WithPullThrough(pullCache)
 	// define router
 	router := chi.NewRouter()
 	log := logrus.StandardLogger().WithFields(

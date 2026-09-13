@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"github.com/metahub-registry/metahub-api/pkg/config"
+	"github.com/metahub-registry/metahub-api/pkg/pullthrough"
 	"github.com/metahub-registry/metahub-core/pkg/backends/magazine"
 	"go.opentelemetry.io/otel"
 )
@@ -18,6 +19,9 @@ type Handlers struct {
 	// registry holds the namespace-authz switches (add-registry-namespace-authz);
 	// the zero value is behavior-neutral (both enforcement flags off).
 	registry config.RegistryConfig
+	// pullThrough is the async cache worker (add-pull-through-manifest-intercept).
+	// Shared (pointer) across handler copies; nil when not wired (tests).
+	pullThrough *pullthrough.Cache
 }
 
 func NewHandlers(env string, mag magazine.Magazine, oidc *OIDCProvider, godmode *GodModeAuth) Handlers {
@@ -33,6 +37,13 @@ func NewHandlers(env string, mag magazine.Magazine, oidc *OIDCProvider, godmode 
 // Server wiring calls this; tests that don't get the behavior-neutral zero value.
 func (h Handlers) WithRegistry(rc config.RegistryConfig) Handlers {
 	h.registry = rc
+	return h
+}
+
+// WithPullThrough returns a copy of h with the async pull-through cache worker
+// set. Server wiring calls this; tests that don't get the nil (inert) value.
+func (h Handlers) WithPullThrough(c *pullthrough.Cache) Handlers {
+	h.pullThrough = c
 	return h
 }
 
