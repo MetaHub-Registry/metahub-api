@@ -61,10 +61,11 @@ func (p MagazinePolicies) PolicyFor(registry string) (RegistryPolicy, bool) {
 			continue
 		}
 		return RegistryPolicy{
-			Enabled:       reg.AllowAnon && reg.PullThrough.Enabled,
-			Cache:         reg.PullThrough.Cache,
-			MaxCacheBytes: reg.PullThrough.MaxCacheBytes,
-			Workers:       reg.PullThrough.Workers,
+			Enabled:        reg.AllowAnon && reg.PullThrough.Enabled,
+			Cache:          reg.PullThrough.Cache,
+			MaxCacheBytes:  reg.PullThrough.MaxCacheBytes,
+			Workers:        reg.PullThrough.Workers,
+			ClientRedirect: reg.PullThrough.ClientRedirect,
 		}, true
 	}
 	return RegistryPolicy{}, false

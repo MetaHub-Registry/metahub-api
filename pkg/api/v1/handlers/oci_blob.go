@@ -13,6 +13,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/metahub-registry/metahub-api/pkg/lib/helper"
 	"github.com/metahub-registry/metahub-api/pkg/metrics"
+	"github.com/metahub-registry/metahub-api/pkg/pullthrough"
 	"github.com/metahub-registry/metahub-core/pkg/types"
 	"github.com/metahub-registry/metahub-core/pkg/upstream"
 	"github.com/metahub-registry/metahub-core/pkg/utils"
@@ -564,6 +565,72 @@ func (h Handlers) BlobUploadPostHandler(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
+// tryPullThroughBlobMiss routes a blob GET whose bytes are absent locally to the
+// configured upstream, and enqueues an async cache job. Returns true when it has
+// written a response (client redirect or proxied bytes); false lets the caller
+// follow the existing not-found path (non-alias, non-pull-through, or upstream
+// fetch failure).
+func (h Handlers) tryPullThroughBlobMiss(ctx context.Context, w http.ResponseWriter, r *http.Request, l *logrus.Entry, span trace.Span, req types.Request) bool {
+	if h.pullThrough == nil || r.Method != http.MethodGet {
+		return false
+	}
+	// Resolve the upstream registry from the request repo prefix (D6: no
+	// Blob.upstream_registries; the alias carries the registry).
+	regURL, strippedRepo, ok := h.mag.ResolveUpstreamRegistry(req.Repo)
+	if !ok {
+		return false
+	}
+	pol, ok := h.pullThrough.Policy(regURL)
+	if !ok || !pol.Enabled {
+		return false
+	}
+	lyrUp, found, err := h.mag.Database.UpstreamGetByLayerDigest(ctx, req.Digest)
+	if err != nil || !found {
+		return false
+	}
+	// Best-effort, non-blocking cache enqueue for the requested digest (D1).
+	h.pullThrough.Enqueue(pullthrough.Job{
+		Registry:  regURL,
+		Repo:      strippedRepo,
+		Tag:       lyrUp.Tag,
+		Digest:    req.Digest,
+		MediaType: lyrUp.MediaType,
+	})
+	if pol.ClientRedirect {
+		redURL := h.mag.GetBlobRedirectURL(lyrUp, req.Digest)
+		utils.Info(l, span, "pull-through: 307 %s to upstream %s", utils.ShortenDigest(req.Digest), redURL)
+		w.Header().Set(dockerContentDigestKey, req.Digest)
+		w.Header().Set(Location, redURL)
+		w.Header().Del("Authorization")
+		http.Redirect(w, r, redURL, http.StatusTemporaryRedirect)
+		return true
+	}
+	// Proxy the upstream bytes to the client (no tee; the worker caches the
+	// requested digest independently at constant memory).
+	up := upstream.UpstreamTriple{
+		Reg:       lyrUp.Reg,
+		Repo:      lyrUp.Repo,
+		Tag:       lyrUp.Tag,
+		Digest:    digest.Digest(req.Digest),
+		MediaType: lyrUp.MediaType,
+	}
+	rc, _, err := h.mag.GetBlobReaderByUpstreamTripleByDigest(ctx, up, req.Digest)
+	if err != nil {
+		utils.Warn(l, span, "pull-through proxy: upstream fetch failed for %s: %v", utils.ShortenDigest(req.Digest), err)
+		return false
+	}
+	defer rc.Close()
+	utils.Info(l, span, "pull-through: proxying %s from upstream", utils.ShortenDigest(req.Digest))
+	w.Header().Set(dockerContentDigestKey, req.Digest)
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Docker-Distribution-API-Version", "registry/2.0")
+	w.WriteHeader(http.StatusOK)
+	if _, cerr := io.Copy(w, rc); cerr != nil {
+		utils.Warn(l, span, "pull-through proxy: stream failed for %s: %v", utils.ShortenDigest(req.Digest), cerr)
+	}
+	return true
+}
+
 // tryBlobGetRedirect attempts upstream or MinIO redirect for a GET blob request.
 // Returns true if a redirect was written and the caller should return.
 func (h Handlers) tryBlobGetRedirect(ctx context.Context, w http.ResponseWriter, r *http.Request, l *logrus.Entry, span trace.Span, req types.Request, up upstream.UpstreamTriple) bool {
@@ -662,6 +729,12 @@ func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
 		// HEADs 200 must be able to GET the bytes.
 		obj, statErr := h.mag.Minio.BlobStatObj(ctx, req.Digest)
 		if statErr != nil {
+			// Pull-through delivery: a base layer that was never cached still
+			// has an upstream source. Route the client (redirect or proxy) and
+			// enqueue an async cache job before falling through to the 404.
+			if h.tryPullThroughBlobMiss(ctx, w, r, l, span, req) {
+				return
+			}
 			utils.Info(l, span, "blob graph-miss AND object-absent — 404 method=%s repo=%s digest=%s stat_err=%v",
 				r.Method, req.Repo, req.Digest, statErr)
 			// Not found

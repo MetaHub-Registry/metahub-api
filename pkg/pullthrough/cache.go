@@ -49,6 +49,9 @@ type RegistryPolicy struct {
 	Cache         string // "off" | "async"
 	MaxCacheBytes int64  // 0 = unlimited
 	Workers       int    // 0 = DefaultWorkers
+	// ClientRedirect selects the blob delivery mode on a local miss:
+	// true → 307 the client to the upstream URL; false → proxy the bytes.
+	ClientRedirect bool
 }
 
 // PolicyResolver resolves the pull-through policy for a registry key. ok is
@@ -139,6 +142,15 @@ func (c *Cache) Stop() {
 		}
 		c.wg.Wait()
 	})
+}
+
+// Policy resolves the pull-through policy for a registry key (nil-safe). The
+// blob handler consults it to pick the delivery mode on a local miss.
+func (c *Cache) Policy(registry string) (RegistryPolicy, bool) {
+	if c == nil {
+		return RegistryPolicy{}, false
+	}
+	return c.policies.PolicyFor(registry)
 }
 
 // Enqueue submits job for asynchronous caching. It never blocks: returns false
