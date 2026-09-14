@@ -638,6 +638,22 @@ func (h Handlers) tryPullThroughBlobMiss(ctx context.Context, w http.ResponseWri
 	return true
 }
 
+// upstreamRedirectAllowed reports whether a blob GET may be 307-redirected to
+// the layer's upstream registry. For pull-through (YAML-configured) registries
+// the operator's client_redirect flag is the single gate: false (the default)
+// means credentialed and anonymous upstreams are proxied/served locally —
+// never redirected; true opts into client-side delivery, requiring the client
+// to hold its own upstream credentials. Registries without an active
+// pull-through policy keep the legacy AllowAnon gate.
+func (h Handlers) upstreamRedirectAllowed(lyrUp types.Upstream) bool {
+	if h.pullThrough != nil {
+		if pol, ok := h.pullThrough.Policy(lyrUp.Reg); ok && pol.Enabled {
+			return pol.ClientRedirect
+		}
+	}
+	return h.mag.AllowsUnauthorizedPull(lyrUp)
+}
+
 // tryBlobGetRedirect attempts upstream or MinIO redirect for a GET blob request.
 // Returns true if a redirect was written and the caller should return.
 func (h Handlers) tryBlobGetRedirect(ctx context.Context, w http.ResponseWriter, r *http.Request, l *logrus.Entry, span trace.Span, req types.Request, up upstream.UpstreamTriple) bool {
@@ -651,7 +667,7 @@ func (h Handlers) tryBlobGetRedirect(ctx context.Context, w http.ResponseWriter,
 	if lyrUp, found, e := h.mag.Database.UpstreamGetByLayerDigest(ctx, req.Digest); e != nil {
 		utils.ErrorHandler(l, span, e, "failed to fetch layer by digest")
 		return true
-	} else if found && h.mag.AllowsUnauthorizedPull(lyrUp) {
+	} else if found && h.upstreamRedirectAllowed(lyrUp) {
 		utils.Debug(l, span, "upstream redirect found: %s (reqDig: %s / upstreamDig: %s)", lyrUp.GetLabel(), utils.ShortenDigest(req.Digest), utils.ShortenDigest(lyrUp.Digest.String()))
 		redUrl := h.mag.GetBlobRedirectURL(lyrUp, req.Digest)
 		utils.Debug(l, span, "redirecting to upstream: %s", redUrl)

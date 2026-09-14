@@ -62,7 +62,10 @@ func (p MagazinePolicies) PolicyFor(registry string) (RegistryPolicy, bool) {
 			continue
 		}
 		return RegistryPolicy{
-			Enabled:         reg.AllowAnon && reg.PullThrough.Enabled,
+			// Pull-throughEligible (metalib) is the single source of truth:
+			// enabled + (allow_anon OR credentials). Credentialed
+			// allow_anon:false registries participate via the proxy path.
+			Enabled:         reg.PullThroughEligible(),
 			Cache:           reg.PullThrough.Cache,
 			MaxCacheBytes:   reg.PullThrough.MaxCacheBytes,
 			Workers:         reg.PullThrough.Workers,

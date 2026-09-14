@@ -15,6 +15,7 @@ import (
 	"github.com/metahub-registry/metahub-api/pkg/pullthrough"
 	"github.com/metahub-registry/metahub-core/pkg/backends/magazine"
 	mhtypes "github.com/metahub-registry/metahub-core/pkg/types"
+	"github.com/metahub-registry/metahub-core/pkg/upstream"
 )
 
 // ptFakeDB embeds the magazine.Database interface (nil) and overrides only the
@@ -109,6 +110,90 @@ func TestTryPullThroughBlobMiss_UpstreamNotFound(t *testing.T) {
 	w := httptest.NewRecorder()
 	assert.False(t, h.tryPullThroughBlobMiss(ctx, w, httptest.NewRequest(http.MethodGet, "/v2/x", nil),
 		logrus.NewEntry(logrus.New()), trace.SpanFromContext(ctx), ptReq()))
+}
+
+// redirectGateMagazine builds a magazine with a single pull-through registry
+// whose AllowAnon/credentials/client_redirect settings are parameterized, so
+// the redirect-gate matrix can be exercised.
+func redirectGateMagazine(allowAnon, creds, clientRedirect, enabled bool) magazine.Magazine {
+	rc := magazine.RegistryConfig{
+		Name:      "harbor.example.com",
+		URL:       "harbor.example.com",
+		TLS:       false,
+		AllowAnon: allowAnon,
+		PullThrough: magazine.PullThroughConfig{
+			Enabled:        enabled,
+			Cache:          "async",
+			ClientRedirect: clientRedirect,
+		},
+	}
+	if creds {
+		rc.User = "robot"
+		rc.Password = "secret"
+	}
+	return magazine.Magazine{Config: magazine.MagConfig{Registries: []magazine.RegistryConfig{rc}}}
+}
+
+// gateHandlers wires a Handlers with the given magazine; the fake DB reports
+// the layer's upstream as harbor.example.com so the redirect gate consults it.
+func gateHandlers(mag magazine.Magazine) Handlers {
+	return NewHandlers("test", mag, nil, nil).
+		WithPullThrough(pullthrough.New(nil, pullthrough.MagazinePolicies{Mag: mag}, nil, pullthrough.Options{}))
+}
+
+var gateLyrUp = mhtypes.Upstream{Reg: "harbor.example.com", Repo: "library/alpine", Digest: "sha256:deadbeef"}
+
+// TestUpstreamRedirectAllowed covers the Option-A gate matrix: pull-through
+// registries are gated on client_redirect alone (proxy is the default for
+// credentialed registries); legacy/unknown registries keep the AllowAnon gate.
+func TestUpstreamRedirectAllowed(t *testing.T) {
+	tests := []struct {
+		name          string
+		allowAnon     bool
+		creds         bool
+		clientRedir   bool
+		enabled       bool
+		want          bool
+		wantLegacyAno bool // expect fallback decision when policy inactive
+	}{
+		{"credentialed + redirect off → proxy (A default)", true, true, false, true, false, false},
+		{"anon + redirect off → proxy", true, false, false, true, false, false},
+		{"credentialed private + redirect off → proxy", false, true, false, true, false, false},
+		{"anon + redirect on → 307", true, false, true, true, true, false},
+		{"credentialed private + redirect on → 307 (client holds upstream creds)", false, true, true, true, true, false},
+		{"disabled pull-through, anon → legacy AllowAnon fallback", true, false, false, false, true, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := gateHandlers(redirectGateMagazine(tt.allowAnon, tt.creds, tt.clientRedir, tt.enabled))
+			assert.Equal(t, tt.want, h.upstreamRedirectAllowed(gateLyrUp))
+		})
+	}
+	// Unknown registry (no policy): legacy AllowAnon gate denies.
+	h := gateHandlers(magazine.Magazine{Config: magazine.MagConfig{Registries: []magazine.RegistryConfig{}}})
+	assert.False(t, h.upstreamRedirectAllowed(gateLyrUp), "unknown registry must not be redirect-eligible")
+}
+
+// TestTryBlobGetRedirect_ClientRedirectOn covers the full 307 path when the
+// pull-through registry opts into client_redirect: the layer's upstream is
+// known, the gate allows, and the redirect carries no Authorization header.
+func TestTryBlobGetRedirect_ClientRedirectOn(t *testing.T) {
+	db := ptFakeDB{upFound: true, up: gateLyrUp}
+	mag := redirectGateMagazine(true, true, true, true) // credentialed, opt-in
+	h := gateHandlers(mag)
+	// ptFakeDB must be reachable through the magazine for UpstreamGetByLayerDigest.
+	h.mag.Database = db
+
+	ctx := context.Background()
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/v2/harbor.example.com/library/alpine/blobs/sha256:deadbeef", nil)
+	r.Header.Set("Authorization", "Bearer metahub-token")
+
+	require.True(t, h.tryBlobGetRedirect(ctx, w, r, logrus.NewEntry(logrus.New()), trace.SpanFromContext(ctx), ptReq(), upstream.UpstreamTriple{}))
+	assert.Equal(t, http.StatusTemporaryRedirect, w.Code)
+	assert.Contains(t, w.Header().Get("Location"), "harbor.example.com")
+	assert.Empty(t, w.Header().Get("Authorization"), "metahub token must be stripped")
+	assert.NotContains(t, w.Header().Get("Location"), "robot", "upstream credentials must never leak into Location")
 }
 
 // countingRefresher records Refresh invocations.

@@ -32,9 +32,22 @@ func testMagazine() magazine.Magazine {
 			},
 		},
 		{
-			// Enabled but no anonymous pull → not eligible.
+			// Enabled but neither anonymous nor credentialed → not eligible.
 			Name:      "noanon.example",
 			AllowAnon: false,
+			PullThrough: magazine.PullThroughConfig{
+				Enabled: true,
+				Cache:   "async",
+			},
+		},
+		{
+			// Credentialed private registry: eligible via the proxy path
+			// (allow_anon:false + user/password).
+			Name:      "priv.example",
+			URL:       "registry.gitlab.com",
+			AllowAnon: false,
+			User:      "robot",
+			Password:  "secret",
 			PullThrough: magazine.PullThroughConfig{
 				Enabled: true,
 				Cache:   "async",
@@ -60,7 +73,11 @@ func TestMagazinePolicies_PolicyFor(t *testing.T) {
 
 	noAnon, ok := p.PolicyFor("noanon.example")
 	require.True(t, ok)
-	assert.False(t, noAnon.Enabled, "allow_anon:false must be ineligible even when enabled")
+	assert.False(t, noAnon.Enabled, "allow_anon:false without credentials must be ineligible even when enabled")
+
+	priv, ok := p.PolicyFor("priv.example")
+	require.True(t, ok)
+	assert.True(t, priv.Enabled, "credentialed allow_anon:false registries are eligible (proxy path)")
 
 	_, ok = p.PolicyFor("unknown.example")
 	assert.False(t, ok, "unknown registry must not resolve")
