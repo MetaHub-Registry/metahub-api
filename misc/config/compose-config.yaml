@@ -53,14 +53,26 @@ registries:
   - name: harbor.example.com
     allow_anon: true
     tls: false
+    pull_through:
+      enabled: true
+      client_redirect: false
+      cache: async
   # Legacy zot upstream — kept until prod-stack and remaining consumers are
   # migrated; remove afterwards.
   - name: zot.example.com
     allow_anon: true
     tls: false
+    pull_through:
+      enabled: true
+      client_redirect: false
+      cache: async
   - name: local-reg
     url: registry:5050
     allow_anon: true
     tls: false
+    pull_through:
+      enabled: true
+      client_redirect: false
+      cache: async
     
 

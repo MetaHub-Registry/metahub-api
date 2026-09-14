@@ -50,16 +50,18 @@ version: '3'
 
 vars:
   SESSION_DIR: sessions
-  DEV_STACK_DIR: ~/src/gitlab.com/qnib-ansible/dev-stack
   REPO_API_DIR: "."
   REPO_LIB_DIR: "../metahub-core"
   REPO_ADMIN_DIR: "../metahub-admin"
   REPO_OUTFITTER_DIR: "../outfitter"
   REPO_UI_DIR: "~/src/gitlab.com/qnib-frontend/metahub-ui"
   REPO_CE_DIR: "~/src/gitlab.com/qnib-metahub/community-edition"
-  REPO_DEVSTACK_DIR: "~/src/gitlab.com/qnib-ansible/dev-stack"
-  REPO_PRODSTACK_DIR: "~/src/gitlab.com/qnib-ansible/prod-stack"
+  REPO_STACK_DIR: "~/src/gitlab.com/qnib-gocd/yaml-config/metahub/stack"
   REPO_FLUX_DIR: "~/src/gitlab.com/qnib-ansible/flux/metahub"
+  REPO_E2E_DEV_DIR: "~/src/gitlab.com/qnib-gocd/metahub-pipelines/e2e-dev"
+  REPO_MH_POPULATE_PROD_DIR: "~/src/gitlab.com/qnib-gocd/metahub-pipelines/mh-populate-prod"
+  REPO_OCI_CONFORMANCE_DIR: "~/src/gitlab.com/qnib-gocd/metahub-pipelines/oci-conformance"
+  REPO_ORAS_CONFORMANCE_DIR: "~/src/gitlab.com/qnib-gocd/metahub-pipelines/oras-conformance"
   REPO_DOCS_DIR: "~/src/gitlab.com/qshuf-mkdocs/metahub-docs"
   REPO_SITEAGENT_DIR: "~/src/gitlab.com/qnib-metahub/waldur-site-agent-metahub"
 
@@ -99,14 +101,23 @@ tasks:
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-ui", REPO_DIR: "{{.REPO_UI_DIR}}" }
       - task: _branch-and-mr
         vars: { DESC: "{{.DESC}}", REPO_NAME: "community-edition", REPO_DIR: "{{.REPO_CE_DIR}}" }
-      # dev-stack + prod-stack track main directly (like flux/metahub): no session
-      # branch/MR, edits commit to main and push to main.
+      # stack tracks main directly (like flux/metahub): no session branch/MR,
+      # edits commit to main and push to main. The consolidated stack repo renders
+      # BOTH GoCD groups — dev/*.gocd.yaml (dev) and prod/*.gocd.yaml (prod).
       - task: _worktree-main
-        vars: { DESC: "{{.DESC}}", REPO_NAME: "dev-stack", REPO_DIR: "{{.REPO_DEVSTACK_DIR}}" }
-      - task: _worktree-main
-        vars: { DESC: "{{.DESC}}", REPO_NAME: "prod-stack", REPO_DIR: "{{.REPO_PRODSTACK_DIR}}" }
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "stack", REPO_DIR: "{{.REPO_STACK_DIR}}" }
       - task: _worktree-main
         vars: { DESC: "{{.DESC}}", REPO_NAME: "flux/metahub", REPO_DIR: "{{.REPO_FLUX_DIR}}" }
+      # metahub-pipelines/* are the GoCD pipeline-support repos (consumed on
+      # main by the dev pipelines), so they track main directly like flux/metahub.
+      - task: _worktree-main
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-pipelines/e2e-dev", REPO_DIR: "{{.REPO_E2E_DEV_DIR}}" }
+      - task: _worktree-main
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-pipelines/mh-populate-prod", REPO_DIR: "{{.REPO_MH_POPULATE_PROD_DIR}}" }
+      - task: _worktree-main
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-pipelines/oci-conformance", REPO_DIR: "{{.REPO_OCI_CONFORMANCE_DIR}}" }
+      - task: _worktree-main
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-pipelines/oras-conformance", REPO_DIR: "{{.REPO_ORAS_CONFORMANCE_DIR}}" }
       - task: _branch-and-mr
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-docs", REPO_DIR: "{{.REPO_DOCS_DIR}}" }
       - task: _branch-and-mr
@@ -166,11 +177,17 @@ tasks:
       - task: _bump-dev
         vars: { DESC: "{{.DESC}}", REPOS: "{{.REPOS}}", REPO_NAME: "community-edition", REPO_DIR: "{{.REPO_CE_DIR}}" }
       - task: _bump-dev
-        vars: { DESC: "{{.DESC}}", REPOS: "{{.REPOS}}", REPO_NAME: "dev-stack", REPO_DIR: "{{.REPO_DEVSTACK_DIR}}" }
-      - task: _bump-dev
-        vars: { DESC: "{{.DESC}}", REPOS: "{{.REPOS}}", REPO_NAME: "prod-stack", REPO_DIR: "{{.REPO_PRODSTACK_DIR}}" }
+        vars: { DESC: "{{.DESC}}", REPOS: "{{.REPOS}}", REPO_NAME: "stack", REPO_DIR: "{{.REPO_STACK_DIR}}" }
       - task: _bump-dev
         vars: { DESC: "{{.DESC}}", REPOS: "{{.REPOS}}", REPO_NAME: "flux/metahub", REPO_DIR: "{{.REPO_FLUX_DIR}}" }
+      - task: _bump-dev
+        vars: { DESC: "{{.DESC}}", REPOS: "{{.REPOS}}", REPO_NAME: "metahub-pipelines/e2e-dev", REPO_DIR: "{{.REPO_E2E_DEV_DIR}}" }
+      - task: _bump-dev
+        vars: { DESC: "{{.DESC}}", REPOS: "{{.REPOS}}", REPO_NAME: "metahub-pipelines/mh-populate-prod", REPO_DIR: "{{.REPO_MH_POPULATE_PROD_DIR}}" }
+      - task: _bump-dev
+        vars: { DESC: "{{.DESC}}", REPOS: "{{.REPOS}}", REPO_NAME: "metahub-pipelines/oci-conformance", REPO_DIR: "{{.REPO_OCI_CONFORMANCE_DIR}}" }
+      - task: _bump-dev
+        vars: { DESC: "{{.DESC}}", REPOS: "{{.REPOS}}", REPO_NAME: "metahub-pipelines/oras-conformance", REPO_DIR: "{{.REPO_ORAS_CONFORMANCE_DIR}}" }
       - task: _bump-dev
         vars: { DESC: "{{.DESC}}", REPOS: "{{.REPOS}}", REPO_NAME: "metahub-docs", REPO_DIR: "{{.REPO_DOCS_DIR}}" }
       - task: _bump-dev
@@ -219,13 +236,13 @@ tasks:
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-ui", REPO_DIR: "{{.REPO_UI_DIR}}" }
       - task: _finalize-repo
         vars: { DESC: "{{.DESC}}", REPO_NAME: "community-edition", REPO_DIR: "{{.REPO_CE_DIR}}" }
-      # dev-stack + prod-stack track main (like flux/metahub) — not finalized via
-      # session-branch logic; their edits are pushed to main directly.
+      # stack tracks main (like flux/metahub) — not finalized via session-branch
+      # logic; its edits are pushed to main directly.
       - task: _finalize-repo
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-docs", REPO_DIR: "{{.REPO_DOCS_DIR}}" }
       - task: _finalize-repo
         vars: { DESC: "{{.DESC}}", REPO_NAME: "waldur-site-agent-metahub", REPO_DIR: "{{.REPO_SITEAGENT_DIR}}" }
-      # outfitter is a _worktree-main repo (like dev-stack/prod-stack/flux/metahub):
+      # outfitter is a _worktree-main repo (like stack/flux/metahub):
       # it tracks its own branch directly rather than a session branch + MR, so it
       # is not finalized through the session-branch logic.
       # Archive the session-level OpenSpec proposal(s) so they are no longer
@@ -274,9 +291,12 @@ tasks:
             metahub-admin)     eval echo "{{.REPO_ADMIN_DIR}}" ;;
             metahub-ui)        eval echo "{{.REPO_UI_DIR}}" ;;
             community-edition) eval echo "{{.REPO_CE_DIR}}" ;;
-            dev-stack)         eval echo "{{.REPO_DEVSTACK_DIR}}" ;;
-            prod-stack)        eval echo "{{.REPO_PRODSTACK_DIR}}" ;;
+            stack)             eval echo "{{.REPO_STACK_DIR}}" ;;
             flux/metahub)      eval echo "{{.REPO_FLUX_DIR}}" ;;
+            metahub-pipelines/e2e-dev)          eval echo "{{.REPO_E2E_DEV_DIR}}" ;;
+            metahub-pipelines/mh-populate-prod) eval echo "{{.REPO_MH_POPULATE_PROD_DIR}}" ;;
+            metahub-pipelines/oci-conformance)  eval echo "{{.REPO_OCI_CONFORMANCE_DIR}}" ;;
+            metahub-pipelines/oras-conformance) eval echo "{{.REPO_ORAS_CONFORMANCE_DIR}}" ;;
             metahub-docs)      eval echo "{{.REPO_DOCS_DIR}}" ;;
             waldur-site-agent-metahub) eval echo "{{.REPO_SITEAGENT_DIR}}" ;;
             outfitter)         eval echo "{{.REPO_OUTFITTER_DIR}}" ;;
@@ -292,7 +312,7 @@ tasks:
       - sh: 'grep -q "^{{.REPO_NAME}}=" "{{.SESSION_DIR}}/{{.CLI_ARGS}}/.branches"'
         msg: "Repo '{{.REPO_NAME}}' not found in session '{{.CLI_ARGS}}'"
       - sh: '[ -n "{{.REPO_DIR}}" ]'
-        msg: "Unknown repo '{{.REPO_NAME}}'. Must be one of: metahub-api, metalib, metahub-admin, metahub-ui, community-edition, dev-stack, prod-stack, flux/metahub, metahub-docs, waldur-site-agent-metahub, outfitter"
+        msg: "Unknown repo '{{.REPO_NAME}}'. Must be one of: metahub-api, metalib, metahub-admin, metahub-ui, community-edition, stack, flux/metahub, metahub-docs, waldur-site-agent-metahub, outfitter"
     cmds:
       - task: _version-repo
         vars:
@@ -319,9 +339,12 @@ tasks:
             metahub-admin)     eval echo "{{.REPO_ADMIN_DIR}}" ;;
             metahub-ui)        eval echo "{{.REPO_UI_DIR}}" ;;
             community-edition) eval echo "{{.REPO_CE_DIR}}" ;;
-            dev-stack)         eval echo "{{.REPO_DEVSTACK_DIR}}" ;;
-            prod-stack)        eval echo "{{.REPO_PRODSTACK_DIR}}" ;;
+            stack)             eval echo "{{.REPO_STACK_DIR}}" ;;
             flux/metahub)      eval echo "{{.REPO_FLUX_DIR}}" ;;
+            metahub-pipelines/e2e-dev)          eval echo "{{.REPO_E2E_DEV_DIR}}" ;;
+            metahub-pipelines/mh-populate-prod) eval echo "{{.REPO_MH_POPULATE_PROD_DIR}}" ;;
+            metahub-pipelines/oci-conformance)  eval echo "{{.REPO_OCI_CONFORMANCE_DIR}}" ;;
+            metahub-pipelines/oras-conformance) eval echo "{{.REPO_ORAS_CONFORMANCE_DIR}}" ;;
             metahub-docs)      eval echo "{{.REPO_DOCS_DIR}}" ;;
             waldur-site-agent-metahub) eval echo "{{.REPO_SITEAGENT_DIR}}" ;;
             outfitter)         eval echo "{{.REPO_OUTFITTER_DIR}}" ;;
@@ -378,11 +401,17 @@ tasks:
       - task: _worktree-rm
         vars: { DESC: "{{.DESC}}", REPO_NAME: "community-edition", REPO_DIR: "{{.REPO_CE_DIR}}" }
       - task: _worktree-rm
-        vars: { DESC: "{{.DESC}}", REPO_NAME: "dev-stack", REPO_DIR: "{{.REPO_DEVSTACK_DIR}}" }
-      - task: _worktree-rm
-        vars: { DESC: "{{.DESC}}", REPO_NAME: "prod-stack", REPO_DIR: "{{.REPO_PRODSTACK_DIR}}" }
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "stack", REPO_DIR: "{{.REPO_STACK_DIR}}" }
       - task: _worktree-rm
         vars: { DESC: "{{.DESC}}", REPO_NAME: "flux/metahub", REPO_DIR: "{{.REPO_FLUX_DIR}}" }
+      - task: _worktree-rm
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-pipelines/e2e-dev", REPO_DIR: "{{.REPO_E2E_DEV_DIR}}" }
+      - task: _worktree-rm
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-pipelines/mh-populate-prod", REPO_DIR: "{{.REPO_MH_POPULATE_PROD_DIR}}" }
+      - task: _worktree-rm
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-pipelines/oci-conformance", REPO_DIR: "{{.REPO_OCI_CONFORMANCE_DIR}}" }
+      - task: _worktree-rm
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-pipelines/oras-conformance", REPO_DIR: "{{.REPO_ORAS_CONFORMANCE_DIR}}" }
       - task: _worktree-rm
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-docs", REPO_DIR: "{{.REPO_DOCS_DIR}}" }
       - task: _worktree-rm
@@ -419,11 +448,17 @@ tasks:
       - task: _worktree-resume
         vars: { DESC: "{{.DESC}}", REPO_NAME: "community-edition", REPO_DIR: "{{.REPO_CE_DIR}}" }
       - task: _worktree-resume
-        vars: { DESC: "{{.DESC}}", REPO_NAME: "dev-stack", REPO_DIR: "{{.REPO_DEVSTACK_DIR}}" }
-      - task: _worktree-resume
-        vars: { DESC: "{{.DESC}}", REPO_NAME: "prod-stack", REPO_DIR: "{{.REPO_PRODSTACK_DIR}}" }
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "stack", REPO_DIR: "{{.REPO_STACK_DIR}}" }
       - task: _worktree-resume
         vars: { DESC: "{{.DESC}}", REPO_NAME: "flux/metahub", REPO_DIR: "{{.REPO_FLUX_DIR}}" }
+      - task: _worktree-resume
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-pipelines/e2e-dev", REPO_DIR: "{{.REPO_E2E_DEV_DIR}}" }
+      - task: _worktree-resume
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-pipelines/mh-populate-prod", REPO_DIR: "{{.REPO_MH_POPULATE_PROD_DIR}}" }
+      - task: _worktree-resume
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-pipelines/oci-conformance", REPO_DIR: "{{.REPO_OCI_CONFORMANCE_DIR}}" }
+      - task: _worktree-resume
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-pipelines/oras-conformance", REPO_DIR: "{{.REPO_ORAS_CONFORMANCE_DIR}}" }
       - task: _worktree-resume
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-docs", REPO_DIR: "{{.REPO_DOCS_DIR}}" }
       - task: _worktree-resume
@@ -462,9 +497,9 @@ tasks:
   #   2. no worktree has uncommitted changes
   #   3. no worktree has commits that were never pushed
   #   4. no OpenSpec change is still active in the session workspace
-  # Repos tracking main (dev-stack, prod-stack, flux/metahub) never get a
-  # status, so gate 1 skips them — but 2 and 3 still apply, which is exactly
-  # where un-pushed infra edits tend to hide.
+  # Repos tracking main (stack, flux/metahub, metahub-pipelines/*) never get a status, so gate 1
+  # skips them — but 2 and 3 still apply, which is exactly where un-pushed
+  # infra edits tend to hide.
   #
   # FORCE=1 skips the gates. Only use it when the work really is disposable.
   # ===========================================================================
@@ -568,11 +603,17 @@ tasks:
       - task: _worktree-rm
         vars: { DESC: "{{.DESC}}", REPO_NAME: "community-edition", REPO_DIR: "{{.REPO_CE_DIR}}" }
       - task: _worktree-rm
-        vars: { DESC: "{{.DESC}}", REPO_NAME: "dev-stack", REPO_DIR: "{{.REPO_DEVSTACK_DIR}}" }
-      - task: _worktree-rm
-        vars: { DESC: "{{.DESC}}", REPO_NAME: "prod-stack", REPO_DIR: "{{.REPO_PRODSTACK_DIR}}" }
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "stack", REPO_DIR: "{{.REPO_STACK_DIR}}" }
       - task: _worktree-rm
         vars: { DESC: "{{.DESC}}", REPO_NAME: "flux/metahub", REPO_DIR: "{{.REPO_FLUX_DIR}}" }
+      - task: _worktree-rm
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-pipelines/e2e-dev", REPO_DIR: "{{.REPO_E2E_DEV_DIR}}" }
+      - task: _worktree-rm
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-pipelines/mh-populate-prod", REPO_DIR: "{{.REPO_MH_POPULATE_PROD_DIR}}" }
+      - task: _worktree-rm
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-pipelines/oci-conformance", REPO_DIR: "{{.REPO_OCI_CONFORMANCE_DIR}}" }
+      - task: _worktree-rm
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-pipelines/oras-conformance", REPO_DIR: "{{.REPO_ORAS_CONFORMANCE_DIR}}" }
       - task: _worktree-rm
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-docs", REPO_DIR: "{{.REPO_DOCS_DIR}}" }
       - task: _worktree-rm
@@ -652,8 +693,8 @@ tasks:
   #
   # The session's .branches file is the source of truth for the expected
   # branch per repo: session-branch repos (<repo>=<iid>-<desc>) must sit on
-  # their session branch, while repos that track main directly (dev-stack,
-  # prod-stack, flux/metahub) must sit on the branch recorded for them
+  # their session branch, while repos that track main directly (stack,
+  # flux/metahub, metahub-pipelines/*) must sit on the branch recorded for them
   # (usually main; outfitter pins its own branch). Fails when a mapped
   # worktree is missing, detached, or on the wrong branch — useful before
   # committing, finishing, or archiving a session.
@@ -698,8 +739,14 @@ tasks:
             echo "  [${REPO}] NOT a git worktree at ${WT}"
             FAILED=1
           elif [ "${CURRENT}" = "HEAD" ]; then
-            echo "  [${REPO}] DETACHED HEAD — expected branch '${EXPECTED}'"
-            FAILED=1
+            # main-tracking repos whose source checkout holds the branch are
+            # created detached at origin/<branch> — that is fine.
+            if [ "$(git -C "${WT}" rev-parse HEAD 2>/dev/null)" = "$(git -C "${WT}" rev-parse "origin/${EXPECTED}" 2>/dev/null)" ]; then
+              echo "  [${REPO}] OK — detached at origin/${EXPECTED}"
+            else
+              echo "  [${REPO}] DETACHED HEAD — expected branch '${EXPECTED}'"
+              FAILED=1
+            fi
           else
             echo "  [${REPO}] WRONG branch — on '${CURRENT}', expected '${EXPECTED}'"
             FAILED=1
@@ -727,17 +774,17 @@ tasks:
         echo "All mapped worktrees are on their expected branches."
 
   # ===========================================================================
-  # session:prod-test — switch prod-stack pipelines to session branches
+  # session:prod-test — switch stack prod/ pipelines to session branches
   #
   # Before merging MRs, validate the full prod pipeline against the session
   # branches. Replaces `branch: main` with the session branch in every
   # *.gocd.yaml that references a session-branch repo, commits, and pushes
-  # prod-stack (which tracks main directly).
+  # (stack tracks main directly).
   #
   # After GoCD validates, run session:prod-restore → then merge the MRs.
   # ===========================================================================
   prod-test:
-    desc: "Switch prod-stack to session branches for pre-merge validation: task session:prod-test -- <description>"
+    desc: "Switch stack prod pipelines to session branches for pre-merge validation: task session:prod-test -- <description>"
     requires:
       vars: [CLI_ARGS]
     vars:
@@ -747,16 +794,16 @@ tasks:
         msg: "Usage: task session:prod-test -- <description>"
       - sh: '[ -f "{{.SESSION_DIR}}/{{.CLI_ARGS}}/.branches" ]'
         msg: "Session '{{.CLI_ARGS}}' not found"
-      - sh: '[ -d "{{.SESSION_DIR}}/{{.CLI_ARGS}}/prod-stack" ]'
-        msg: "prod-stack worktree not found — run session:resume first"
+      - sh: '[ -d "{{.SESSION_DIR}}/{{.CLI_ARGS}}/stack" ]'
+        msg: "stack worktree not found — run session:resume first"
     cmds:
       - |
         set -e
         S="$(pwd)/{{.SESSION_DIR}}/{{.DESC}}"
         BRANCHES_FILE="${S}/.branches"
-        PS_WT="${S}/prod-stack"
+        PS_WT="${S}/stack"
 
-        echo "=== [prod-test] Switching prod-stack to session branches ==="
+        echo "=== [prod-test] Switching stack prod pipelines to session branches ==="
 
         while IFS='=' read -r REPO BRANCH; do
           [ -z "${REPO}" ] && continue
@@ -764,10 +811,10 @@ tasks:
           # Only act on session-branch repos (skip _worktree-main repos on main)
           [ "${BRANCH}" = "main" ] && continue
 
-          # Find *.gocd.yaml files that reference this repo's git URL
-          FILES=$(grep -rl "${REPO}\.git" "${PS_WT}/"*.gocd.yaml 2>/dev/null || true)
+          # Find *.gocd.yaml files in stack/prod/ that reference this repo's git URL
+          FILES=$(grep -rl "${REPO}\.git" "${PS_WT}/prod/"*.gocd.yaml 2>/dev/null || true)
           if [ -z "${FILES}" ]; then
-            echo "  [${REPO}] No prod-stack pipeline found — skipping"
+            echo "  [${REPO}] No stack prod pipeline found — skipping"
             continue
           fi
 
@@ -782,24 +829,24 @@ tasks:
         git add -A
         if git diff --cached --quiet; then
           echo ""
-          echo "No changes to prod-stack — all session repos may already be on non-main branches or have no prod pipelines."
+          echo "No changes — all session repos may already be on non-main branches or have no prod pipelines."
         else
           git commit -m "session:prod-test: switch to session branches for {{.DESC}}"
           git push
           echo ""
-          echo "=== prod-stack switched to session branches ==="
+          echo "=== stack prod pipelines switched to session branches ==="
           echo "Trigger GoCD prod pipelines and validate, then run:"
           echo "  task session:prod-restore -- {{.DESC}}"
         fi
 
   # ===========================================================================
-  # session:prod-restore — revert prod-stack back to main branches
+  # session:prod-restore — revert stack prod/ pipelines back to main branches
   #
   # Run after GoCD validation succeeds. Restores all *.gocd.yaml files to
   # `branch: main`, commits, and pushes. Then merge the session MRs.
   # ===========================================================================
   prod-restore:
-    desc: "Restore prod-stack to main branches after pre-merge validation: task session:prod-restore -- <description>"
+    desc: "Restore stack prod pipelines to main branches after pre-merge validation: task session:prod-restore -- <description>"
     requires:
       vars: [CLI_ARGS]
     vars:
@@ -809,23 +856,23 @@ tasks:
         msg: "Usage: task session:prod-restore -- <description>"
       - sh: '[ -f "{{.SESSION_DIR}}/{{.CLI_ARGS}}/.branches" ]'
         msg: "Session '{{.CLI_ARGS}}' not found"
-      - sh: '[ -d "{{.SESSION_DIR}}/{{.CLI_ARGS}}/prod-stack" ]'
-        msg: "prod-stack worktree not found — run session:resume first"
+      - sh: '[ -d "{{.SESSION_DIR}}/{{.CLI_ARGS}}/stack" ]'
+        msg: "stack worktree not found — run session:resume first"
     cmds:
       - |
         set -e
         S="$(pwd)/{{.SESSION_DIR}}/{{.DESC}}"
         BRANCHES_FILE="${S}/.branches"
-        PS_WT="${S}/prod-stack"
+        PS_WT="${S}/stack"
 
-        echo "=== [prod-restore] Restoring prod-stack to main branches ==="
+        echo "=== [prod-restore] Restoring stack prod pipelines to main branches ==="
 
         while IFS='=' read -r REPO BRANCH; do
           [ -z "${REPO}" ] && continue
           case "${REPO}" in *.status|*.version|*.mr) continue;; esac
           [ "${BRANCH}" = "main" ] && continue
 
-          FILES=$(grep -rl "${REPO}\.git" "${PS_WT}/"*.gocd.yaml 2>/dev/null || true)
+          FILES=$(grep -rl "${REPO}\.git" "${PS_WT}/prod/"*.gocd.yaml 2>/dev/null || true)
           if [ -z "${FILES}" ]; then
             continue
           fi
@@ -841,20 +888,20 @@ tasks:
         git add -A
         if git diff --cached --quiet; then
           echo ""
-          echo "No changes — prod-stack already on main branches (prod-test was never run or already restored)."
+          echo "No changes — stack prod pipelines already on main branches (prod-test was never run or already restored)."
         else
           git commit -m "session:prod-restore: revert to main branches after {{.DESC}}"
           git push
           echo ""
-          echo "=== prod-stack restored to main branches ==="
+          echo "=== stack prod pipelines restored to main branches ==="
           echo "Now merge the session MRs."
         fi
 
   # ===========================================================================
   # session:push — push all session branches in dependency order
   #
-  # The dev-stack render line (`_update-dev-stack` → dev-stack Taskfile.yml)
-  # fixes the pipeline slot order:
+  # `_update-dev-stack` renders dev pipelines into the stack worktree (dev/)
+  # and pushes them. The render slot order is:
   #
   #     API : LIB : ADMIN : CE : dev : UI : DOCS : OUTFITTER : SITEAGENT
   #
@@ -863,23 +910,19 @@ tasks:
   # repos that consume it, so their MR pipelines build against the new code:
   #
   #     metalib → metahub-api → metahub-admin → community-edition →
-  #     dev-stack → metahub-ui → metahub-docs → outfitter →
-  #     waldur-site-agent-metahub
+  #     metahub-ui → metahub-docs → outfitter → waldur-site-agent-metahub
   #
   # metalib is the Go library both metahub-api and metahub-admin consume
   # (`replace ../metahub-core`), and the harness manifest sources skills/commands
-  # from `metalib/.opencode` — so it goes first. dev-stack sits at its "dev"
-  # slot so its re-render sees the branches pushed just before it.
+  # from `metalib/.opencode` — so it goes first.
   #
   # Two phases (mirrors the session workspace `push` task):
   #   1. verify: every mapped worktree exists, sits on its .branches branch,
   #      and is fully committed — any violation aborts BEFORE the first push.
   #   2. push: only branches that are ahead of origin, in the defined order.
   #
-  # Repos tracking main (dev-stack, prod-stack, flux/metahub) push their
-  # worktree HEAD:main; the unmapped metahub-pipelines/e2e-dev worktree (not
-  # in .branches, e.g. the drift-gate stage) is appended last and pushes its
-  # current branch.
+  # Repos tracking main (stack, flux/metahub, metahub-pipelines/*) push their
+  # worktree HEAD:main; they are appended after the dependency-ordered repos.
   # ===========================================================================
   push:
     desc: "Push session branches (dependency order): task session:push -- <description>"
@@ -900,12 +943,12 @@ tasks:
 
         # Dependency order: metalib (the shared library — go.mod `replace` in
         # metahub-api/metahub-admin, plus the harness `.opencode` source) lands
-        # before its consumers; dev-stack at its "dev" render slot. The raw
-        # dev-stack render line is API:LIB:ADMIN:CE:dev:UI:DOCS:OUTFITTER:
-        # SITEAGENT — a slot listing, not a dependency order.
-        ORDERED="metalib metahub-api metahub-admin community-edition dev-stack metahub-ui metahub-docs outfitter waldur-site-agent-metahub"
+        # before its consumers. The render slot order in the stack repo is
+        # API:LIB:ADMIN:CE:OCI:UI:DOCS:OUTFITTER:SITEAGENT — a slot listing, not
+        # a dependency order.
+        ORDERED="metalib metahub-api metahub-admin community-edition metahub-ui metahub-docs outfitter waldur-site-agent-metahub"
         # Not part of the render line — pushed after; order not load-bearing.
-        TAIL="prod-stack flux/metahub metahub-pipelines/e2e-dev"
+        TAIL="stack flux/metahub metahub-pipelines/e2e-dev metahub-pipelines/mh-populate-prod metahub-pipelines/oci-conformance metahub-pipelines/oras-conformance"
 
         echo "=== Pushing session '{{.DESC}}' (dependency order: lib → api → admin → …) ==="
 
@@ -918,15 +961,21 @@ tasks:
             continue
           fi
           # `|| true` matters: task runs cmds with `-e -o pipefail`, and the
-          # grep misses for unmapped repos (metahub-pipelines/e2e-dev) — the
-          # failed pipeline must not kill the loop.
+          # grep misses for unmapped repos (e.g. a nested flux/* worktree that
+          # is not in .branches) — the failed pipeline must not kill the loop.
           EXPECTED=$(grep "^${REPO}=" "${BRANCHES_FILE}" 2>/dev/null | head -1 | cut -d= -f2 || true)
           CURRENT=$(git -C "${WT}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
           if [ -n "${EXPECTED}" ] && [ "${CURRENT}" != "${EXPECTED}" ]; then
-            echo "  [${REPO}] ABORT: on '${CURRENT}' but .branches expects '${EXPECTED}'" >&2
-            echo "         fix first: task session:check -- {{.DESC}}" >&2
-            FAILED=1
-            continue
+            # Accept the detached-at-origin/<branch> shape for main-tracking
+            # repos whose source checkout holds the branch.
+            if [ "${CURRENT}" = "HEAD" ] && [ "$(git -C "${WT}" rev-parse HEAD 2>/dev/null)" = "$(git -C "${WT}" rev-parse "origin/${EXPECTED}" 2>/dev/null)" ]; then
+              :
+            else
+              echo "  [${REPO}] ABORT: on '${CURRENT}' but .branches expects '${EXPECTED}'" >&2
+              echo "         fix first: task session:check -- {{.DESC}}" >&2
+              FAILED=1
+              continue
+            fi
           fi
           DIRT=$(git -C "${WT}" status --porcelain 2>/dev/null)
           if [ -n "${DIRT}" ]; then
@@ -948,7 +997,13 @@ tasks:
         for REPO in ${ORDERED} ${TAIL}; do
           WT="${S}/${REPO}"
           [ -d "${WT}" ] || continue
-          BRANCH=$(git -C "${WT}" rev-parse --abbrev-ref HEAD 2>/dev/null) || continue
+          CURRENT=$(git -C "${WT}" rev-parse --abbrev-ref HEAD 2>/dev/null) || continue
+          # Detached worktrees push to the .branches branch (main-tracking repos).
+          BRANCH="${CURRENT}"
+          if [ "${CURRENT}" = "HEAD" ]; then
+            BRANCH=$(grep "^${REPO}=" "${BRANCHES_FILE}" 2>/dev/null | head -1 | cut -d= -f2 || true)
+            BRANCH="${BRANCH:-main}"
+          fi
           git -C "${WT}" fetch -q origin "${BRANCH}" 2>/dev/null || true
           AHEAD=$(git -C "${WT}" rev-list --count "origin/${BRANCH}..HEAD" 2>/dev/null || echo "?")
           if [ "${AHEAD}" = "0" ]; then
@@ -1537,15 +1592,21 @@ tasks:
         echo "[${REPO_NAME}] Ready for review: ${TARGET}"
 
   # ---------------------------------------------------------------------------
-  # _update-dev-stack — update dev-stack Taskfile with new branches
+  # _update-dev-stack — render dev pipelines in the consolidated stack worktree
+  #
+  # The former dev-stack repo was folded into `stack` (dev/ + prod/). This
+  # renders the session's MR branches into stack/dev/ — the `dev` argument
+  # selects the stack Taskfile's `render:dev:<API>:<LIB>:<ADMIN>:<CE>:<OCI>:
+  # <UI>:<DOCS>:<OUTFITTER>:<SITEAGENT>` task (the current dev-stack Taskfile
+  # signature had no group segment, so it was rendered into the wrong repo).
   # ---------------------------------------------------------------------------
   _update-dev-stack:
     internal: true
     requires:
       vars: [DESC]
     vars:
-      DEV_STACK_EXPANDED:
-        sh: eval echo "{{.DEV_STACK_DIR}}"
+      STACK_WT_PATH:
+        sh: echo "$(pwd)/{{.SESSION_DIR}}/{{.DESC}}/stack"
       API_BRANCH:
         sh: grep "^metahub-api=" "{{.SESSION_DIR}}/{{.DESC}}/.branches" | cut -d= -f2
       LIB_BRANCH:
@@ -1563,14 +1624,14 @@ tasks:
       SITEAGENT_BRANCH:
         sh: grep "^waldur-site-agent-metahub=" "{{.SESSION_DIR}}/{{.DESC}}/.branches" | cut -d= -f2
     preconditions:
-      - sh: '[ -d "{{.DEV_STACK_EXPANDED}}" ]'
-        msg: "Dev-stack directory not found at {{.DEV_STACK_DIR}}"
-      - sh: '[ -f "{{.DEV_STACK_EXPANDED}}/Taskfile.yml" ]'
-        msg: "Dev-stack Taskfile.yml not found"
+      - sh: '[ -d "{{.STACK_WT_PATH}}" ]'
+        msg: "stack worktree not found at {{.STACK_WT_PATH}} — run session:resume first"
+      - sh: '[ -f "{{.STACK_WT_PATH}}/Taskfile.yml" ]'
+        msg: "stack Taskfile.yml not found at {{.STACK_WT_PATH}}"
     cmds:
       - |
         set -e
-        DEV_STACK="{{.DEV_STACK_EXPANDED}}"
+        STACK="{{.STACK_WT_PATH}}"
         API="{{.API_BRANCH}}"
         LIB="{{.LIB_BRANCH}}"
         ADMIN="{{.ADMIN_BRANCH}}"
@@ -1582,7 +1643,7 @@ tasks:
         DESC="{{.DESC}}"
 
         echo ""
-        echo "=== Updating dev-stack Taskfile ==="
+        echo "=== Rendering dev pipelines into stack/dev/ ==="
         echo "  API:   ${API}"
         echo "  LIB:   ${LIB}"
         echo "  ADMIN: ${ADMIN}"
@@ -1592,26 +1653,26 @@ tasks:
         echo "  OUTFIT:${OUTFITTER}"
         echo "  SITEAG:${SITEAGENT}"
 
-        cd "${DEV_STACK}"
+        cd "${STACK}"
 
-        # render slots: API:LIB:ADMIN:CE:OCI:UI:DOCS:OUTFITTER:SITEAGENT (all 9 required)
-        RENDER_CMD="render:${API}:${LIB}:${ADMIN}:${CE}:dev:${UI}:${DOCS}:${OUTFITTER}:${SITEAGENT}"
-        NEW_LINE="      - task: ${RENDER_CMD}"
-        awk -v new="${NEW_LINE}" '
-          /- task: render:/ && !/\{\{/ { print new; next }
-          { print }
-        ' Taskfile.yml > Taskfile.yml.tmp && mv Taskfile.yml.tmp Taskfile.yml
+        # stack render slots: API:LIB:ADMIN:CE:OCI:UI:DOCS:OUTFITTER:SITEAGENT.
+        # The leading `dev:` selects the dev group (stack renders prod/ via
+        # render:prod:*). OCI is literal `dev` — it only feeds OCI_BRANCH_IDX.
+        RENDER_CMD="render:dev:${API}:${LIB}:${ADMIN}:${CE}:dev:${UI}:${DOCS}:${OUTFITTER}:${SITEAGENT}"
+        # The `render:dev:*` task needs GITLAB_QNIB_REPO_RO_TOKEN (stack/.env or
+        # the environment); its own precondition reports a clear error if absent.
+        task ${RENDER_CMD}
 
-        echo "[dev-stack] Updated Taskfile.yml"
+        # Path-limited add: never stage stray files (stack has no .gitignore,
+        # so a bare `git add -A` could stage a local .env/token).
+        git add -A dev
+        git commit -m "render dev pipelines for session ${DESC}" || echo "[stack] Nothing to commit"
+        git push || echo "[stack] Push failed — push manually"
 
-        git add Taskfile.yml
-        git commit -m "start new session ${DESC}" || echo "[dev-stack] Nothing to commit"
-        git push || echo "[dev-stack] Push failed — push manually"
-
-        echo "[dev-stack] Committed and pushed"
+        echo "[stack] Dev pipelines rendered and pushed (dev/)"
         echo ""
-        echo "[dev-stack] Render the session pipelines with (all 9 slots incl. OUTFITTER + SITEAGENT):"
-        echo "             (cd ${DEV_STACK} && task ${RENDER_CMD})"
+        echo "[stack] Re-render at any time with:"
+        echo "        (cd ${STACK} && task ${RENDER_CMD})"
 
   # ---------------------------------------------------------------------------
   # _worktree-rm — remove a single worktree

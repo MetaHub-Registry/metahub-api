@@ -2,6 +2,65 @@
 
 > This file helps AI agents understand the repo quickly.
 
+## Session: readd-pull-through-cache — repo4 routes + Option-A delivery policy (2026-09-14)
+
+Branch `116-readd-pull-through-cache`, commits `7020083`…`3241270`.
+Sonar gate OK (new coverage 81.3%, 0 new violations).
+
+### 1. repo4 router routes (5-segment /v2 paths)
+
+Deep upstream repos pulled through the cache
+(`/v2/harbor.example.com/<proj>/<sub>/<sub>/<image>/manifests/<tag>`) need 5 path
+segments, but every `/v2/` route family stopped at 4 (`repo3`) → chi 404 with
+the unhelpful body `404 page not found`. Fix: `repo4ImgManifestRefPath`,
+`repo4ImgBlobRefPath` and `Repo4ImgBlobUploadUuidPath` registered for
+manifests GET/HEAD/PUT, blobs GET/HEAD, blob uploads POST/PATCH/PUT/GET, tags
+and referrers (`pkg/api/v1/router/router.go`). metalib's `extractRepoName`
+joins `repo4` accordingly.
+
+### 2. Option-A pull-through delivery policy (`upstream-credential-proxy`)
+
+Two holes closed in the blob delivery path:
+
+- **`tryBlobGetRedirect`** (`pkg/api/v1/handlers/oci_blob.go`): the upstream
+  `307` was gated on `AllowsUnauthorizedPull` (= `AllowAnon`) only — a
+  credentialed registry with `allow_anon: true` (harbor!) would redirect
+  clients to private upstreams they cannot authenticate against. New
+  `upstreamRedirectAllowed(lyrUp)` helper: pull-through registries are gated
+  on `client_redirect` alone (`false` = proxy default, `true` = explicit
+  opt-in where the client holds its own upstream creds); non-pull-through
+  registries keep the legacy AllowAnon gate.
+- **`PolicyFor.Enabled`** (`pkg/pullthrough/magazine.go`): was
+  `AllowAnon && Enabled`, silently excluding `allow_anon:false` +
+  credentials registries (registry.gitlab.com!) from blob-miss proxying and
+  cache enqueue. Now uses metalib's `RegistryConfig.PullThroughEligible()` —
+  the single source of truth.
+
+Semantics (session addendum D-cred1): proxy is the default for credentialed
+registries; `client_redirect: true` is the operator's statement that clients
+hold their own upstream credentials (their login answers the redirect
+challenge). MetaHub never injects its own credentials into a redirect
+(`Authorization` stripped, `Location` from registry name + digest only).
+
+### 3. Live-verified behavior
+
+GoCD `pull-through-test_MR116_dev` scenario (verified locally via
+`run-pull-through.sh`, 4/4 each): anonymous
+(`harbor.example.com/library/alpine:3.24`), private harbor
+(`harbor.example.com/metahub/api/dev/metahub-api_mr116_dev:14`), private GitLab
+(`registry.github.com/metahub-registry/metahub-api:prod.2026-03-16-1`) — manifest
+resolution, Neo4j graph ingest, layer delivery, warm pull.
+
+### Gotchas
+
+- The `upstream` import in handlers is metalib's `pkg/upstream` (`UpstreamTriple`);
+  the `:Upstream` graph node type is `types.Upstream` (metalib `pkg/types`).
+  `UpstreamGetByLayerDigest` returns the latter.
+- `pullthrough.Cache.Policy()` is nil-safe (`c == nil` guard) — calling it on a
+  zero `Handlers` is fine.
+- OpenSpec: `add-upstream-registry-credentials` (5/10) carries the remaining
+  live-e2e + graph tasks; spec deltas amended to Option A.
+
 ## Session: waldur-outfitter-improvements — fix-digest-manifest-existence handler test (2026-09-08)
 
 **Change:** `fix-digest-manifest-existence`, commit `99620ed`.

@@ -13,6 +13,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/metahub-registry/metahub-api/pkg/lib/helper"
 	"github.com/metahub-registry/metahub-api/pkg/metrics"
+	"github.com/metahub-registry/metahub-api/pkg/pullthrough"
 	"github.com/metahub-registry/metahub-core/pkg/types"
 	"github.com/metahub-registry/metahub-core/pkg/upstream"
 	"github.com/metahub-registry/metahub-core/pkg/utils"
@@ -33,6 +34,8 @@ const (
 	dockerUploadUUIDKey     = "Docker-Upload-UUID"
 	dockerContentDigestKey  = "Docker-Content-Digest"
 	FailedAuthPushPrfFMT    = "failed to authorize push for profile '%s'"
+	attrKeyBlobDigest       = "blob.digest"
+	octetStreamMediaType    = "application/octet-stream"
 )
 
 // legacyPushAuthz applies the pre-namespace push rule, and reports nothing when
@@ -564,6 +567,93 @@ func (h Handlers) BlobUploadPostHandler(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
+// tryPullThroughBlobMiss routes a blob GET whose bytes are absent locally to the
+// configured upstream, and enqueues an async cache job. Returns true when it has
+// written a response (client redirect or proxied bytes); false lets the caller
+// follow the existing not-found path (non-alias, non-pull-through, or upstream
+// fetch failure).
+func (h Handlers) tryPullThroughBlobMiss(ctx context.Context, w http.ResponseWriter, r *http.Request, l *logrus.Entry, span trace.Span, req types.Request) bool {
+	if h.pullThrough == nil || r.Method != http.MethodGet {
+		return false
+	}
+	ctx, ispan := tracer.Start(ctx, "BlobHandler.tryPullThroughBlobMiss")
+	defer ispan.End()
+	ispan.SetAttributes(attribute.Key(attrKeyBlobDigest).String(req.Digest), attribute.Key("repo").String(req.Repo))
+	// Resolve the upstream registry from the request repo prefix (D6: no
+	// Blob.upstream_registries; the alias carries the registry).
+	regURL, strippedRepo, ok := h.mag.ResolveUpstreamRegistry(req.Repo)
+	if !ok {
+		return false
+	}
+	pol, ok := h.pullThrough.Policy(regURL)
+	if !ok || !pol.Enabled {
+		return false
+	}
+	lyrUp, found, err := h.mag.Database.UpstreamGetByLayerDigest(ctx, req.Digest)
+	if err != nil || !found {
+		return false
+	}
+	// Best-effort, non-blocking cache enqueue for the requested digest (D1).
+	h.pullThrough.Enqueue(pullthrough.Job{
+		Registry:  regURL,
+		Repo:      strippedRepo,
+		Tag:       lyrUp.Tag,
+		Digest:    req.Digest,
+		MediaType: lyrUp.MediaType,
+	})
+	if pol.ClientRedirect {
+		redURL := h.mag.GetBlobRedirectURL(lyrUp, req.Digest)
+		metrics.PullThroughBlobOutcome("redirect")
+		utils.Info(l, span, "pull-through: 307 %s to upstream %s", utils.ShortenDigest(req.Digest), redURL)
+		w.Header().Set(dockerContentDigestKey, req.Digest)
+		w.Header().Set(Location, redURL)
+		w.Header().Del("Authorization")
+		http.Redirect(w, r, redURL, http.StatusTemporaryRedirect)
+		return true
+	}
+	// Proxy the upstream bytes to the client (no tee; the worker caches the
+	// requested digest independently at constant memory).
+	up := upstream.UpstreamTriple{
+		Reg:       lyrUp.Reg,
+		Repo:      lyrUp.Repo,
+		Tag:       lyrUp.Tag,
+		Digest:    digest.Digest(req.Digest),
+		MediaType: lyrUp.MediaType,
+	}
+	rc, err := h.openUpstreamBlob(ctx, up, req.Digest)
+	if err != nil {
+		utils.Warn(l, span, "pull-through proxy: upstream fetch failed for %s: %v", utils.ShortenDigest(req.Digest), err)
+		return false
+	}
+	defer rc.Close()
+	metrics.PullThroughBlobOutcome("proxy")
+	utils.Info(l, span, "pull-through: proxying %s from upstream", utils.ShortenDigest(req.Digest))
+	w.Header().Set(dockerContentDigestKey, req.Digest)
+	w.Header().Set("Content-Type", octetStreamMediaType)
+	w.Header().Set("Docker-Distribution-API-Version", "registry/2.0")
+	w.WriteHeader(http.StatusOK)
+	if _, cerr := io.Copy(w, rc); cerr != nil {
+		utils.Warn(l, span, "pull-through proxy: stream failed for %s: %v", utils.ShortenDigest(req.Digest), cerr)
+	}
+	return true
+}
+
+// upstreamRedirectAllowed reports whether a blob GET may be 307-redirected to
+// the layer's upstream registry. For pull-through (YAML-configured) registries
+// the operator's client_redirect flag is the single gate: false (the default)
+// means credentialed and anonymous upstreams are proxied/served locally —
+// never redirected; true opts into client-side delivery, requiring the client
+// to hold its own upstream credentials. Registries without an active
+// pull-through policy keep the legacy AllowAnon gate.
+func (h Handlers) upstreamRedirectAllowed(lyrUp types.Upstream) bool {
+	if h.pullThrough != nil {
+		if pol, ok := h.pullThrough.Policy(lyrUp.Reg); ok && pol.Enabled {
+			return pol.ClientRedirect
+		}
+	}
+	return h.mag.AllowsUnauthorizedPull(lyrUp)
+}
+
 // tryBlobGetRedirect attempts upstream or MinIO redirect for a GET blob request.
 // Returns true if a redirect was written and the caller should return.
 func (h Handlers) tryBlobGetRedirect(ctx context.Context, w http.ResponseWriter, r *http.Request, l *logrus.Entry, span trace.Span, req types.Request, up upstream.UpstreamTriple) bool {
@@ -573,11 +663,11 @@ func (h Handlers) tryBlobGetRedirect(ctx context.Context, w http.ResponseWriter,
 	// distinguishes "presign + 307" from the streamed-copy path below.
 	ctx, redirSpan := tracer.Start(ctx, "BlobHandler.tryBlobGetRedirect")
 	defer redirSpan.End()
-	redirSpan.SetAttributes(attribute.Key("blob.digest").String(req.Digest))
+	redirSpan.SetAttributes(attribute.Key(attrKeyBlobDigest).String(req.Digest))
 	if lyrUp, found, e := h.mag.Database.UpstreamGetByLayerDigest(ctx, req.Digest); e != nil {
 		utils.ErrorHandler(l, span, e, "failed to fetch layer by digest")
 		return true
-	} else if found && h.mag.AllowsUnauthorizedPull(lyrUp) {
+	} else if found && h.upstreamRedirectAllowed(lyrUp) {
 		utils.Debug(l, span, "upstream redirect found: %s (reqDig: %s / upstreamDig: %s)", lyrUp.GetLabel(), utils.ShortenDigest(req.Digest), utils.ShortenDigest(lyrUp.Digest.String()))
 		redUrl := h.mag.GetBlobRedirectURL(lyrUp, req.Digest)
 		utils.Debug(l, span, "redirecting to upstream: %s", redUrl)
@@ -608,6 +698,37 @@ func (h Handlers) tryBlobGetRedirect(ctx context.Context, w http.ResponseWriter,
 		}
 	}
 	return false
+}
+
+// resolveBlobOnMiss handles the graph-miss case for a blob GET/HEAD. Blob
+// metadata lives in the graph, but the authoritative store is the object bucket
+// (blobs are keyed by digest): the e2e `parse rules --empty-graph=…` wipe
+// DETACH DELETEs :Blob nodes while leaving the S3 objects intact, so a
+// graph-miss does NOT mean the bytes are gone. Stat the object and, when
+// present, synthesise the descriptor so HEAD 200 and GET stream stay
+// consistent. When the object is absent, route pull-through (redirect/proxy and
+// enqueue a cache job) or write the 404. Returns stop=true once a response has
+// been written.
+func (h Handlers) resolveBlobOnMiss(ctx context.Context, w http.ResponseWriter, r *http.Request, l *logrus.Entry, span trace.Span, req types.Request) (blob *types.Blob, stop bool) {
+	size, exists, statErr := h.statBlob(ctx, req.Digest)
+	if statErr != nil || !exists {
+		// Pull-through delivery: a base layer that was never cached still has an
+		// upstream source. Route the client (redirect or proxy) and enqueue an
+		// async cache job before falling through to the 404.
+		if h.tryPullThroughBlobMiss(ctx, w, r, l, span, req) {
+			return nil, true
+		}
+		utils.Info(l, span, "blob graph-miss AND object-absent — 404 method=%s repo=%s digest=%s stat_err=%v",
+			r.Method, req.Repo, req.Digest, statErr)
+		det := helper.NewDetailFromReq(req)
+		e := helper.NewErrPayload("NAME_UNKNOWN", "could not find blob", det)
+		span.SetStatus(http.StatusNotFound, e.Message)
+		helper.WriteOCIErrror(w, http.StatusNotFound, e)
+		return nil, true
+	}
+	utils.Info(l, span, "blob graph-miss but object present — content-addressed serve method=%s repo=%s digest=%s size=%d",
+		r.Method, req.Repo, req.Digest, size)
+	return &types.Blob{Digest: req.Digest, MediaType: octetStreamMediaType, Size: size}, false
 }
 
 func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
@@ -652,29 +773,12 @@ func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !found {
-		// Content-addressed fallback: blob metadata lives in the graph, but the
-		// authoritative store is the object bucket (blobs are keyed by digest). The
-		// e2e `parse rules --empty-graph=…` wipe DETACH DELETEs :Blob nodes while
-		// leaving the S3 objects intact, so a graph-miss does NOT mean the blob is
-		// gone. Stat the object; when present, synthesise the descriptor and serve
-		// it (HEAD 200 / GET stream) so clients don't re-upload/re-send an existing
-		// (potentially ~GB) layer. HEAD and GET stay consistent — a client that
-		// HEADs 200 must be able to GET the bytes.
-		obj, statErr := h.mag.Minio.BlobStatObj(ctx, req.Digest)
-		if statErr != nil {
-			utils.Info(l, span, "blob graph-miss AND object-absent — 404 method=%s repo=%s digest=%s stat_err=%v",
-				r.Method, req.Repo, req.Digest, statErr)
-			// Not found
-			msg = "could not find blob"
-			det := helper.NewDetailFromReq(req)
-			e := helper.NewErrPayload("NAME_UNKNOWN", msg, det)
-			span.SetStatus(http.StatusNotFound, e.Message)
-			helper.WriteOCIErrror(w, http.StatusNotFound, e)
+		// Content-addressed fallback + pull-through routing; see resolveBlobOnMiss.
+		var stop bool
+		blob, stop = h.resolveBlobOnMiss(ctx, w, r, l, span, req)
+		if stop {
 			return
 		}
-		utils.Info(l, span, "blob graph-miss but object present — content-addressed serve method=%s repo=%s digest=%s size=%d",
-			r.Method, req.Repo, req.Digest, obj.Size)
-		blob = &types.Blob{Digest: req.Digest, MediaType: "application/octet-stream", Size: obj.Size}
 	} else {
 		utils.Debug(l, span, "blob for w/ digest '%s' found in graph", utils.ShortenDigest(req.Digest))
 	}
@@ -724,7 +828,7 @@ func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
 	defer rc.Close()
 	span.SetStatus(codes.Ok, "streaming blob")
 	w.Header().Set(dockerContentDigestKey, blob.Digest)
-	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Type", octetStreamMediaType)
 	w.Header().Set(ContentLength, fmt.Sprintf("%d", blob.Size))
 	w.Header().Set("Docker-Distribution-API-Version", "registry/2.0")
 	w.WriteHeader(http.StatusOK)
@@ -733,7 +837,7 @@ func (h Handlers) BlobHandler(w http.ResponseWriter, r *http.Request) {
 	// bytes_streamed lets the trace attribute wall-time to actual throughput.
 	_, streamSpan := tracer.Start(ctx, "BlobHandler.streamBlob")
 	streamSpan.SetAttributes(
-		attribute.Key("blob.digest").String(req.Digest),
+		attribute.Key(attrKeyBlobDigest).String(req.Digest),
 		attribute.Key("blob.size").Int64(int64(blob.Size)),
 	)
 	n, cerr := io.Copy(w, rc)

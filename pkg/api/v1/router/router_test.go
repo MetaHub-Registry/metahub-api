@@ -31,7 +31,7 @@ func newTestGodMode() *handlers.GodModeAuth {
 // POST /api/v1/godmode/login to the GodModeLogin handler and that the route
 // is reachable without any authentication.
 func TestRouter_GodModeLoginRoute_Public(t *testing.T) {
-	r := Initialize(magazine.Magazine{}, nil, newTestGodMode())
+	r := Initialize(magazine.Magazine{}, nil, newTestGodMode(), nil)
 
 	// Valid god-mode credentials → 200
 	body := strings.NewReader(`{"username":"oci","password":"oci-pass"}`)
@@ -50,7 +50,7 @@ func TestRouter_GodModeLoginRoute_Public(t *testing.T) {
 // router is initialised without god-mode, POST /api/v1/godmode/login returns
 // 404 (feature not enabled) rather than 401 or 405.
 func TestRouter_GodModeLoginRoute_DisabledReturns404(t *testing.T) {
-	r := Initialize(magazine.Magazine{}, nil, nil)
+	r := Initialize(magazine.Magazine{}, nil, nil, nil)
 
 	body := strings.NewReader(`{"username":"oci","password":"oci-pass"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/godmode/login", body)
@@ -64,7 +64,7 @@ func TestRouter_GodModeLoginRoute_DisabledReturns404(t *testing.T) {
 // TestRouter_AuthConfigRoute_Public confirms that GET /api/v1/auth/config is
 // wired and reachable without authentication.
 func TestRouter_AuthConfigRoute_Public(t *testing.T) {
-	r := Initialize(magazine.Magazine{}, nil, newTestGodMode())
+	r := Initialize(magazine.Magazine{}, nil, newTestGodMode(), nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/config", nil)
 	rr := httptest.NewRecorder()
@@ -80,7 +80,7 @@ func TestRouter_AuthConfigRoute_Public(t *testing.T) {
 // TestRouter_AuthConfigRoute_NoAuthRequired confirms that no Authorization
 // header is required to reach the auth/config endpoint.
 func TestRouter_AuthConfigRoute_NoAuthRequired(t *testing.T) {
-	r := Initialize(magazine.Magazine{}, nil, nil)
+	r := Initialize(magazine.Magazine{}, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/config", nil)
 	// Intentionally no Authorization header.
