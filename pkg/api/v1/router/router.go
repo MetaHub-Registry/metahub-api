@@ -23,12 +23,15 @@ const (
 	RepoImgBlobUploadUuidPath  = "/{repo}/{image}/blobs/uploads/{uuid}"
 	Repo2ImgBlobUploadUuidPath = "/{repo}/{repo2}/{image}/blobs/uploads/{uuid}"
 	Repo3ImgBlobUploadUuidPath = "/{repo}/{repo2}/{repo3}/{image}/blobs/uploads/{uuid}"
+	Repo4ImgBlobUploadUuidPath = "/{repo}/{repo2}/{repo3}/{repo4}/{image}/blobs/uploads/{uuid}"
 	imgManifestRefPath         = "/{image}/manifests/{reference}"
 	repoImgManifestRefPath     = "/{repo}/{image}/manifests/{reference}"
 	repo2ImgManifestRefPath    = "/{repo}/{repo2}/{image}/manifests/{reference}"
 	repo3ImgManifestRefPath    = "/{repo}/{repo2}/{repo3}/{image}/manifests/{reference}"
+	repo4ImgManifestRefPath    = "/{repo}/{repo2}/{repo3}/{repo4}/{image}/manifests/{reference}"
 	imgBlobRefPath             = "/{image}/blobs/{reference}"
 	repoImgBlobRefPath         = "/{repo}/{image}/blobs/{reference}"
+	repo4ImgBlobRefPath        = "/{repo}/{repo2}/{repo3}/{repo4}/{image}/blobs/{reference}"
 )
 
 func Initialize(mag magazine.Magazine, oidcProvider *handlers.OIDCProvider, godmode *handlers.GodModeAuth, pullCache *pullthrough.Cache) *chi.Mux {
@@ -162,12 +165,18 @@ func Initialize(mag magazine.Magazine, oidcProvider *handlers.OIDCProvider, godm
 			r.Get(repo2ImgManifestRefPath, h.ManifestGetHandler)
 			r.Head(repo3ImgManifestRefPath, h.ManifestHeadHandler)
 			r.Get(repo3ImgManifestRefPath, h.ManifestGetHandler)
+			// repo4 (5 path segments) covers deep upstream repos pulled
+			// through the cache, e.g.
+			// /v2/harbor.example.com/metahub/api/dev/<image>/manifests/<tag>.
+			r.Head(repo4ImgManifestRefPath, h.ManifestHeadHandler)
+			r.Get(repo4ImgManifestRefPath, h.ManifestGetHandler)
 
 			//// Upload Manifest
 			r.Put(imgManifestRefPath, h.ManifestPutHandler)
 			r.Put(repoImgManifestRefPath, h.ManifestPutHandler)
 			r.Put(repo2ImgManifestRefPath, h.ManifestPutHandler)
 			r.Put(repo3ImgManifestRefPath, h.ManifestPutHandler)
+			r.Put(repo4ImgManifestRefPath, h.ManifestPutHandler)
 			//// Delete
 			r.Delete(imgManifestRefPath, h.ManifestDelHandler)
 			r.Delete(repoImgManifestRefPath, h.ManifestDelHandler)
@@ -176,17 +185,20 @@ func Initialize(mag magazine.Magazine, oidcProvider *handlers.OIDCProvider, godm
 			r.Get(repoImgBlobRefPath, h.BlobHandler)
 			r.Get("/{repo}/{repo2}/{image}/blobs/{reference}", h.BlobHandler)
 			r.Get("/{repo}/{repo2}/{repo3}/{image}/blobs/{reference}", h.BlobHandler)
+			r.Get(repo4ImgBlobRefPath, h.BlobHandler)
 			///// HEAD is the same w/o actually writing a body
 			r.Head(imgBlobRefPath, h.BlobHandler)
 			r.Head(repoImgBlobRefPath, h.BlobHandler)
 			r.Head("/{repo}/{repo2}/{image}/blobs/{reference}", h.BlobHandler)
 			r.Head("/{repo}/{repo2}/{repo3}/{image}/blobs/{reference}", h.BlobHandler)
+			r.Head(repo4ImgBlobRefPath, h.BlobHandler)
 
 			// Tags
 			r.Get("/{image}/tags/list", h.TagGetHandler)
 			r.Get("/{repo}/{image}/tags/list", h.TagGetHandler)
 			r.Get("/{repo}/{repo2}/{image}/tags/list", h.TagGetHandler)
 			r.Get("/{repo}/{repo2}/{repo3}/{image}/tags/list", h.TagGetHandler)
+			r.Get("/{repo}/{repo2}/{repo3}/{repo4}/{image}/tags/list", h.TagGetHandler)
 			r.Get("/_catalog", h.CatalogGetHandler)
 			// Upload Blobs — support up to 3 repo segments (like the GET/HEAD blob +
 			// manifest routes) so deep repos such as models/<org>/<name>-layer push.
@@ -194,18 +206,22 @@ func Initialize(mag magazine.Magazine, oidcProvider *handlers.OIDCProvider, godm
 			r.Post("/{repo}/{image}/blobs/uploads", h.BlobUploadPostHandler)
 			r.Post("/{repo}/{repo2}/{image}/blobs/uploads", h.BlobUploadPostHandler)
 			r.Post("/{repo}/{repo2}/{repo3}/{image}/blobs/uploads", h.BlobUploadPostHandler)
+			r.Post("/{repo}/{repo2}/{repo3}/{repo4}/{image}/blobs/uploads", h.BlobUploadPostHandler)
 			r.Patch(ImgBlobUploadUuidPath, h.BlobUploadPatchHandler)
 			r.Patch(RepoImgBlobUploadUuidPath, h.BlobUploadPatchHandler)
 			r.Patch(Repo2ImgBlobUploadUuidPath, h.BlobUploadPatchHandler)
 			r.Patch(Repo3ImgBlobUploadUuidPath, h.BlobUploadPatchHandler)
+			r.Patch(Repo4ImgBlobUploadUuidPath, h.BlobUploadPatchHandler)
 			r.Put(ImgBlobUploadUuidPath, h.BlobUploadPutHandler)
 			r.Put(RepoImgBlobUploadUuidPath, h.BlobUploadPutHandler)
 			r.Put(Repo2ImgBlobUploadUuidPath, h.BlobUploadPutHandler)
 			r.Put(Repo3ImgBlobUploadUuidPath, h.BlobUploadPutHandler)
+			r.Put(Repo4ImgBlobUploadUuidPath, h.BlobUploadPutHandler)
 			r.Get(ImgBlobUploadUuidPath, h.BlobUploadGetHandler)
 			r.Get(RepoImgBlobUploadUuidPath, h.BlobUploadGetHandler)
 			r.Get(Repo2ImgBlobUploadUuidPath, h.BlobUploadGetHandler)
 			r.Get(Repo3ImgBlobUploadUuidPath, h.BlobUploadGetHandler)
+			r.Get(Repo4ImgBlobUploadUuidPath, h.BlobUploadGetHandler)
 			// Delete Blobs
 			r.Delete(repoImgBlobRefPath, h.BlobDelHandler)
 			r.Delete(imgBlobRefPath, h.BlobDelHandler)
@@ -214,6 +230,7 @@ func Initialize(mag magazine.Magazine, oidcProvider *handlers.OIDCProvider, godm
 			r.Get("/{repo}/{image}/referrers/{reference}", h.ReferrersGetHandler)
 			r.Get("/{repo}/{repo2}/{image}/referrers/{reference}", h.ReferrersGetHandler)
 			r.Get("/{repo}/{repo2}/{repo3}/{image}/referrers/{reference}", h.ReferrersGetHandler)
+			r.Get("/{repo}/{repo2}/{repo3}/{repo4}/{image}/referrers/{reference}", h.ReferrersGetHandler)
 		})
 	})
 	router.Get("/", h.RedirectToWWW)
