@@ -33,7 +33,14 @@ import (
 
 // newPrefixTestHandlers builds a Handlers with a minimal in-memory Magazine
 // that only populates Config.Registries. No Minio/Neo4j required.
+//
+// The fixtures represent YAML/structured registries, which must opt into
+// pull-through via the nested block (D1/D3): the participation gate in
+// ResolveUpstreamRegistry skips registries without `pull_through.enabled`.
 func newPrefixTestHandlers(registries ...magazine.RegistryConfig) Handlers {
+	for i := range registries {
+		registries[i].PullThrough.Enabled = true
+	}
 	mag := magazine.Magazine{
 		Config: magazine.MagConfig{
 			Registries: registries,

@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/opencontainers/go-digest"
@@ -13,6 +14,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/metahub-registry/metahub-api/pkg/lib/helper"
 	"github.com/metahub-registry/metahub-api/pkg/metrics"
+	"github.com/metahub-registry/metahub-api/pkg/pullthrough"
 	"github.com/metahub-registry/metahub-core/pkg/types"
 	"github.com/metahub-registry/metahub-core/pkg/upstream"
 	"github.com/metahub-registry/metahub-core/pkg/utils"
@@ -271,6 +273,44 @@ func (h Handlers) tryPullthroughOnMiss(ctx context.Context, l *logrus.Entry, spa
 	return mediaType, true
 }
 
+// maybeRefreshManifest enqueues an async upstream re-check for a cached
+// pull-through alias whose TTL has expired (D5). The cached manifest has
+// already been selected for serving; the refresh runs in the background and
+// rewires the Slot when the upstream digest moved. Digest pulls bypass TTL and
+// non-pull-through repos are ignored.
+func (h Handlers) maybeRefreshManifest(ctx context.Context, l *logrus.Entry, span trace.Span, req types.Request) {
+	if h.pullThrough == nil || req.Digest != "" || req.Tag == "" {
+		return
+	}
+	ctx, rspan := tracer.Start(ctx, "ManifestHandler.maybeRefreshManifest")
+	defer rspan.End()
+	rspan.SetAttributes(attribute.Key("repo").String(req.Repo), attribute.Key("tag").String(req.Tag))
+	regURL, _, ok := h.mag.ResolveUpstreamRegistry(req.Repo)
+	if !ok {
+		return
+	}
+	pol, ok := h.pullThrough.Policy(regURL)
+	if !ok || !pol.Enabled {
+		return
+	}
+	last, found, err := h.mag.Database.CollectionTagGetLastRefreshed(ctx, req.Repo, req.Tag)
+	if err != nil {
+		utils.Warn(l, span, "pull-through: last_refreshed lookup failed for %s:%s: %v", req.Repo, req.Tag, err)
+		return
+	}
+	if !pullthrough.NeedsRefresh(last, found, time.Now(), pol.RefreshInterval) {
+		return
+	}
+	if h.pullThrough.EnqueueRefresh(pullthrough.RefreshJob{
+		Registry: regURL,
+		Repo:     req.Repo,
+		Tag:      req.Tag,
+		Profile:  req.Profile,
+	}) {
+		utils.Info(l, span, "pull-through: enqueued manifest refresh for %s:%s (last_refreshed=%d found=%t)", req.Repo, req.Tag, last, found)
+	}
+}
+
 // resolveMissingManifest attempts recovery paths when ManifestExists returned
 // found=false: direct digest lookup (Path Z), then tag-based pullthrough. It
 // writes the response and returns stop=true in any case where the caller must
@@ -416,6 +456,10 @@ func (h Handlers) ManifestHandler(ctx context.Context, w http.ResponseWriter, r 
 		}
 		mediaType = mt
 	}
+	// TTL refresh (D5): a cached pull-through alias past its refresh_interval is
+	// served immediately, with an async upstream re-check enqueued. Digest pulls
+	// bypass TTL; the cold-miss path just stamped last_refreshed so it is a no-op.
+	h.maybeRefreshManifest(ctx, l, span, req)
 	msg := fmt.Sprintf("Manifest found with type '%s'", mediaType)
 	span.AddEvent("log", trace.WithAttributes(
 		attribute.String("log.severity", "debug"),
