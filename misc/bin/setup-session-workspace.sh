@@ -162,9 +162,11 @@ fi
 API_BRANCH=$(grep "^metahub-api=" "${BRANCHES_FILE}" | cut -d= -f2)
 LIB_BRANCH=$(grep "^metalib=" "${BRANCHES_FILE}" | cut -d= -f2)
 ADMIN_BRANCH=$(grep "^metahub-admin=" "${BRANCHES_FILE}" | cut -d= -f2)
+ADMINUI_BRANCH=$(grep "^metahub-admin-ui=" "${BRANCHES_FILE}" | cut -d= -f2)
 UI_BRANCH=$(grep "^metahub-ui=" "${BRANCHES_FILE}" | cut -d= -f2)
 CE_BRANCH=$(grep "^community-edition=" "${BRANCHES_FILE}" | cut -d= -f2)
 # Default unused stack render slots to main
+ADMINUI_BRANCH="${ADMINUI_BRANCH:-main}"
 CE_BRANCH="${CE_BRANCH:-main}"
 DOCS_BRANCH=$(grep "^metahub-docs=" "${BRANCHES_FILE}" | cut -d= -f2)
 DOCS_BRANCH="${DOCS_BRANCH:-main}"
@@ -187,10 +189,10 @@ tasks:
       #   task dev -- metahub-ui metalib   -> bump only those two
       - task -d "${REL_API_ROOT}" session:dev -- ${DESC} {{.CLI_ARGS}}
   render:
-    desc: "Print the stack 'task render:dev:*' line (slots: API:LIB:ADMIN:CE:OCI:UI:DOCS:OUTFITTER:SITEAGENT)"
+    desc: "Print the stack 'task render:dev:*' line (slots: API:LIB:ADMIN:ADMINUI:CE:OCI:UI:DOCS:OUTFITTER:SITEAGENT)"
     silent: true
     cmds:
-      - echo "task render:dev:${API_BRANCH}:${LIB_BRANCH}:${ADMIN_BRANCH}:${CE_BRANCH}:dev:${UI_BRANCH}:${DOCS_BRANCH}:${OUTFITTER_BRANCH}:${SITEAGENT_BRANCH}"
+      - echo "task render:dev:${API_BRANCH}:${LIB_BRANCH}:${ADMIN_BRANCH}:${ADMINUI_BRANCH}:${CE_BRANCH}:dev:${UI_BRANCH}:${DOCS_BRANCH}:${OUTFITTER_BRANCH}:${SITEAGENT_BRANCH}"
   finish:
     desc: "Finalize session: test, sonar, archive, push, comment MRs"
     cmds:

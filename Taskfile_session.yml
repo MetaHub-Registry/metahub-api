@@ -53,6 +53,7 @@ vars:
   REPO_API_DIR: "."
   REPO_LIB_DIR: "../metahub-core"
   REPO_ADMIN_DIR: "../metahub-admin"
+  REPO_ADMIN_UI_DIR: "../metahub-admin-ui"
   REPO_OUTFITTER_DIR: "../outfitter"
   REPO_UI_DIR: "~/src/gitlab.com/qnib-frontend/metahub-ui"
   REPO_CE_DIR: "~/src/gitlab.com/qnib-metahub/community-edition"
@@ -97,6 +98,8 @@ tasks:
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metalib", REPO_DIR: "{{.REPO_LIB_DIR}}" }
       - task: _branch-and-mr
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-admin", REPO_DIR: "{{.REPO_ADMIN_DIR}}" }
+      - task: _branch-and-mr
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-admin-ui", REPO_DIR: "{{.REPO_ADMIN_UI_DIR}}" }
       - task: _branch-and-mr
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-ui", REPO_DIR: "{{.REPO_UI_DIR}}" }
       - task: _branch-and-mr
@@ -173,6 +176,8 @@ tasks:
       - task: _bump-dev
         vars: { DESC: "{{.DESC}}", REPOS: "{{.REPOS}}", REPO_NAME: "metahub-admin", REPO_DIR: "{{.REPO_ADMIN_DIR}}" }
       - task: _bump-dev
+        vars: { DESC: "{{.DESC}}", REPOS: "{{.REPOS}}", REPO_NAME: "metahub-admin-ui", REPO_DIR: "{{.REPO_ADMIN_UI_DIR}}" }
+      - task: _bump-dev
         vars: { DESC: "{{.DESC}}", REPOS: "{{.REPOS}}", REPO_NAME: "metahub-ui", REPO_DIR: "{{.REPO_UI_DIR}}" }
       - task: _bump-dev
         vars: { DESC: "{{.DESC}}", REPOS: "{{.REPOS}}", REPO_NAME: "community-edition", REPO_DIR: "{{.REPO_CE_DIR}}" }
@@ -233,6 +238,8 @@ tasks:
       - task: _finalize-repo
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-admin", REPO_DIR: "{{.REPO_ADMIN_DIR}}" }
       - task: _finalize-repo
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-admin-ui", REPO_DIR: "{{.REPO_ADMIN_UI_DIR}}" }
+      - task: _finalize-repo
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-ui", REPO_DIR: "{{.REPO_UI_DIR}}" }
       - task: _finalize-repo
         vars: { DESC: "{{.DESC}}", REPO_NAME: "community-edition", REPO_DIR: "{{.REPO_CE_DIR}}" }
@@ -289,6 +296,7 @@ tasks:
             metahub-api)       eval echo "{{.REPO_API_DIR}}" ;;
             metalib)           eval echo "{{.REPO_LIB_DIR}}" ;;
             metahub-admin)     eval echo "{{.REPO_ADMIN_DIR}}" ;;
+            metahub-admin-ui)  eval echo "{{.REPO_ADMIN_UI_DIR}}" ;;
             metahub-ui)        eval echo "{{.REPO_UI_DIR}}" ;;
             community-edition) eval echo "{{.REPO_CE_DIR}}" ;;
             stack)             eval echo "{{.REPO_STACK_DIR}}" ;;
@@ -312,7 +320,7 @@ tasks:
       - sh: 'grep -q "^{{.REPO_NAME}}=" "{{.SESSION_DIR}}/{{.CLI_ARGS}}/.branches"'
         msg: "Repo '{{.REPO_NAME}}' not found in session '{{.CLI_ARGS}}'"
       - sh: '[ -n "{{.REPO_DIR}}" ]'
-        msg: "Unknown repo '{{.REPO_NAME}}'. Must be one of: metahub-api, metalib, metahub-admin, metahub-ui, community-edition, stack, flux/metahub, metahub-docs, waldur-site-agent-metahub, outfitter"
+        msg: "Unknown repo '{{.REPO_NAME}}'. Must be one of: metahub-api, metalib, metahub-admin, metahub-admin-ui, metahub-ui, community-edition, stack, flux/metahub, metahub-docs, waldur-site-agent-metahub, outfitter"
     cmds:
       - task: _version-repo
         vars:
@@ -337,6 +345,7 @@ tasks:
             metahub-api)       eval echo "{{.REPO_API_DIR}}" ;;
             metalib)           eval echo "{{.REPO_LIB_DIR}}" ;;
             metahub-admin)     eval echo "{{.REPO_ADMIN_DIR}}" ;;
+            metahub-admin-ui)  eval echo "{{.REPO_ADMIN_UI_DIR}}" ;;
             metahub-ui)        eval echo "{{.REPO_UI_DIR}}" ;;
             community-edition) eval echo "{{.REPO_CE_DIR}}" ;;
             stack)             eval echo "{{.REPO_STACK_DIR}}" ;;
@@ -397,6 +406,8 @@ tasks:
       - task: _worktree-rm
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-admin", REPO_DIR: "{{.REPO_ADMIN_DIR}}" }
       - task: _worktree-rm
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-admin-ui", REPO_DIR: "{{.REPO_ADMIN_UI_DIR}}" }
+      - task: _worktree-rm
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-ui", REPO_DIR: "{{.REPO_UI_DIR}}" }
       - task: _worktree-rm
         vars: { DESC: "{{.DESC}}", REPO_NAME: "community-edition", REPO_DIR: "{{.REPO_CE_DIR}}" }
@@ -443,6 +454,8 @@ tasks:
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metalib", REPO_DIR: "{{.REPO_LIB_DIR}}" }
       - task: _worktree-resume
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-admin", REPO_DIR: "{{.REPO_ADMIN_DIR}}" }
+      - task: _worktree-resume
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-admin-ui", REPO_DIR: "{{.REPO_ADMIN_UI_DIR}}" }
       - task: _worktree-resume
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-ui", REPO_DIR: "{{.REPO_UI_DIR}}" }
       - task: _worktree-resume
@@ -598,6 +611,8 @@ tasks:
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metalib", REPO_DIR: "{{.REPO_LIB_DIR}}" }
       - task: _worktree-rm
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-admin", REPO_DIR: "{{.REPO_ADMIN_DIR}}" }
+      - task: _worktree-rm
+        vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-admin-ui", REPO_DIR: "{{.REPO_ADMIN_UI_DIR}}" }
       - task: _worktree-rm
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-ui", REPO_DIR: "{{.REPO_UI_DIR}}" }
       - task: _worktree-rm
@@ -944,9 +959,9 @@ tasks:
         # Dependency order: metalib (the shared library — go.mod `replace` in
         # metahub-api/metahub-admin, plus the harness `.opencode` source) lands
         # before its consumers. The render slot order in the stack repo is
-        # API:LIB:ADMIN:CE:OCI:UI:DOCS:OUTFITTER:SITEAGENT — a slot listing, not
-        # a dependency order.
-        ORDERED="metalib metahub-api metahub-admin community-edition metahub-ui metahub-docs outfitter waldur-site-agent-metahub"
+        # API:LIB:ADMIN:ADMINUI:CE:OCI:UI:DOCS:OUTFITTER:SITEAGENT — a slot
+        # listing, not a dependency order.
+        ORDERED="metalib metahub-api metahub-admin metahub-admin-ui community-edition metahub-ui metahub-docs outfitter waldur-site-agent-metahub"
         # Not part of the render line — pushed after; order not load-bearing.
         TAIL="stack flux/metahub metahub-pipelines/e2e-dev metahub-pipelines/mh-populate-prod metahub-pipelines/oci-conformance metahub-pipelines/oras-conformance"
 
@@ -1613,6 +1628,8 @@ tasks:
         sh: grep "^metalib=" "{{.SESSION_DIR}}/{{.DESC}}/.branches" | cut -d= -f2
       ADMIN_BRANCH:
         sh: grep "^metahub-admin=" "{{.SESSION_DIR}}/{{.DESC}}/.branches" | cut -d= -f2
+      ADMINUI_BRANCH:
+        sh: BR=$(grep "^metahub-admin-ui=" "{{.SESSION_DIR}}/{{.DESC}}/.branches" | cut -d= -f2); echo "${BR:-main}"
       UI_BRANCH:
         sh: grep "^metahub-ui=" "{{.SESSION_DIR}}/{{.DESC}}/.branches" | cut -d= -f2
       CE_BRANCH:
@@ -1635,6 +1652,7 @@ tasks:
         API="{{.API_BRANCH}}"
         LIB="{{.LIB_BRANCH}}"
         ADMIN="{{.ADMIN_BRANCH}}"
+        ADMINUI="{{.ADMINUI_BRANCH}}"
         UI="{{.UI_BRANCH}}"
         CE="{{.CE_BRANCH}}"
         DOCS="{{.DOCS_BRANCH}}"
@@ -1644,21 +1662,22 @@ tasks:
 
         echo ""
         echo "=== Rendering dev pipelines into stack/dev/ ==="
-        echo "  API:   ${API}"
-        echo "  LIB:   ${LIB}"
-        echo "  ADMIN: ${ADMIN}"
-        echo "  CE:    ${CE}"
-        echo "  UI:    ${UI}"
-        echo "  DOCS:  ${DOCS}"
-        echo "  OUTFIT:${OUTFITTER}"
-        echo "  SITEAG:${SITEAGENT}"
+        echo "  API:     ${API}"
+        echo "  LIB:     ${LIB}"
+        echo "  ADMIN:   ${ADMIN}"
+        echo "  ADMINUI: ${ADMINUI}"
+        echo "  CE:      ${CE}"
+        echo "  UI:      ${UI}"
+        echo "  DOCS:    ${DOCS}"
+        echo "  OUTFIT:  ${OUTFITTER}"
+        echo "  SITEAG:  ${SITEAGENT}"
 
         cd "${STACK}"
 
-        # stack render slots: API:LIB:ADMIN:CE:OCI:UI:DOCS:OUTFITTER:SITEAGENT.
+        # stack render slots: API:LIB:ADMIN:ADMINUI:CE:OCI:UI:DOCS:OUTFITTER:SITEAGENT.
         # The leading `dev:` selects the dev group (stack renders prod/ via
         # render:prod:*). OCI is literal `dev` — it only feeds OCI_BRANCH_IDX.
-        RENDER_CMD="render:dev:${API}:${LIB}:${ADMIN}:${CE}:dev:${UI}:${DOCS}:${OUTFITTER}:${SITEAGENT}"
+        RENDER_CMD="render:dev:${API}:${LIB}:${ADMIN}:${ADMINUI}:${CE}:dev:${UI}:${DOCS}:${OUTFITTER}:${SITEAGENT}"
         # The `render:dev:*` task needs GITLAB_QNIB_REPO_RO_TOKEN (stack/.env or
         # the environment); its own precondition reports a clear error if absent.
         task ${RENDER_CMD}
