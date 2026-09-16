@@ -18,16 +18,35 @@ echo ""
 echo "=== Setting up session workspace ==="
 
 # --- Harness composition via outfitter ---
+# session:new is idempotent: re-runs fill in gaps (new repos, worktrees, MRs)
+# and must NOT recompose an existing harness. The composed files are live
+# session state — permission grants made mid-session live in opencode.json —
+# and outfit's -o guard rightly refuses to clobber a config that differs from
+# a fresh build (the harness sources move on while the session runs).
+# Force a re-composition with HARNESS_REFRESH=1: the previous managed paths
+# (opencode.json, .opencode/) are archived to .harness-bak-<stamp>/ first.
 OUTFIT_BIN="${OUTFIT_BIN:-outfit}"
-echo "[workspace] Composing harness from ${API_ROOT}/agent.compose.yaml..."
-if ! command -v "${OUTFIT_BIN}" >/dev/null 2>&1; then
-  echo "ERROR: '${OUTFIT_BIN}' not found on PATH. Set OUTFIT_BIN or install outfitter." >&2
-  exit 2
+if [ -f "${S}/opencode.json" ] && [ "${HARNESS_REFRESH:-0}" != "1" ]; then
+  echo "[workspace] Harness already composed — skipping outfit build (HARNESS_REFRESH=1 to re-compose)"
+else
+  if [ -f "${S}/opencode.json" ] || [ -d "${S}/.opencode" ]; then
+    STAMP="$(date +%Y%m%d-%H%M%S)"
+    BAK="${S}/.harness-bak-${STAMP}"
+    echo "[workspace] Re-composing: archiving previous harness → ${BAK}"
+    mkdir -p "${BAK}"
+    if [ -f "${S}/opencode.json" ]; then mv "${S}/opencode.json" "${BAK}/"; fi
+    if [ -d "${S}/.opencode" ]; then mv "${S}/.opencode" "${BAK}/"; fi
+  fi
+  echo "[workspace] Composing harness from ${API_ROOT}/agent.compose.yaml..."
+  if ! command -v "${OUTFIT_BIN}" >/dev/null 2>&1; then
+    echo "ERROR: '${OUTFIT_BIN}' not found on PATH. Set OUTFIT_BIN or install outfitter." >&2
+    exit 2
+  fi
+  (cd "${API_ROOT}" && "${OUTFIT_BIN}" build -o "${S}") || {
+    echo "ERROR: outfitter build failed. Is ${API_ROOT}/agent.compose.yaml valid?" >&2
+    exit 2
+  }
 fi
-(cd "${API_ROOT}" && "${OUTFIT_BIN}" build -o "${S}") || {
-  echo "ERROR: outfitter build failed. Is ${API_ROOT}/agent.compose.yaml valid?" >&2
-  exit 2
-}
 
 SKILL_COUNT=$(find "${S}/.opencode/skills" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
 CMD_COUNT=$(find "${S}/.opencode/command" -maxdepth 1 -type f 2>/dev/null | wc -l | tr -d ' ')
