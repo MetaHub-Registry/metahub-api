@@ -258,18 +258,19 @@ cat >> "${S}/Taskfile.yml" <<'EOF'
         fi
 
         DIRTY=0
-        printf "%-18s %-30s %-6s %-12s %s\n" "REPO" "BRANCH" "AHEAD" "WORKTREE" "HEAD"
-        printf "%-18s %-30s %-6s %-12s %s\n" "----" "------" "-----" "--------" "----"
+        printf "%-18s %-30s %-7s %-6s %-12s %s\n" "REPO" "BRANCH" "BEHIND" "AHEAD" "WORKTREE" "HEAD"
+        printf "%-18s %-30s %-7s %-6s %-12s %s\n" "----" "------" "------" "-----" "--------" "----"
         while IFS='=' read -r REPO BRANCH; do
           [ -z "${REPO}" ] && continue
           case "${REPO}" in *.status|*.version) continue;; esac
           WT="${SESSION_DIR}/${REPO}"
           if [ ! -d "${WT}/.git" ] && [ ! -f "${WT}/.git" ]; then
-            printf "%-18s %-30s %-6s %-12s %s\n" "${REPO}" "${BRANCH}" "-" "MISSING" "(suspended?)"
+            printf "%-18s %-30s %-7s %-6s %-12s %s\n" "${REPO}" "${BRANCH}" "-" "-" "MISSING" "(suspended?)"
             continue
           fi
-          # Refresh remote-tracking ref quietly so ahead-count is accurate.
+          # Refresh remote-tracking refs quietly so ahead/behind counts are accurate.
           git -C "${WT}" fetch -q origin "${BRANCH}" 2>/dev/null || true
+          git -C "${WT}" fetch -q origin main 2>/dev/null || true
           COUNT="$(git -C "${WT}" status --porcelain | wc -l | tr -d ' ')"
           if [ "${COUNT}" = "0" ]; then
             CLEAN="clean"
@@ -277,9 +278,12 @@ cat >> "${S}/Taskfile.yml" <<'EOF'
             CLEAN="dirty(${COUNT})"
             DIRTY=1
           fi
+          # BEHIND = commits on origin/main missing from the session branch —
+          # flags drift after a prior session merged while this session ran.
+          BEHIND="$(git -C "${WT}" rev-list --count "HEAD..origin/main" 2>/dev/null || echo "?")"
           AHEAD="$(git -C "${WT}" rev-list --count "origin/${BRANCH}..HEAD" 2>/dev/null || echo "?")"
           HEAD="$(git -C "${WT}" log -1 --format='%h %s' 2>/dev/null)"
-          printf "%-18s %-30s %-6s %-12s %s\n" "${REPO}" "${BRANCH}" "${AHEAD}" "${CLEAN}" "${HEAD}"
+          printf "%-18s %-30s %-7s %-6s %-12s %s\n" "${REPO}" "${BRANCH}" "${BEHIND}" "${AHEAD}" "${CLEAN}" "${HEAD}"
         done < "${BRANCHES_FILE}"
 
         echo ""
