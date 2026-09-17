@@ -38,7 +38,8 @@ func Initialize(mag magazine.Magazine, oidcProvider *handlers.OIDCProvider, godm
 	// Handlers
 	h := handlers.NewHandlers("dev", mag, oidcProvider, godmode).
 		WithRegistry(config.RegistryConfigFromViper()).
-		WithPullThrough(pullCache)
+		WithPullThrough(pullCache).
+		WithInventory(inventoryClientFromViper())
 	// define router
 	router := chi.NewRouter()
 	log := logrus.StandardLogger().WithFields(
@@ -235,4 +236,21 @@ func Initialize(mag magazine.Magazine, oidcProvider *handlers.OIDCProvider, godm
 	})
 	router.Get("/", h.RedirectToWWW)
 	return router
+}
+
+// inventoryClientFromViper builds the inventory resolution client from the
+// profile_resolution config block. Absent/empty block (or a config error) ⇒
+// nil ⇒ disabled — byte-identical legacy behaviour (fail-open philosophy:
+// a broken config must never break a login).
+func inventoryClientFromViper() *handlers.InventoryClient {
+	cfg, err := config.ProfileResolutionFromViper()
+	if err != nil {
+		logrus.WithError(err).Warn("invalid profile_resolution config — resolution disabled")
+		return nil
+	}
+	if !cfg.Enabled() {
+		logrus.Debug("profile_resolution not configured — suffix-less logins stay generic")
+		return nil
+	}
+	return handlers.NewInventoryClient(*cfg.Inventory)
 }
