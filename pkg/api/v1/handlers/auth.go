@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel/trace"
 	"github.com/metahub-registry/metahub-api/pkg/config"
 	"github.com/metahub-registry/metahub-api/pkg/metrics"
 	"github.com/metahub-registry/metahub-api/pkg/usage"
@@ -81,6 +83,36 @@ func parseUsernameProfile(rawUsername string) (username, profile string) {
 		profile = defaultProfile
 	}
 	return username, profile
+}
+
+// resolveProfileFromInventory consults the inventory service for suffix-less
+// logins (openspec change hostname-profile-resolution). metahub-api is a thin
+// consumer — the inventory service (metahub-admin-ui) owns the ENTIRE
+// resolution chain.
+//
+// Skip conditions, in order:
+//   - explicit user/profile suffix (profile != defaultProfile) — an explicit
+//     suffix always wins, resolution is not consulted at all;
+//   - no client configured (nil) — disabled, byte-identical legacy behaviour.
+//
+// The client fails open: on no-match/outage the inputs are returned unchanged
+// (profile stays generic). On a hit the returned rawUsername carries the
+// resolved suffix so minted tokens flow through the OCI middleware unchanged.
+func (h Handlers) resolveProfileFromInventory(
+	ctx context.Context, l *logrus.Entry, span trace.Span,
+	rawUsername, username, profile string, r *http.Request,
+) (string, string) {
+	if profile != defaultProfile || h.inventory == nil {
+		return rawUsername, profile
+	}
+	ip := clientIP(r)
+	resolved, ok := h.inventory.Resolve(ctx, ip)
+	if !ok {
+		utils.Debug(l, span, "inventory no-match for client ip %s — profile stays '%s'", ip, profile)
+		return rawUsername, profile
+	}
+	utils.Debug(l, span, "inventory resolved profile '%s' for client ip %s", resolved, ip)
+	return username + "/" + resolved, resolved
 }
 
 // exchangeCredentialsWithAuthentik POSTs username/password to Authentik's
@@ -164,21 +196,12 @@ func (h Handlers) AuthHandler(w http.ResponseWriter, r *http.Request) {
 	username, profile := parseUsernameProfile(rawUsername)
 	utils.Debug(l, span, "auth request for user:'%s' profile:'%s' acct:'%s'", username, profile, acct)
 
-	// Profile resolution (openspec change hostname-profile-resolution): metahub-api
-	// is a thin consumer of the inventory service (metahub-admin-ui), which owns
-	// the ENTIRE resolution chain. Only suffix-less logins resolve — an explicit
-	// user/profile suffix always wins (profile != defaultProfile ⇒ skip). The
-	// client fails open: on no-match/outage the profile stays `generic`, and a
-	// hit rewrites rawUsername so the minted token carries the suffix through
-	// the existing OCI middleware unchanged.
-	if profile == defaultProfile && h.inventory != nil {
-		ip := clientIP(r)
-		if resolved, ok := h.inventory.Resolve(ctx, ip); ok {
-			utils.Debug(l, span, "inventory resolved profile '%s' for client ip %s", resolved, ip)
-			profile = resolved
-			rawUsername = username + "/" + resolved
-		}
-	}
+	// Profile resolution (openspec change hostname-profile-resolution):
+	// suffix-less logins consult the inventory service; the rewritten
+	// rawUsername makes god-mode/envelope tokens carry the suffix through the
+	// OCI middleware unchanged. Explicit suffixes and outages behave exactly
+	// as before (see resolveProfileFromInventory).
+	rawUsername, profile = h.resolveProfileFromInventory(ctx, l, span, rawUsername, username, profile, r)
 
 	// God-mode check: bypass OIDC if credentials match a god-mode user.
 	// Use rawUsername (which preserves the /profile suffix) so the minted
