@@ -163,7 +163,87 @@ func TestAuthHandler_ConfigAbsentLegacyBehaviour(t *testing.T) {
 	assert.Equal(t, "oci", claims.Username)
 }
 
-// --- OIDC envelope path -----------------------------------------------------
+// --- learning (openspec add-learned-entries) --------------------------------
+
+func TestAuthHandler_ExplicitLoginLearns(t *testing.T) {
+	learned := make(chan map[string]any, 4)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		learned <- body
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"status":"learned"}`))
+	}))
+	defer srv.Close()
+	inv := NewInventoryClient(config.InventoryResolutionConfig{
+		URL: srv.URL, Timeout: 2 * time.Second, CacheTTL: time.Minute,
+	})
+
+	// Explicit suffix → god-mode token → learn reported for the client IP.
+	h := Handlers{mag: magazine.Magazine{}, godmode: newTestGodMode()}.WithInventory(inv)
+	r := httptest.NewRequest("GET", "/auth?account=oci/frame", nil)
+	r.SetBasicAuth("oci", "oci-pass")
+	w := httptest.NewRecorder()
+	h.AuthHandler(w, r)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var body map[string]any
+	select {
+	case body = <-learned:
+	case <-time.After(2 * time.Second):
+		t.Fatal("learn was not reported for an explicit login")
+	}
+	assert.Equal(t, "frame", body["profile"])
+	assert.Equal(t, true, body["learned"])
+	assert.NotEmpty(t, body["ip"])
+}
+
+func TestAuthHandler_SuffixlessDoesNotLearn(t *testing.T) {
+	learnCalled := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			learnCalled = true
+			w.WriteHeader(http.StatusCreated)
+			return
+		}
+		// resolve path: no match for the client IP
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+	inv := NewInventoryClient(config.InventoryResolutionConfig{
+		URL: srv.URL, Timeout: 500 * time.Millisecond, CacheTTL: time.Minute,
+	})
+
+	h := Handlers{mag: magazine.Magazine{}, godmode: newTestGodMode()}.WithInventory(inv)
+	r := httptest.NewRequest("GET", "/auth?account=oci", nil)
+	r.SetBasicAuth("oci", "oci-pass")
+	w := httptest.NewRecorder()
+	h.AuthHandler(w, r)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	time.Sleep(300 * time.Millisecond)
+	assert.False(t, learnCalled, "suffix-less logins must not learn")
+}
+
+func TestAuthHandler_LearnFailureIsSilent(t *testing.T) {
+	dead := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	deadURL := dead.URL
+	dead.Close()
+	inv := NewInventoryClient(config.InventoryResolutionConfig{
+		URL: deadURL, Timeout: 300 * time.Millisecond, CacheTTL: time.Minute,
+	})
+	h := Handlers{mag: magazine.Magazine{}, godmode: newTestGodMode()}.WithInventory(inv)
+
+	r := httptest.NewRequest("GET", "/auth?account=oci/frame", nil)
+	r.SetBasicAuth("oci", "oci-pass")
+	w := httptest.NewRecorder()
+	h.AuthHandler(w, r) // fire-and-forget: must not fail the login
+	require.Equal(t, http.StatusOK, w.Code)
+	var resp map[string]string
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.NotEmpty(t, resp["token"])
+}
 
 func TestAuthHandler_OIDCEnvelopeCarriesResolvedSuffix(t *testing.T) {
 	const signingKey = "test-envelope-signing-key-at-least-32-chars-long"

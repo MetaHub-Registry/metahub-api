@@ -115,6 +115,21 @@ func (h Handlers) resolveProfileFromInventory(
 	return username + "/" + resolved, resolved
 }
 
+// learnExplicitLogin reports an explicit suffixed login as a per-node
+// observation (openspec add-learned-entries): the operator logged in as
+// username/profile from this client IP, so the inventory learns ip→profile
+// as the node's default for later suffix-less logins. Suffix-less and
+// anonymous logins carry no identity statement and are never reported.
+// Fire-and-forget — learning must never block or fail a login.
+func (h Handlers) learnExplicitLogin(l *logrus.Entry, span trace.Span, profile string, r *http.Request) {
+	if profile == defaultProfile || h.inventory == nil {
+		return
+	}
+	ip := clientIP(r)
+	utils.Debug(l, span, "reporting explicit login (profile '%s') for client ip %s to the inventory", profile, ip)
+	h.inventory.LearnAsync(ip, profile)
+}
+
 // exchangeCredentialsWithAuthentik POSTs username/password to Authentik's
 // ROPC/client_credentials token endpoint and returns the JWT access token.
 func (h Handlers) exchangeCredentialsWithAuthentik(username, password string) (string, error) {
@@ -218,6 +233,7 @@ func (h Handlers) AuthHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		metrics.ObserveTokenIssued(metrics.AuthGodmode, profile)
 		usage.Auth(username, profile, metrics.AuthGodmode, usage.ResultSuccess, clientIP(r))
+		h.learnExplicitLogin(l, span, profile, r)
 		w.Header().Set(headerContentType, contentTypeJSON)
 		json.NewEncoder(w).Encode(map[string]string{"token": token})
 		return
@@ -249,6 +265,9 @@ func (h Handlers) AuthHandler(w http.ResponseWriter, r *http.Request) {
 	// through to the OCI middleware. Without a profile suffix, return the
 	// Authentik JWT unchanged (existing behaviour).
 	if profile != defaultProfile {
+		// Learning (openspec add-learned-entries): explicit suffix on a
+		// successful OIDC login — report the per-node observation.
+		h.learnExplicitLogin(l, span, profile, r)
 		signingKey, keyErr := config.EnvelopeSigningKey()
 		if keyErr != nil {
 			utils.Warn(l, span, "envelope signing key unavailable, returning plain Authentik JWT: %v", keyErr)

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -103,6 +104,71 @@ func (c *InventoryClient) Resolve(ctx context.Context, ip string) (string, bool)
 		"ip": ip, "profile": profile, "ok": ok, "cache": "miss",
 	}).Debug("inventory resolve")
 	return profile, ok
+}
+
+// Learn reports an explicit login observation to the inventory service
+// (openspec add-learned-entries): the operator logged in as username/profile
+// from ip, so the inventory should remember ip→profile as the node's default
+// for later suffix-less logins. Learned entries are last-write-wins and soft
+// state. Synchronous variant — returns true when the inventory accepted the
+// mapping; on success the negative resolve cache for ip is cleared so the
+// learned profile takes effect immediately.
+func (c *InventoryClient) Learn(ctx context.Context, ip, profile string) bool {
+	if c == nil || c.url == "" || ip == "" || profile == "" {
+		return false
+	}
+	body, err := json.Marshal(map[string]any{
+		"ip": ip, "profile": profile, "learned": true,
+	})
+	if err != nil {
+		return false
+	}
+	endpoint := fmt.Sprintf("%s/api/v1/entries", c.url)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		log.WithError(err).WithField("ip", ip).Debug("inventory learn: bad request")
+		return false
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		log.WithError(err).WithField("ip", ip).Debug("inventory learn: request failed")
+		return false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		log.WithFields(log.Fields{"ip": ip, "status": resp.StatusCode}).
+			Debug("inventory learn: unexpected status")
+		return false
+	}
+
+	// Drop any cached (esp. negative) resolve outcome for ip — the learned
+	// profile must be visible to the next suffix-less login immediately.
+	c.mu.Lock()
+	delete(c.cache, ip)
+	c.mu.Unlock()
+	log.WithFields(log.Fields{"ip": ip, "profile": profile}).Debug("inventory learn accepted")
+	return true
+}
+
+// LearnAsync is the fire-and-forget wrapper used on the auth path: learning
+// must never block or fail a login. It runs with a bounded context derived
+// from the client's timeout.
+func (c *InventoryClient) LearnAsync(ip, profile string) {
+	if c == nil || ip == "" || profile == "" {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), c.http.Timeout)
+		defer cancel()
+		if !c.Learn(ctx, ip, profile) {
+			log.WithField("ip", ip).Debug("inventory learn not accepted (inventory down/invalid) — fail-open, nothing to do")
+		}
+	}()
 }
 
 // resolveHTTP performs the versioned resolve call. ANY failure — timeout,
