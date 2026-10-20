@@ -6,6 +6,8 @@ coverage.xml
 lcov.info
 **.sqlite3
 report.html
+report.json
+pre_test.log
 exp/**
 misc/minio
 misc/backup

@@ -43,7 +43,6 @@
         "source=${localEnv:HOME}/go/src/github.com/metahub-registry/metahub-core,target=${localEnv:HOME}/go/src/github.com/metahub-registry/metahub-core,type=bind,consistency=cached",
         "source=${localEnv:HOME}/src/gitlab.com/qnib-frontend/metahub-ui,target=${localEnv:HOME}/src/gitlab.com/qnib-frontend/metahub-ui,type=bind,consistency=cached",
         "source=${localEnv:HOME}/.config/opencode,target=/root/.config/opencode,type=bind,consistency=cached",
-        "source=/Users/christian.kniep/.config/openviking/ovcli.conf,target=/Users/christian.kniep/.config/openviking/ovcli.conf,type=bind,consistency=cached",
         "source=${localEnv:HOME}/temp/QnibObsidian,target=${localEnv:HOME}/temp/QnibObsidian,type=bind,consistency=cached"
     ]
 }

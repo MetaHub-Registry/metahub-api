@@ -9,19 +9,19 @@ services:
     #image: registry.github.com/metahub-registry/metahub-api:2023-03-01-arm64-dev
     environment:
       - SQLITE_FILE=./misc/sqlite/metahub_20251209.db
-      - PATH=/go/metahub:/go/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      - PATH=/go/metahub-api:/go/metalib/misc/bin:/go/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     ports:
       - 8080:80
     volumes:
       - goMod:/go/pkg/mod
       - ../community-edition:/community-edition
-      - ../metahub-core:/Users/christian.kniep/go/src/github.com/metahub-registry/metahub-core
-      - ../metahub-admin:/Users/christian.kniep/go/src/github.com/metahub-registry/metahub-admin
-      - ./:/Users/christian.kniep/go/src/github.com/metahub-registry/metahub-api
+      - ../metahub-core:/go/metalib
+      - ../metahub-admin:/go/metahub-admin
+      - ./:/go/metahub-api
     networks:
       - api-internal
       - mh-data
-    working_dir: /Users/christian.kniep/go/src/github.com/metahub-registry/metahub-api
+    working_dir: /go/metahub-api
     #command: ["sleep", "inf"]
   dind:
     build: misc/docker/dind/
@@ -30,12 +30,12 @@ services:
     volumes:
       - .:/go/metahub
       - ./misc/docker/dind/daemon.json:/etc/docker/daemon.json:ro
-      - ${HOME}/go/src/github.com/metahub-registry/metahub-core:${HOME}/go/src/github.com/metahub-registry/metahub-core
+      - ../metahub-core:/go/metalib
     networks:
      - api-internal
      - mh-data
     environment:
-      PATH: /Users/christian.kniep/go/src/github.com/metahub-registry/metahub-core/misc/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      PATH: /go/metalib/misc/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       DEV_URL: dev:80
       CE_URL: ce:80
       PS1: 'dind > '
