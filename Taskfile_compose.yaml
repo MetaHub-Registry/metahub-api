@@ -9,6 +9,7 @@ includes:
   mh-ui:
     taskfile: ../metahub-ui/Taskfile.yaml
     dir: ../metahub-ui/
+    optional: true
 vars:
   DC_DATA: docker compose -f docker-compose-data.yaml
   DC_ALL: docker compose -f docker-compose-data.yaml -f docker-compose.yaml

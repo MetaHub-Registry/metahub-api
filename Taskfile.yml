@@ -14,6 +14,7 @@ includes:
   mh-ui:
     taskfile: ~/src/gitlab.com/qnib-frontend/metahub-ui/Taskfile.yaml
     dir: ~/src/gitlab.com/qnib-frontend/metahub-ui/
+    optional: true
 tasks:
   localConfig:
     cmds:
