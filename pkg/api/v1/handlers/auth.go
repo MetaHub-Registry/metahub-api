@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel/trace"
 	"github.com/metahub-registry/metahub-api/pkg/config"
 	"github.com/metahub-registry/metahub-api/pkg/metrics"
 	"github.com/metahub-registry/metahub-api/pkg/usage"
@@ -81,6 +83,51 @@ func parseUsernameProfile(rawUsername string) (username, profile string) {
 		profile = defaultProfile
 	}
 	return username, profile
+}
+
+// resolveProfileFromInventory consults the inventory service for suffix-less
+// logins (openspec change hostname-profile-resolution). metahub-api is a thin
+// consumer — the inventory service (metahub-admin-ui) owns the ENTIRE
+// resolution chain.
+//
+// Skip conditions, in order:
+//   - explicit user/profile suffix (profile != defaultProfile) — an explicit
+//     suffix always wins, resolution is not consulted at all;
+//   - no client configured (nil) — disabled, byte-identical legacy behaviour.
+//
+// The client fails open: on no-match/outage the inputs are returned unchanged
+// (profile stays generic). On a hit the returned rawUsername carries the
+// resolved suffix so minted tokens flow through the OCI middleware unchanged.
+func (h Handlers) resolveProfileFromInventory(
+	ctx context.Context, l *logrus.Entry, span trace.Span,
+	rawUsername, username, profile string, r *http.Request,
+) (string, string) {
+	if profile != defaultProfile || h.inventory == nil {
+		return rawUsername, profile
+	}
+	ip := clientIP(r)
+	resolved, ok := h.inventory.Resolve(ctx, ip)
+	if !ok {
+		utils.Debug(l, span, "inventory no-match for client ip %s — profile stays '%s'", ip, profile)
+		return rawUsername, profile
+	}
+	utils.Debug(l, span, "inventory resolved profile '%s' for client ip %s", resolved, ip)
+	return username + "/" + resolved, resolved
+}
+
+// learnExplicitLogin reports an explicit suffixed login as a per-node
+// observation (openspec add-learned-entries): the operator logged in as
+// username/profile from this client IP, so the inventory learns ip→profile
+// as the node's default for later suffix-less logins. Suffix-less and
+// anonymous logins carry no identity statement and are never reported.
+// Fire-and-forget — learning must never block or fail a login.
+func (h Handlers) learnExplicitLogin(l *logrus.Entry, span trace.Span, profile string, r *http.Request) {
+	if profile == defaultProfile || h.inventory == nil {
+		return
+	}
+	ip := clientIP(r)
+	utils.Debug(l, span, "reporting explicit login (profile '%s') for client ip %s to the inventory", profile, ip)
+	h.inventory.LearnAsync(ip, profile)
 }
 
 // exchangeCredentialsWithAuthentik POSTs username/password to Authentik's
@@ -164,6 +211,13 @@ func (h Handlers) AuthHandler(w http.ResponseWriter, r *http.Request) {
 	username, profile := parseUsernameProfile(rawUsername)
 	utils.Debug(l, span, "auth request for user:'%s' profile:'%s' acct:'%s'", username, profile, acct)
 
+	// Profile resolution (openspec change hostname-profile-resolution):
+	// suffix-less logins consult the inventory service; the rewritten
+	// rawUsername makes god-mode/envelope tokens carry the suffix through the
+	// OCI middleware unchanged. Explicit suffixes and outages behave exactly
+	// as before (see resolveProfileFromInventory).
+	rawUsername, profile = h.resolveProfileFromInventory(ctx, l, span, rawUsername, username, profile, r)
+
 	// God-mode check: bypass OIDC if credentials match a god-mode user.
 	// Use rawUsername (which preserves the /profile suffix) so the minted
 	// token carries the profile through to the OCI auth middleware.
@@ -179,6 +233,7 @@ func (h Handlers) AuthHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		metrics.ObserveTokenIssued(metrics.AuthGodmode, profile)
 		usage.Auth(username, profile, metrics.AuthGodmode, usage.ResultSuccess, clientIP(r))
+		h.learnExplicitLogin(l, span, profile, r)
 		w.Header().Set(headerContentType, contentTypeJSON)
 		json.NewEncoder(w).Encode(map[string]string{"token": token})
 		return
@@ -210,6 +265,9 @@ func (h Handlers) AuthHandler(w http.ResponseWriter, r *http.Request) {
 	// through to the OCI middleware. Without a profile suffix, return the
 	// Authentik JWT unchanged (existing behaviour).
 	if profile != defaultProfile {
+		// Learning (openspec add-learned-entries): explicit suffix on a
+		// successful OIDC login — report the per-node observation.
+		h.learnExplicitLogin(l, span, profile, r)
 		signingKey, keyErr := config.EnvelopeSigningKey()
 		if keyErr != nil {
 			utils.Warn(l, span, "envelope signing key unavailable, returning plain Authentik JWT: %v", keyErr)

@@ -416,3 +416,13 @@ this repo at session close (both validated with `openspec validate`):
   (OpenProject WP #48). Proposal + intent-level delta spec; `design.md`
   (blob-delivery strategy matrix) is the next artifact. Depends on the metalib
   change `add-upstream-registry-categories`.
+
+## Session close — 2026-10-20
+
+- Inventory consumer: `profile_resolution.inventory.*` config, resolution at
+  `GET /auth` for suffix-less logins, TTL cache incl. negative, fail-open to
+  `generic`, learned explicit-login reporting.
+- Merged current `main` into the session branch (licence/community, README,
+  portable compose/Taskfile, removed absolute paths and committed binaries).
+- Open-source prep: history rewritten (removed `.env` and the AWS demo config,
+  normalised author emails), README rewritten, community files added.

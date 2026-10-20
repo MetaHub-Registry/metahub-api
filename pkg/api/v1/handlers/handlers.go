@@ -26,6 +26,10 @@ type Handlers struct {
 	// pullThrough is the async cache worker (add-pull-through-manifest-intercept).
 	// Shared (pointer) across handler copies; nil when not wired (tests).
 	pullThrough *pullthrough.Cache
+	// inventory is the thin consumer of the metahub-admin-ui resolve endpoint
+	// (openspec change hostname-profile-resolution). nil ⇒ disabled — the
+	// AuthHandler call site checks nil and skips resolution entirely.
+	inventory *InventoryClient
 	// blobStat / upstreamBlobReader are test seams for the two pull-through code
 	// paths that otherwise reach the concrete Minio backend / a live registry.
 	// When nil they delegate to the magazine. See statBlob / openUpstreamBlob.
@@ -76,6 +80,14 @@ func (h Handlers) WithRegistry(rc config.RegistryConfig) Handlers {
 // set. Server wiring calls this; tests that don't get the nil (inert) value.
 func (h Handlers) WithPullThrough(c *pullthrough.Cache) Handlers {
 	h.pullThrough = c
+	return h
+}
+
+// WithInventory returns a copy of h with the inventory resolution client set
+// (thin consumer of metahub-admin-ui's resolve surface). nil (or omitted) is
+// the disabled state — behaviour-neutral, the call site checks nil.
+func (h Handlers) WithInventory(c *InventoryClient) Handlers {
+	h.inventory = c
 	return h
 }
 
