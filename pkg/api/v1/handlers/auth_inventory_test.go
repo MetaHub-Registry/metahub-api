@@ -19,16 +19,21 @@ import (
 // inventoryStub is an httptest resolve endpoint with a call counter — used to
 // assert WHEN resolution is consulted and when it is skipped.
 type inventoryStub struct {
-	srv    *httptest.Server
-	calls  int
-	respond func(w http.ResponseWriter, r *http.Request)
+	srv        *httptest.Server
+	calls      int // resolve (GET) calls
+	learnCalls int // learned-entry reports (POST /api/v1/entries)
+	respond    func(w http.ResponseWriter, r *http.Request)
 }
 
 func newInventoryStub(t *testing.T, respond func(w http.ResponseWriter, r *http.Request)) *inventoryStub {
 	t.Helper()
 	st := &inventoryStub{respond: respond}
 	st.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		st.calls++
+		if r.Method == http.MethodPost && r.URL.Path == "/api/v1/entries" {
+			st.learnCalls++
+		} else {
+			st.calls++
+		}
 		st.respond(w, r)
 	}))
 	t.Cleanup(st.srv.Close)
