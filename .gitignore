@@ -8,6 +8,7 @@ lcov.info
 report.html
 report.json
 pre_test.log
+misc/bruno/metahub-api/alpine/*/data/*.tar
 exp/**
 misc/minio
 misc/backup
