@@ -6,6 +6,9 @@ coverage.xml
 lcov.info
 **.sqlite3
 report.html
+report.json
+pre_test.log
+misc/bruno/metahub-api/alpine/*/data/*.tar
 exp/**
 misc/minio
 misc/backup
