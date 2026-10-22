@@ -19,7 +19,6 @@ func toUIManipulations(mps []types.Manipulation) []UIManipulation {
 // empty); `Layers` is populated from the legacy flat form when present.
 func toUIManipulation(mp types.Manipulation) UIManipulation {
 	ui := UIManipulation{
-		ID:    mp.ID,
 		Label: mp.Label,
 	}
 	if !mp.Default.IsZero() {

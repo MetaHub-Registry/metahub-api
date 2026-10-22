@@ -26,7 +26,7 @@ import (
 // manifests for qnib/featuretest, bound to the `generic` profile via
 // rules/generic/linux.yaml. Returns the resolved collection_id + tag_id
 // for the `generic` tag.
-func bootstrapProfileFilterFixture(t *testing.T, ctx context.Context) (int64, int64, func()) {
+func bootstrapProfileFilterFixture(t *testing.T, ctx context.Context) (string, string, func()) {
 	t.Helper()
 	bs := utils.NewBootstrap()
 	bs.SetEmptyAll()
@@ -56,12 +56,8 @@ func bootstrapProfileFilterFixture(t *testing.T, ctx context.Context) (int64, in
 	br, err := SetupTest(ctx, bs)
 	require.NoError(t, err)
 
-	colID, err := br.GetInt64("collection:ft#id")
-	require.NoError(t, err)
-	tagID, err := br.GetInt64("tag:generic#id")
-	require.NoError(t, err)
-
-	return colID, tagID, func() { TeardownTest(bs, br) }
+	_ = br
+	return "qnib/featuretest", "generic", func() { TeardownTest(bs, br) }
 }
 
 func postRepoGetOne(t *testing.T, body ReqPayload) CollectionResponse {
@@ -94,10 +90,10 @@ func postRepoGetOne(t *testing.T, body ReqPayload) CollectionResponse {
 // against hand-built UIManifest slices with populated Profiles.
 func TestRepoGetOne_ProfileFilter_AllManifestsWhenAbsent(t *testing.T) {
 	ctx := context.Background()
-	colID, tagID, teardown := bootstrapProfileFilterFixture(t, ctx)
+	repo, tag, teardown := bootstrapProfileFilterFixture(t, ctx)
 	defer teardown()
 
-	resp := postRepoGetOne(t, ReqPayload{ColID: colID, TagID: tagID})
+	resp := postRepoGetOne(t, ReqPayload{RepoName: repo, TagName: tag})
 	assert.Equal(t, "qnib/featuretest", resp.Collection.Name)
 	assert.NotEmpty(t, resp.Collection.Manifests,
 		"absent profile must return manifests (backwards-compat)")
@@ -109,15 +105,15 @@ func TestRepoGetOne_ProfileFilter_AllManifestsWhenAbsent(t *testing.T) {
 // guards the normalizeProfile() contract at the wire level.
 func TestRepoGetOne_ProfileFilter_EmptyTreatedAsAbsent(t *testing.T) {
 	ctx := context.Background()
-	colID, tagID, teardown := bootstrapProfileFilterFixture(t, ctx)
+	repo, tag, teardown := bootstrapProfileFilterFixture(t, ctx)
 	defer teardown()
 
-	absent := postRepoGetOne(t, ReqPayload{ColID: colID, TagID: tagID})
+	absent := postRepoGetOne(t, ReqPayload{RepoName: repo, TagName: tag})
 	require.NotEmpty(t, absent.Collection.Manifests,
 		"precondition: omitted profile returns manifests")
 
 	for _, p := range []string{"", "   ", "\t"} {
-		got := postRepoGetOne(t, ReqPayload{ColID: colID, TagID: tagID, Profile: p})
+		got := postRepoGetOne(t, ReqPayload{RepoName: repo, TagName: tag, Profile: p})
 		assert.Equal(t, len(absent.Collection.Manifests),
 			len(got.Collection.Manifests),
 			"empty/whitespace profile %q must behave like no filter", p)
@@ -132,17 +128,17 @@ func TestRepoGetOne_ProfileFilter_EmptyTreatedAsAbsent(t *testing.T) {
 // "absent" backward-compat test.
 func TestRepoGetOne_ProfileFilter_FilterIsWired(t *testing.T) {
 	ctx := context.Background()
-	colID, tagID, teardown := bootstrapProfileFilterFixture(t, ctx)
+	repo, tag, teardown := bootstrapProfileFilterFixture(t, ctx)
 	defer teardown()
 
-	unfiltered := postRepoGetOne(t, ReqPayload{ColID: colID, TagID: tagID})
+	unfiltered := postRepoGetOne(t, ReqPayload{RepoName: repo, TagName: tag})
 	require.NotEmpty(t, unfiltered.Collection.Manifests,
 		"precondition: unfiltered call returns manifests")
 
 	filtered := postRepoGetOne(t, ReqPayload{
-		ColID:   colID,
-		TagID:   tagID,
-		Profile: "generic",
+		RepoName: repo,
+		TagName:  tag,
+		Profile:  "generic",
 	})
 	assert.Empty(t, filtered.Collection.Manifests,
 		"a non-empty profile filter must drop manifests whose resolved "+
@@ -155,14 +151,14 @@ func TestRepoGetOne_ProfileFilter_FilterIsWired(t *testing.T) {
 // collections-api spec, scenario "Profile filter with no matches").
 func TestRepoGetOne_ProfileFilter_NoMatchReturnsEmptyArray(t *testing.T) {
 	ctx := context.Background()
-	colID, tagID, teardown := bootstrapProfileFilterFixture(t, ctx)
+	repo, tag, teardown := bootstrapProfileFilterFixture(t, ctx)
 	defer teardown()
 
 	w := httptest.NewRecorder()
 	body := ReqPayload{
-		ColID:   colID,
-		TagID:   tagID,
-		Profile: "cpu#strix-halo-nonexistent",
+		RepoName: repo,
+		TagName:  tag,
+		Profile:  "cpu#strix-halo-nonexistent",
 	}
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/collection",
 		bytes.NewBuffer(body.ToByte()))
@@ -229,10 +225,10 @@ func TestRepoGetAll_UnfilteredManifestCount(t *testing.T) {
 // the pure TestCountDigestsWithProfile).
 func TestProfileFilteredManifestCount_Direct(t *testing.T) {
 	ctx := context.Background()
-	colID, tagID, teardown := bootstrapProfileFilterFixture(t, ctx)
+	repo, tag, teardown := bootstrapProfileFilterFixture(t, ctx)
 	defer teardown()
 
-	col, err := h.mag.Database.CollectionListingGetByID(ctx, colID, tagID)
+	col, err := h.mag.Database.CollectionListingGetByName(ctx, repo, tag)
 	require.NoError(t, err)
 	require.NotEmpty(t, col.Manifests, "fixture must have manifests")
 

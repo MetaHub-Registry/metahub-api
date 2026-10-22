@@ -2,14 +2,15 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/StudioSol/set"
-	"github.com/sirupsen/logrus"
 	"github.com/metahub-registry/metahub-api/internal/utils"
 	"github.com/metahub-registry/metahub-core/pkg/types"
 	mlibUtils "github.com/metahub-registry/metahub-core/pkg/utils"
+	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -19,9 +20,7 @@ const (
 
 type Next struct {
 	Repo      string `json:"repo"`
-	Tag       string `json:"tag"`           // Tag is added when repo slug is exhausted
-	ColID     int64  `json:"collection_id"` // ID is added when repo slug is exhausted
-	TagID     int64  `json:"tag_id"`        // ID is added when repo slug is exhausted
+	Tag       string `json:"tag"` // Tag is added when repo slug is exhausted
 	ColCount  int    `json:"collection_count"`
 	ManiCount int64  `json:"manifest_count"`
 }
@@ -40,17 +39,15 @@ type Next struct {
 // The post-decoration loop is cheap (a tag has ≤ a handful of manifests
 // in practice) and keeps the metalib query surface unchanged.
 // repoGetOnePayload is the request body for RepoGetOne. A collection is
-// addressed EITHER by (repo_name, tag_name) OR by (collection_id,
-// tag_id); the legacy `repo`/`tag` aliases are normalised onto the
-// `*_name` fields. `profile` is an optional manifest filter (see the
-// RepoGetOne doc comment).
+// addressed by (repo_name, tag_name); the legacy `repo`/`tag` aliases are
+// normalised onto the `*_name` fields. `profile` is an optional manifest
+// filter (see the RepoGetOne doc comment). Storage element IDs are not
+// part of the API.
 type repoGetOnePayload struct {
 	RepoName string `json:"repo_name"`
 	Repo     string `json:"repo"`
 	Tag      string `json:"tag"`
 	TagName  string `json:"tag_name"`
-	ColID    int64  `json:"collection_id"`
-	TagID    int64  `json:"tag_id"`
 	Profile  string `json:"profile"`
 }
 
@@ -79,14 +76,14 @@ func (pl *repoGetOnePayload) normalise() {
 	pl.Profile = normalizeProfile(pl.Profile)
 }
 
-// resolveCollection loads the CollectionListing addressed by the
-// payload — by name when both repo_name and tag_name are present, else
-// by numeric IDs.
+// resolveCollection loads the CollectionListing addressed by the payload.
+// A collection is identified publicly by repo_name + tag_name; storage
+// element IDs are not part of the API.
 func (h Handlers) resolveCollection(ctx context.Context, pl repoGetOnePayload) (types.CollectionListing, error) {
-	if pl.RepoName != "" && pl.TagName != "" {
-		return h.mag.Database.CollectionListingGetByName(ctx, pl.RepoName, pl.TagName)
+	if pl.RepoName == "" || pl.TagName == "" {
+		return types.CollectionListing{}, fmt.Errorf("repo_name and tag_name are required")
 	}
-	return h.mag.Database.CollectionListingGetByID(ctx, pl.ColID, pl.TagID)
+	return h.mag.Database.CollectionListingGetByName(ctx, pl.RepoName, pl.TagName)
 }
 
 // buildCollectionBreadcrumbs derives the breadcrumb trail and the
@@ -152,6 +149,10 @@ func (h Handlers) RepoGetOne(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pl.normalise()
+	if pl.RepoName == "" || pl.TagName == "" {
+		h.writeJSON(w, http.StatusBadRequest, envelope{"error": "repo_name and tag_name are required"})
+		return
+	}
 	mlibUtils.Info(l, span, "Payload: %s:%s", pl.RepoName, pl.TagName)
 	col, err := h.resolveCollection(ctx, pl)
 	if err != nil {
@@ -272,7 +273,8 @@ func (h Handlers) hydrateManifestLayers(ctx context.Context, col types.Collectio
 		"package": pkgNameCol,
 		"func":    "hydrateManifestLayers",
 	})
-	// Build digest -> metalib Manifest.ID map for a single pass lookup.
+	// Build digest -> metalib Manifest.ID map for a single pass lookup. The ID
+	// never leaves this process; the public payload carries only the digest.
 	byDigest := make(map[string]int64, len(col.Manifests))
 	for _, m := range col.Manifests {
 		if m.Digest != "" {
@@ -315,8 +317,6 @@ func accumulateCollectionNext(cols []types.CollectionListing, repoSlug []string,
 			next[col.Tag] = Next{
 				Repo:      col.Repo,
 				Tag:       col.Tag,
-				ColID:     col.ID,
-				TagID:     col.ColTag.ID,
 				ColCount:  1,
 				ManiCount: col.ManifestCount,
 			}
