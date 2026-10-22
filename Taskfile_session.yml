@@ -8,7 +8,7 @@ version: '3'
 #   task session:dev     -- <description>            # iterate dev version
 #   task session:finish  -- <description>            # finalize all repos
 #   task session:version:<repo>:<level> -- <desc>    # set release version
-#   task session:close:<repo>           -- <desc>    # close MR (no changes)
+#   task session:close:<repo>           -- <desc>    # close PR (no changes)
 #   task session:suspend -- <description>            # remove worktrees
 #   task session:resume  -- <description>            # recreate worktrees
 #   task session:list                                # list active sessions
@@ -19,9 +19,9 @@ version: '3'
 #
 #   1. START
 #      task session:new -- add-oauth-support
-#        → branches all repos, bumps to X.Y.Z-dev1, pushes, draft MRs
+#        → branches all repos, bumps to X.Y.Z-dev1, pushes, draft PRs
 #        → idempotent: safe to re-run to fill gaps (re-creates missing
-#          worktrees/branches/MRs, regenerates the workspace scaffold)
+#          worktrees/branches/PRs, regenerates the workspace scaffold)
 #
 #   2. WORK (repeat)
 #      OpenSpec propose/apply/explore in each worktree
@@ -31,7 +31,7 @@ version: '3'
 #   3. FINISH
 #      task session:finish -- add-oauth-support
 #        → per repo: archive OpenSpec changes, run tests, sonar, push
-#        → updates each MR with a summary comment
+#        → updates each PR with a summary comment
 #        → human reviews and merges
 #
 #   4. VERSION (per repo, after finish)
@@ -54,16 +54,16 @@ vars:
   REPO_LIB_DIR: "../metahub-core"
   REPO_ADMIN_DIR: "../metahub-admin"
   REPO_ADMIN_UI_DIR: "../metahub-admin-ui"
-  REPO_OUTFITTER_DIR: "../outfitter"
-  REPO_UI_DIR: "~/src/gitlab.com/qnib-frontend/metahub-ui"
-  REPO_CE_DIR: "~/src/gitlab.com/qnib-metahub/community-edition"
+  REPO_OUTFITTER_DIR: "~/go/src/gitlab.com/qnib-golang/outfitter"
+  REPO_UI_DIR: "~/go/src/github.com/metahub-registry/metahub-ui"
+  REPO_CE_DIR: "~/go/src/github.com/metahub-registry/metahub-community-edition"
   REPO_STACK_DIR: "~/src/gitlab.com/qnib-gocd/yaml-config/metahub/stack"
   REPO_FLUX_DIR: "~/src/gitlab.com/qnib-ansible/flux/metahub"
   REPO_E2E_DEV_DIR: "~/src/gitlab.com/qnib-gocd/metahub-pipelines/e2e-dev"
   REPO_MH_POPULATE_PROD_DIR: "~/src/gitlab.com/qnib-gocd/metahub-pipelines/mh-populate-prod"
   REPO_OCI_CONFORMANCE_DIR: "~/src/gitlab.com/qnib-gocd/metahub-pipelines/oci-conformance"
   REPO_ORAS_CONFORMANCE_DIR: "~/src/gitlab.com/qnib-gocd/metahub-pipelines/oras-conformance"
-  REPO_DOCS_DIR: "~/src/gitlab.com/qshuf-mkdocs/metahub-docs"
+  REPO_DOCS_DIR: "~/go/src/github.com/metahub-registry/metahub-docs"
   REPO_SITEAGENT_DIR: "~/src/gitlab.com/qnib-metahub/waldur-site-agent-metahub"
 
 tasks:
@@ -83,9 +83,9 @@ tasks:
         msg: "Description must be kebab-case (lowercase, hyphens, no leading/trailing hyphen)"
       # NOTE: no "directory must not exist" guard — session:new is idempotent
       # and may be re-run on an existing session to fill in gaps (missing
-      # repos, worktrees, MRs, or workspace scaffold).
-      - sh: 'command -v glab >/dev/null 2>&1'
-        msg: "glab CLI is required but not found"
+      # repos, worktrees, PRs, or workspace scaffold).
+      - sh: 'command -v gh >/dev/null 2>&1'
+        msg: "gh CLI is required but not found"
       - sh: 'command -v bump2version >/dev/null 2>&1'
         msg: "bump2version is required but not found"
       - sh: 'command -v openspec >/dev/null 2>&1'
@@ -104,7 +104,7 @@ tasks:
         vars: { DESC: "{{.DESC}}", REPO_NAME: "metahub-ui", REPO_DIR: "{{.REPO_UI_DIR}}" }
       - task: _branch-and-mr
         vars: { DESC: "{{.DESC}}", REPO_NAME: "community-edition", REPO_DIR: "{{.REPO_CE_DIR}}" }
-      # stack tracks main directly (like flux/metahub): no session branch/MR,
+      # stack tracks main directly (like flux/metahub): no session branch/PR,
       # edits commit to main and push to main. The consolidated stack repo renders
       # BOTH GoCD groups — dev/*.gocd.yaml (dev) and prod/*.gocd.yaml (prod).
       - task: _worktree-main
@@ -210,7 +210,7 @@ tasks:
   #   2. Run the full test suite
   #   3. Submit SonarQube analysis
   #   4. Push the branch
-  #   5. Update the MR description with a summary
+  #   5. Update the PR description with a summary
   #
   # Repos with no changes are reported as "unchanged".
   # The human decides per-repo: version:<repo>:<level> or close:<repo>.
@@ -250,7 +250,7 @@ tasks:
       - task: _finalize-repo
         vars: { DESC: "{{.DESC}}", REPO_NAME: "waldur-site-agent-metahub", REPO_DIR: "{{.REPO_SITEAGENT_DIR}}" }
       # outfitter is a _worktree-main repo (like stack/flux/metahub):
-      # it tracks its own branch directly rather than a session branch + MR, so it
+      # it tracks its own branch directly rather than a session branch + PR, so it
       # is not finalized through the session-branch logic.
       # Archive the session-level OpenSpec proposal(s) so they are no longer
       # active: a session may pose a session-scoped change, refined here and then
@@ -330,10 +330,10 @@ tasks:
           LEVEL: "{{.LEVEL}}"
 
   # ===========================================================================
-  # session:close:<repo> — close MR for a repo with no changes
+  # session:close:<repo> — close PR for a repo with no changes
   # ===========================================================================
   close:*:
-    desc: "Close MR (no changes): task session:close:<repo> -- <description>"
+    desc: "Close PR (no changes): task session:close:<repo> -- <description>"
     requires:
       vars: [CLI_ARGS]
     vars:
@@ -376,11 +376,11 @@ tasks:
         BRANCHES_FILE="$(pwd)/{{.SESSION_DIR}}/${DESC}/.branches"
 
         echo ""
-        echo "=== [${REPO_NAME}] Closing MR (no changes) ==="
+        echo "=== [${REPO_NAME}] Closing PR (no changes) ==="
 
         cd "${WT_PATH}" 2>/dev/null || cd "{{.REPO_DIR}}"
-        glab mr close "${BRANCH}" 2>&1 || echo "[${REPO_NAME}] WARNING: Could not close MR"
-        echo "[${REPO_NAME}] MR closed"
+        gh pr close "${BRANCH}" 2>&1 || echo "[${REPO_NAME}] WARNING: Could not close PR"
+        echo "[${REPO_NAME}] PR closed"
 
         echo "${REPO_NAME}.status=closed" >> "${BRANCHES_FILE}"
 
@@ -791,12 +791,12 @@ tasks:
   # ===========================================================================
   # session:prod-test — switch stack prod/ pipelines to session branches
   #
-  # Before merging MRs, validate the full prod pipeline against the session
+  # Before merging PRs, validate the full prod pipeline against the session
   # branches. Replaces `branch: main` with the session branch in every
   # *.gocd.yaml that references a session-branch repo, commits, and pushes
   # (stack tracks main directly).
   #
-  # After GoCD validates, run session:prod-restore → then merge the MRs.
+  # After GoCD validates, run session:prod-restore → then merge the PRs.
   # ===========================================================================
   prod-test:
     desc: "Switch stack prod pipelines to session branches for pre-merge validation: task session:prod-test -- <description>"
@@ -858,7 +858,7 @@ tasks:
   # session:prod-restore — revert stack prod/ pipelines back to main branches
   #
   # Run after GoCD validation succeeds. Restores all *.gocd.yaml files to
-  # `branch: main`, commits, and pushes. Then merge the session MRs.
+  # `branch: main`, commits, and pushes. Then merge the session PRs.
   # ===========================================================================
   prod-restore:
     desc: "Restore stack prod pipelines to main branches after pre-merge validation: task session:prod-restore -- <description>"
@@ -909,7 +909,7 @@ tasks:
           git push
           echo ""
           echo "=== stack prod pipelines restored to main branches ==="
-          echo "Now merge the session MRs."
+          echo "Now merge the session PRs."
         fi
 
   # ===========================================================================
@@ -922,7 +922,7 @@ tasks:
   #
   # but the render line is a slot listing, not a dependency order. Pushing
   # follows the DEPENDENCY order — a resource lands on origin before the
-  # repos that consume it, so their MR pipelines build against the new code:
+  # repos that consume it, so their PR pipelines build against the new code:
   #
   #     metalib → metahub-api → metahub-admin → community-edition →
   #     metahub-ui → metahub-docs → outfitter → waldur-site-agent-metahub
@@ -1044,7 +1044,7 @@ tasks:
   # ===========================================================================
 
   # ---------------------------------------------------------------------------
-  # _branch-and-mr — create branch, worktree, bump dev, push, create draft MR
+  # _branch-and-mr — create branch, worktree, bump dev, push, create draft PR
   # ---------------------------------------------------------------------------
   _branch-and-mr:
     internal: true
@@ -1058,23 +1058,22 @@ tasks:
       BRANCH:
         sh: |
           # Resolve the session branch idempotently so a re-run reuses the
-          # same name instead of allocating a fresh MR IID:
+          # same name:
           #   1. the branch already recorded in .branches, else
-          #   2. an existing local/remote <iid>-<DESC> branch, else
-          #   3. the next MR IID (first-time creation).
+          #   2. an existing local/remote branch for this session — either the
+          #      current "<DESC>" or a legacy "<iid>-<DESC>" cut in the GitLab
+          #      days, else
+          #   3. "<DESC>" (first-time creation).
           BRANCHES_FILE="$(pwd)/{{.SESSION_DIR}}/{{.DESC}}/.branches"
           EXISTING=$(grep "^{{.REPO_NAME}}=" "${BRANCHES_FILE}" 2>/dev/null | head -1 | cut -d= -f2)
           if [ -n "${EXISTING}" ]; then echo "${EXISTING}"; exit 0; fi
           cd "$(eval echo "{{.REPO_DIR}}")"
-          FOUND=$(git branch --format='%(refname:short)' 2>/dev/null | grep -xE "[0-9]+-{{.DESC}}" | head -1)
+          FOUND=$(git branch --format='%(refname:short)' 2>/dev/null | grep -xE "([0-9]+-)?{{.DESC}}" | head -1)
           if [ -z "${FOUND}" ]; then
-            FOUND=$(git branch -r --format='%(refname:short)' 2>/dev/null | sed 's#^origin/##' | grep -xE "[0-9]+-{{.DESC}}" | head -1)
+            FOUND=$(git branch -r --format='%(refname:short)' 2>/dev/null | sed 's#^origin/##' | grep -xE "([0-9]+-)?{{.DESC}}" | head -1)
           fi
           if [ -n "${FOUND}" ]; then echo "${FOUND}"; exit 0; fi
-          NEXT=$(glab mr list -A -P 1 -F json 2>/dev/null \
-            | python3 -c "import json,sys; mrs=json.load(sys.stdin); print(mrs[0]['iid']+1 if mrs else 1)" 2>/dev/null \
-            || echo "1")
-          echo "${NEXT}-{{.DESC}}"
+          echo "{{.DESC}}"
     preconditions:
       - sh: '[ -d "{{.EXPANDED_DIR}}" ]'
         msg: "Source repo '{{.REPO_NAME}}' not found at '{{.REPO_DIR}}'"
@@ -1149,19 +1148,18 @@ tasks:
           git push -u origin "${BRANCH}"
         fi
 
-        # Ensure a draft MR exists (skip the create when one is already open).
-        echo "[${REPO_NAME}] Ensuring draft MR..."
-        if glab mr list --source-branch "${BRANCH}" 2>/dev/null | grep -q "${BRANCH}"; then
-          echo "[${REPO_NAME}] MR already exists for '${BRANCH}'"
+        # Ensure a draft PR exists (skip the create when one is already open).
+        echo "[${REPO_NAME}] Ensuring draft PR..."
+        OPEN_PR=$( cd "${WT_PATH}" && gh pr list --head "${BRANCH}" --state open --json number --jq 'length' 2>/dev/null || echo 0 )
+        if [ "${OPEN_PR:-0}" -gt 0 ] 2>/dev/null; then
+          echo "[${REPO_NAME}] PR already exists for '${BRANCH}'"
         else
-          glab mr create \
-            --source-branch "${BRANCH}" \
-            --target-branch main \
-            --title "Draft: {{.DESC}}" \
-            --description "Session: {{.DESC}}" \
-            --draft \
-            --no-editor \
-            2>&1 || echo "[${REPO_NAME}] WARNING: MR creation failed (may already exist)"
+          ( cd "${WT_PATH}" && gh pr create \
+              --head "${BRANCH}" \
+              --base main \
+              --title "Draft: {{.DESC}}" \
+              --body "Session: {{.DESC}}" \
+              --draft ) 2>&1 || echo "[${REPO_NAME}] WARNING: PR creation failed (may already exist)"
         fi
 
         # Record the branch mapping once (no duplicate lines on re-run).
@@ -1170,11 +1168,11 @@ tasks:
         fi
 
   # ---------------------------------------------------------------------------
-  # _worktree-main — add a worktree pinned to a branch (BRANCH var, default main; no session branch / MR)
+  # _worktree-main — add a worktree pinned to a branch (BRANCH var, default main; no session branch / PR)
   #
   # For GitOps/deployment repos (flux/metahub) that must track main directly:
   # the worktree is checked out on main so deployment edits commit to main and
-  # ship via `task push` (HEAD:main) instead of a session branch + MR. Records
+  # ship via `task push` (HEAD:main) instead of a session branch + PR. Records
   # the repo in .branches as "<repo>=main" so suspend/resume/status/push treat
   # it like any other entry. Falls back to a detached origin/main worktree if
   # main is already checked out in the source repo.
@@ -1391,11 +1389,11 @@ tasks:
         fi
 
   # ---------------------------------------------------------------------------
-  # _finalize-repo — archive changes, test, sonar, push, comment on MR
+  # _finalize-repo — archive changes, test, sonar, push, comment on PR
   #
   # Detects whether the repo has changes beyond the initial dev bump.
   # If no real changes: marks as unchanged, skips tests.
-  # If changes exist: runs full checklist, pushes, comments on MR.
+  # If changes exist: runs full checklist, pushes, comments on PR.
   # ---------------------------------------------------------------------------
   _finalize-repo:
     internal: true
@@ -1500,14 +1498,14 @@ tasks:
         echo "[${REPO_NAME}] Pushing..."
         git push
 
-        # Build MR comment with commit summary
+        # Build PR comment with commit summary
         COMMIT_SUMMARY=$(git log main..HEAD --oneline --no-decorate 2>/dev/null \
           | grep -vE "^[0-9a-f]+ (Start dev:|Dev iteration:)" \
           | head -20 \
           | sed 's/^/- /')
         CURRENT_VER=$(grep -E "^current_version" .bumpversion.cfg 2>/dev/null | head -1 | cut -d= -f2 | tr -d ' ')
 
-        MR_COMMENT=$(cat <<EOF
+        PR_COMMENT=$(cat <<EOF
         ## Session finalized: ${DESC}
 
         **Current version:** ${CURRENT_VER}
@@ -1521,9 +1519,9 @@ tasks:
         EOF
         )
 
-        echo "[${REPO_NAME}] Adding MR comment..."
-        glab mr note "${BRANCH}" -m "${MR_COMMENT}" 2>&1 \
-          || echo "[${REPO_NAME}] WARNING: Could not add MR comment"
+        echo "[${REPO_NAME}] Adding PR comment..."
+        gh pr comment "${BRANCH}" --body "${PR_COMMENT}" 2>&1 \
+          || echo "[${REPO_NAME}] WARNING: Could not add PR comment"
 
         echo "${REPO_NAME}.status=finalized" >> "${BRANCHES_FILE}"
         echo "[${REPO_NAME}] Finalized (${REAL_COMMITS} commits)"
@@ -1592,14 +1590,14 @@ tasks:
         git push
         git push origin "v${TARGET}"
 
-        # Mark MR as ready
-        echo "[${REPO_NAME}] Marking MR as ready..."
-        glab mr update "${BRANCH}" --draft=false 2>&1 \
-          || echo "[${REPO_NAME}] WARNING: Could not update MR draft status"
+        # Mark PR as ready
+        echo "[${REPO_NAME}] Marking PR as ready..."
+        gh pr ready "${BRANCH}" 2>&1 \
+          || echo "[${REPO_NAME}] WARNING: Could not mark PR ready"
 
-        # Update MR title to include version
-        glab mr update "${BRANCH}" --title "${DESC} (${TARGET})" 2>&1 \
-          || echo "[${REPO_NAME}] WARNING: Could not update MR title"
+        # Update PR title to include version
+        gh pr edit "${BRANCH}" --title "${DESC} (${TARGET})" 2>&1 \
+          || echo "[${REPO_NAME}] WARNING: Could not update PR title"
 
         echo "${REPO_NAME}.status=versioned" >> "${BRANCHES_FILE}"
         echo "${REPO_NAME}.version=${TARGET}" >> "${BRANCHES_FILE}"
@@ -1610,7 +1608,7 @@ tasks:
   # _update-dev-stack — render dev pipelines in the consolidated stack worktree
   #
   # The former dev-stack repo was folded into `stack` (dev/ + prod/). This
-  # renders the session's MR branches into stack/dev/ — the `dev` argument
+  # renders the session's PR branches into stack/dev/ — the `dev` argument
   # selects the stack Taskfile's `render:dev:<API>:<LIB>:<ADMIN>:<CE>:<OCI>:
   # <UI>:<DOCS>:<OUTFITTER>:<SITEAGENT>` task (the current dev-stack Taskfile
   # signature had no group segment, so it was rendered into the wrong repo).
