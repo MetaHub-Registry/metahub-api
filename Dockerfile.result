@@ -9,10 +9,12 @@
 #     real per-arch image. Its single RUN (mkdir) is trivial and may run under
 #     QEMU for the foreign leg (binfmt installed by the CI build script).
 ARG METALIB_IMAGE
+# Base image registry, supplied by build-image.sh from HARBOR_REG. Declared in the
+# global scope (before the first FROM) so later stages can use it.
+ARG BASE_REGISTRY
 FROM --platform=$BUILDPLATFORM $METALIB_IMAGE AS metalib
 
 # --- Go build: runs natively on the builder, cross-compiles to TARGETARCH ---
-ARG BASE_REGISTRY
 FROM --platform=$BUILDPLATFORM ${BASE_REGISTRY}/qnib-container/golang:2026-04-14.1 AS go
 ARG TARGETOS TARGETARCH
 # zig cc serves as the cgo cross-compiler for non-native targets:
