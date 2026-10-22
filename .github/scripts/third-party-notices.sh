@@ -20,7 +20,15 @@ parse, so the licence check ignores it explicitly.
 |---|---|---|
 HEADER
 
-go run github.com/google/go-licenses/v2@v2.0.1 report ./... \
+run_licenses() {
+  if command -v go-licenses >/dev/null 2>&1; then
+    go-licenses "$@"
+  else
+    go run github.com/google/go-licenses/v2@v2.0.1 "$@"
+  fi
+}
+
+run_licenses report ./... \
   --ignore github.com/multiformats/go-base36 2>/dev/null |
   awk -F, -v root="$(go list -m)" '
     $1 == root { next }
