@@ -981,9 +981,10 @@ tasks:
           EXPECTED=$(grep "^${REPO}=" "${BRANCHES_FILE}" 2>/dev/null | head -1 | cut -d= -f2 || true)
           CURRENT=$(git -C "${WT}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
           if [ -n "${EXPECTED}" ] && [ "${CURRENT}" != "${EXPECTED}" ]; then
-            # Accept the detached-at-origin/<branch> shape for main-tracking
-            # repos whose source checkout holds the branch.
-            if [ "${CURRENT}" = "HEAD" ] && [ "$(git -C "${WT}" rev-parse HEAD 2>/dev/null)" = "$(git -C "${WT}" rev-parse "origin/${EXPECTED}" 2>/dev/null)" ]; then
+            # Accept the detached shape for main-tracking repos whose source
+            # checkout holds the branch: HEAD must descend from origin/<branch>,
+            # so it is either level with it or ahead with session commits.
+            if [ "${CURRENT}" = "HEAD" ] && git -C "${WT}" merge-base --is-ancestor "origin/${EXPECTED}" HEAD 2>/dev/null; then
               :
             else
               echo "  [${REPO}] ABORT: on '${CURRENT}' but .branches expects '${EXPECTED}'" >&2
@@ -1684,7 +1685,8 @@ tasks:
         # so a bare `git add -A` could stage a local .env/token).
         git add -A dev
         git commit -m "render dev pipelines for session ${DESC}" || echo "[stack] Nothing to commit"
-        git push || echo "[stack] Push failed — push manually"
+        # Detached worktrees (source checkout holds main) must push explicitly.
+        git push origin HEAD:main || echo "[stack] Push failed — push manually"
 
         echo "[stack] Dev pipelines rendered and pushed (dev/)"
         echo ""
