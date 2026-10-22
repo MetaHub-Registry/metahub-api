@@ -2,12 +2,12 @@ package handlers
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/metahub-registry/metahub-core/pkg/backends/magazine"
 	"github.com/metahub-registry/metahub-core/pkg/backends/minio"
 	"github.com/metahub-registry/metahub-core/pkg/backends/neo"
@@ -15,6 +15,7 @@ import (
 	"github.com/metahub-registry/metahub-core/pkg/tracing"
 	"github.com/metahub-registry/metahub-core/pkg/upstream"
 	"github.com/metahub-registry/metahub-core/pkg/utils"
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -32,6 +33,13 @@ var (
 )
 
 func TestMain(m *testing.M) {
+	flag.Parse()
+	if testing.Short() {
+		// The package fixture starts Neo4j, MinIO and Jaeger containers.
+		// The public fast lane runs with -short and no container runtime; the
+		// integration lane runs the full suite. See openspec/oss-public-ci.
+		os.Exit(0)
+	}
 	logrus.Info("Start TestMain")
 	ctx := context.Background()
 	/// Neo4j
