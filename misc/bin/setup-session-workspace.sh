@@ -199,7 +199,9 @@ fi
 # agent.compose.lock with dest "."); mode bits travel through the build, so the
 # 0755 exec bit needs no chmod. Assert rather than generate: a missing or
 # non-executable wrapper means the manifest/lock drifted from the scaffold.
-if [ ! -x "${S}/opencode.sh" ]; then
+# Skipped when there is no manifest: composition never ran, so no wrapper is
+# expected. The session is still usable with a stock opencode binary.
+if [ -f "${API_ROOT}/agent.compose.yaml" ] && [ ! -x "${S}/opencode.sh" ]; then
   echo "ERROR: ${S}/opencode.sh missing or not executable after outfitter build." >&2
   echo "       Check the 'scaffold' component in ${API_ROOT}/agent.compose.yaml." >&2
   exit 2
@@ -515,5 +517,9 @@ VL_AGENT="claude-opus-4-6" ${REL_API_ROOT}/misc/bin/vl-event.sh <event_type> <ph
 EOF
 
 echo "[workspace] AGENTS.md generated"
-echo "[workspace] opencode.sh composed by outfitter"
+if [ -x "${S}/opencode.sh" ]; then
+  echo "[workspace] opencode.sh composed by outfitter"
+else
+  echo "[workspace] No harness — start opencode directly, not via ./opencode.sh"
+fi
 echo "[workspace] Taskfile.yml generated"
