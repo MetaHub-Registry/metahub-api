@@ -252,7 +252,7 @@ func (h Handlers) BlobUploadGetHandler(w http.ResponseWriter, r *http.Request) {
 	utils.Debug(l, span, "bu: %v", bu)
 	chunks, err := h.mag.Database.UploadChunkGetByUUID(ctx, bu.ID)
 	if err != nil {
-		err = utils.ErrorHandler(l, span, err, "failed to fetch blob upload chunks")
+		_ = utils.ErrorHandler(l, span, err, "failed to fetch blob upload chunks")
 		det := helper.NewDetailFromReq(req)
 		e := helper.NewErrPayload("INTERNAL_ERROR", "failed to fetch blob upload chunks", det)
 		helper.WriteOCIErrror(w, http.StatusNotFound, e)

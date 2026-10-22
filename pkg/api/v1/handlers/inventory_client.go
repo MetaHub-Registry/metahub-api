@@ -33,7 +33,6 @@ type InventoryClient struct {
 	now    func() time.Time // test seam
 	mu     sync.RWMutex
 	cache  map[string]inventoryCacheEntry
-	warned bool // token_env-unset warning fires once
 }
 
 type inventoryCacheEntry struct {
@@ -44,7 +43,7 @@ type inventoryCacheEntry struct {
 
 // NewInventoryClient builds a client from the validated config. The bearer
 // token comes from cfg.TokenEnv (environment, never YAML); an unset variable
-// means "no token" and warns once.
+// means "no token".
 func NewInventoryClient(cfg config.InventoryResolutionConfig) *InventoryClient {
 	c := &InventoryClient{
 		url:   cfg.URL,

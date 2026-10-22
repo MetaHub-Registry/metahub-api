@@ -775,7 +775,7 @@ func (h Handlers) computeAfterManifestPush(ctx context.Context, l *logrus.Entry,
 }
 
 func (h Handlers) ManifestPutHandlerWrapper(ctx context.Context, w http.ResponseWriter, req types.Request, m types.Manifest) {
-	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
+	l, _, span := utils.InitLogging(ctx, tracer, map[string]any{
 		"package": pkgNameOciMani,
 		"func":    "api.ManifestPutHandlerWrapper",
 		"repo":    req.Repo,
