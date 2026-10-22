@@ -108,20 +108,24 @@ if [ -n "${ENV_MISSING}" ]; then
 fi
 
 # --- .opencode/.gitignore ---
-cat > "${S}/.opencode/.gitignore" <<'EOF'
+# Only when a harness was composed. A public clone has no agent.compose.yaml,
+# so the block above skips composition and there is no .opencode to write into.
+if [ -d "${S}/.opencode" ]; then
+  cat > "${S}/.opencode/.gitignore" <<'EOF'
 node_modules
 package-lock.json
 bun.lock
 EOF
 
-# --- Install plugin deps ---
-cd "${S}/.opencode"
-if command -v bun >/dev/null 2>&1; then
-  bun install --silent 2>/dev/null || true
-elif command -v npm >/dev/null 2>&1; then
-  npm install --silent 2>/dev/null || true
+  # --- Install plugin deps ---
+  cd "${S}/.opencode"
+  if command -v bun >/dev/null 2>&1; then
+    bun install --silent 2>/dev/null || true
+  elif command -v npm >/dev/null 2>&1; then
+    npm install --silent 2>/dev/null || true
+  fi
+  cd "${S}"
 fi
-cd "${S}"
 
 # --- .opencodeignore — copy from metahub-api if it exists ---
 if [ -f "${API_ROOT}/.opencodeignore" ] && [ ! -f "${S}/.opencodeignore" ]; then
