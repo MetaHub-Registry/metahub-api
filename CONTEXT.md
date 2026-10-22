@@ -404,14 +404,14 @@ believing a failure; run the single test to confirm.
 Two proposal-stage OpenSpec changes were carried from the session level into
 this repo at session close (both validated with `openspec validate`):
 
-- `openspec/changes/hostname-profile-resolution/` — profile resolution from
+- `MetaHub-Registry/openspec` → `changes/hostname-profile-resolution/` — profile resolution from
   network identity (DNS PTR → hostname regex → profile) at `GET /auth`.
   Proposal + design (D1–D5) + delta spec (6 requirements / 11 scenarios) +
   tasks are complete and ready to implement; nothing is implemented yet.
   Full research incl. deferred CIDR/Netbox resolver designs:
   Obsidian `Metahub/docs/research/profile-resolution-from-network-identity.md`
   (OpenProject WP #47).
-- `openspec/changes/add-pull-through-manifest-intercept/` — metahub-api slice
+- `MetaHub-Registry/openspec` → `changes/add-pull-through-manifest-intercept/` — metahub-api slice
   of the archived session change `pull-through-with-manipulation`
   (OpenProject WP #48). Proposal + intent-level delta spec; `design.md`
   (blob-delivery strategy matrix) is the next artifact. Depends on the metalib

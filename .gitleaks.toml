@@ -1,0 +1,37 @@
+# Triage of the findings reported during the public import (2026-10-22).
+#
+# Every entry is path-scoped or pattern-scoped, so a new file is still scanned:
+# this allowlist records decisions about existing content, it does not disable
+# the scan. Re-review when a listed file gains new secrets.
+#
+#   *_test.go                 fixture tokens and passwords; none is live
+#   compose-config.yaml       dev-compose defaults (Postgres/Neo4j/MinIO)
+#   garage/config.toml        dev-compse S3 fixture rpc_secret
+#   grafana.ini               Grafana's documented upstream default secret_key
+#   run-pipeline.sh           `aws ecr get-login` command text, not a credential
+#   setup-session-workspace.sh  documented placeholder in a maintainer script
+#   Taskfile*.yml             `curl -u user:pass` examples against localhost
+[extend]
+useDefault = true
+
+[allowlist]
+regexTarget = 'match'
+description = "Triaged fixtures, dev defaults and known false positives"
+paths = [
+  '''^pkg/api/v1/handlers/[a-z_]+_test\.go$''',
+  '''^pkg/api/v1/router/router_test\.go$''',
+  '''^pkg/pullthrough/[a-z_]+_test\.go$''',
+  '''^misc/config/compose-config\.yaml$''',
+  '''^misc/compose/garage/config\.toml$''',
+  '''^misc/compose/grafana/grafana\.ini$''',
+  '''^misc/gocd/bin/run-pipeline\.sh$''',
+  '''^misc/bin/setup-session-workspace\.sh$''',
+  '''^Taskfile\.yml$''',
+  '''^Taskfile_compose\.yaml$''',
+  '''^oauth\.go$''',
+  '''^api/v1/handlers/auth\.go$''',
+]
+regexes = [
+  '''"scope":\s+\{"openid profile email groups"\}''',
+  '''return "", "", false''',
+]

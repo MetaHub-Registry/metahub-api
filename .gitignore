@@ -27,5 +27,7 @@ test.log
 junit.xml
 sonar.log
 test.log
-.understand-anything/.trash-*
 metahub.db
+openspec/changes/
+agent.compose.yaml
+agent.compose.lock

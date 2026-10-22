@@ -2,7 +2,8 @@
 // worker: it streams upstream layer blobs into MetaHub storage off the client
 // request path, deduplicated per digest and bounded by a per-registry soft cap.
 //
-// See openspec/changes/add-pull-through-manifest-intercept (upstream-blob-delivery).
+// See the MetaHub-Registry/openspec change add-pull-through-manifest-intercept
+// (spec: upstream-blob-delivery).
 package pullthrough
 
 import (

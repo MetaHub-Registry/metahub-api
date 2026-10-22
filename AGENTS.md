@@ -22,7 +22,6 @@ sessions/add-oauth/
   - **Sub-changes** — when a feature or migration within the session blows the scope of the main change.
   - **Deferred changes** — future work discovered during the session but not acted on now. These can be carried into a later session.
 - **Version levels are decided at session end**, per-repo, based on actual changes. During the session, versions use `-devN` on the current base version (e.g. `3.0.0-dev1`, not `3.0.1-dev1`).
-- Each worktree ships its own **codebase knowledge graph** at `.understand-anything/knowledge-graph.json` (see "Codebase Knowledge Graph" below). Because worktrees branch off `main`, the graph is inherited at session start; treat it as the first stop for orientation and keep it fresh as code changes.
 
 ### Tools
 
@@ -34,68 +33,9 @@ Use the MCP servers to do inspection instead of trying it with bash
 
 Please use the MCP
 
-## Codebase Knowledge Graph
+## Use GitHub
 
-This repo ships a pre-built knowledge graph of its own source at
-`.understand-anything/knowledge-graph.json` (nodes, edges, architectural
-layers, and a guided tour). **Consult it before doing broad code exploration** —
-it is faster and cheaper than blind file/grep search for "where does X live",
-"what depends on Y", or "how is the registry wired together".
-
-### How to use it
-
-- **First stop for orientation.** Grep the graph for relevant `name`/`summary`/`tags`
-  to find nodes, then follow `imports`/`calls`/`contains` edges for the 1-hop
-  subgraph. Don't dump the whole file into context — search the sections you need.
-- **Resolve symbols via the graph, not `grep`.** Node IDs are
-  `function:<relpath>:<Name>` (methods likewise) and `calls` edges run
-  caller → callee, so "who uses this function?" is a graph query — not a source
-  grep. Reserve `rg`/grep for string/literal search; for "where is X defined",
-  "who calls X", "what depends on X", query the graph first:
-
-  ```bash
-  KG=.understand-anything/knowledge-graph.json
-
-  # Where is it defined?
-  jq -r '.nodes[] | select(.id|endswith(":ProfileGetOne")) | .id' "$KG"
-
-  # Who calls it? (the usages you'd otherwise grep for)
-  jq -r '.edges[] | select(.type=="calls" and (.target|endswith(":ProfileGetOne"))) | .source' "$KG"
-
-  # What does it call / import? (1-hop out)
-  jq -r '.edges[] | select((.type=="calls" or .type=="imports") and (.source|endswith(":ProfileGetOne"))) | .target' "$KG"
-  ```
-- **Graph skills** (in `.opencode/skills/`, available as project skills):
-  - `understand-chat` — ask questions about the codebase using the graph.
-  - `understand-explain` — deep-dive a specific file/function/module.
-  - `understand-diff` — analyze the current git diff against the graph (changed
-    + affected components, risks); writes a dashboard overlay.
-  - `understand-onboard` — generate an onboarding guide for the project.
-- **Scope.** The graph is scoped to code + key infra (see
-  `.understand-anything/.understandignore`); OpenSpec docs, Bruno collections,
-  and misc yaml are intentionally excluded.
-
-### Keeping it fresh
-
-The graph is tied to a git commit (`.understand-anything/meta.json`) with a
-fingerprints baseline for fast incremental updates. After material code changes,
-regenerate it with the global `/understand` tool (re-analyzes only changed files).
-A stale-but-present graph is still a useful map; note staleness if the commit
-hash differs from `HEAD`.
-
-### Session Lifecycle
-
-1. **Create** — `task session:new -- <description>`. Sets up worktrees, branches, draft MRs, bumps to `-dev1`.
-2. **Work** — use OpenSpec propose/apply/explore within each worktree as needed. **Before broad code exploration, consult that worktree's knowledge graph** (`.understand-anything/knowledge-graph.json`) or the `understand-*` skills — see "Codebase Knowledge Graph". Note the graph's commit hash against `HEAD`; if it is stale, it is still a useful map.
-3. **Iterate** — `task session:dev -- <description>` (optional). Bumps all repos to next `-devN`.
-4. **Finish** — `task session:finish -- <description>`. Archives OpenSpec changes, runs tests + sonar, pushes all branches, adds summary comments to MRs.
-5. **Version** — per modified repo: `task session:version:<repo>:<level> -- <description>`. Sets the release version, marks MR as ready.
-6. **Close** — per unchanged repo: `task session:close:<repo> -- <description>`. Closes the MR without merge.
-7. **Merge** — the human reviews and merges each ready MR.
-
-## Use GitLab
-
-The command `glab` allows interaction with GitLab (issues, MRs, pipelines, etc.).
+The command `gh` allows interaction with GitHub (issues, pull requests, actions, etc.).
 
 ## Commits and Pushes
 
@@ -128,20 +68,6 @@ Make sure the current branch within the SonarQube project is accepted.
 Use the SonarQube MCP server to verify quality gate status.
 
 All three steps must pass before a change is considered complete.
-
-### 4. Refresh the knowledge graph (if code changed)
-
-If the change touched in-scope source (see `.understand-anything/.understandignore`),
-keep the worktree's graph in sync so the next task/agent inherits an accurate map:
-
-- Run the `understand-diff` skill to review changed + affected components and risks
-  against the existing graph.
-- If the changes are material, regenerate with the global `/understand` tool — it
-  re-analyzes only changed files using the fingerprints baseline in
-  `.understand-anything/meta.json`.
-- Commit the updated `.understand-anything/` artifacts alongside the code so the
-  graph's commit hash tracks `HEAD`. Doc-only, Bruno, or yaml-only changes can
-  skip this step.
 
 ## Partial Test Runs
 
