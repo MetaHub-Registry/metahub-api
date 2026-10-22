@@ -96,6 +96,7 @@ export DOCKER_BUILDKIT=1
 docker build --platform linux/${ARCH} \
    -f Dockerfile.result \
    --build-arg=METALIB_IMAGE=${METALIB_IMAGE} \
+   --build-arg=BASE_REGISTRY=${HARBOR_REG:?HARBOR_REG must be set} \
    -t ${NEW_IMAGE} .
 docker push ${NEW_IMAGE}
 # .full is the per-arch image; the Manifest stage publishes the manifest-list

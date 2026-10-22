@@ -12,7 +12,8 @@ ARG METALIB_IMAGE
 FROM --platform=$BUILDPLATFORM $METALIB_IMAGE AS metalib
 
 # --- Go build: runs natively on the builder, cross-compiles to TARGETARCH ---
-FROM --platform=$BUILDPLATFORM harbor.example.com/qnib-container/golang:2026-04-14.1 AS go
+ARG BASE_REGISTRY
+FROM --platform=$BUILDPLATFORM ${BASE_REGISTRY}/qnib-container/golang:2026-04-14.1 AS go
 ARG TARGETOS TARGETARCH
 # zig cc serves as the cgo cross-compiler for non-native targets:
 #   amd64 -> x86_64-linux-musl, arm64 -> aarch64-linux-musl
