@@ -21,7 +21,7 @@ for x in $(echo ${ARCHS}|tr , ' '); do
     docker buildx build --platform=linux/${x} \
         --load -f Dockerfile.dev \
         --build-arg=USERDB_FILE=${USERDB_FILE} \
-        --build-context metalib=../metahub-core \
+        --build-context metahub-core=../metahub-core \
         -t ${IMG_NAME} .
     docker push ${IMG_NAME}
     set +x

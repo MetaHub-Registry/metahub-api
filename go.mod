@@ -24,7 +24,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.13.0
 	github.com/stretchr/testify v1.9.0
-	github.com/metahub-registry/metahub-core v0.0.0-00010101000000-000000000000
+	github.com/metahub-registry/metahub-core v0.3.10
 	go.opentelemetry.io/otel v1.19.0
 	go.opentelemetry.io/otel/exporters/jaeger v1.14.0
 	go.opentelemetry.io/otel/sdk v1.19.0
@@ -142,4 +142,3 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/metahub-registry/metahub-core => ../metahub-core

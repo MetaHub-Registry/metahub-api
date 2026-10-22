@@ -33,14 +33,14 @@ else
 fi
 
 # Export the metalib source from its built image and replace the module locally.
-mkdir -p ext/metalib
+mkdir -p ext/metahub-core
 (
-  cd ext/metalib
+  cd ext/metahub-core
   docker run -d --name target-test "${METALIB_IMAGE}" sleep 30
   docker export target-test | tar xf - pkg go.mod go.sum
   docker rm -f target-test
 )
-go mod edit -replace github.com/metahub-registry/metahub-core=${PWD}/ext/metalib
+go mod edit -replace github.com/metahub-registry/metahub-core=${PWD}/ext/metahub-core
 go mod tidy
 
 # Run the suite → coverage.txt (consumed by the Sonar stage via a GoCD artifact).

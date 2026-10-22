@@ -5,18 +5,18 @@ RUN mkdir -p -m 0700 ~/.ssh && ssh-keyscan gitlab.com >> ~/.ssh/known_hosts
 WORKDIR /go/metahub-api
 COPY . ./
 RUN mkdir -p ext
-RUN --mount=type=ssh git clone git@github.com:MetaHub-Registry/metahub-core.git ext/metalib
+RUN --mount=type=ssh git clone git@github.com:MetaHub-Registry/metahub-core.git ext/metahub-core
 RUN ls -la ext
 RUN go mod edit \
-     -replace github.com/metahub-registry/metahub-core=/go/metahub-api/ext/metalib \
+     -replace github.com/metahub-registry/metahub-core=/go/metahub-api/ext/metahub-core \
      -replace github.com/metahub-registry/metahub-core/pkg/backends/minio=\
-/go/metahub-api/ext/metalib/pkg/backends/minio \
+/go/metahub-api/ext/metahub-core/pkg/backends/minio \
      -replace github.com/metahub-registry/metahub-core/pkg/types=\
-/go/metahub-api/ext/metalib/pkg/types \
+/go/metahub-api/ext/metahub-core/pkg/types \
      -replace github.com/metahub-registry/metahub-core/pkg/backends/sqlite=\
-/go/metahub-api/ext/metalib/pkg/backends/sqlite \
+/go/metahub-api/ext/metahub-core/pkg/backends/sqlite \
      -replace github.com/metahub-registry/metahub-core/pkg/backends/neo=\
-/go/metahub-api/ext/metalib/pkg/backends/neo
+/go/metahub-api/ext/metahub-core/pkg/backends/neo
 
 RUN --mount=type=cache,target=/go/pkg/mod go mod tidy
 ENV CGO_ENABLED=1 GOOS=linux
@@ -36,13 +36,13 @@ RUN mkdir -p -m 0700 ~/.ssh && ssh-keyscan gitlab.com >> ~/.ssh/known_hosts
 WORKDIR /go/metahub-api
 # COPY . ./
 # RUN mkdir -p ext
-# RUN --mount=type=ssh git clone git@github.com:MetaHub-Registry/metahub-core.git ext/metalib
+# RUN --mount=type=ssh git clone git@github.com:MetaHub-Registry/metahub-core.git ext/metahub-core
 # RUN ls -la ext
-# RUN go mod edit -replace github.com/metahub-registry/metahub-core=/go/metahub-api/ext/metalib \
-#  && go mod edit -replace github.com/metahub-registry/metahub-core/pkg/backends/minio=/go/metahub-api/ext/metalib/pkg/backends/minio \
-#  && go mod edit -replace github.com/metahub-registry/metahub-core/pkg/types=/go/metahub-api/ext/metalib/pkg/types \
-#  && go mod edit -replace github.com/metahub-registry/metahub-core/pkg/backends/sqlite=/go/metahub-api/ext/metalib/pkg/backends/sqlite \
-#  && go mod edit -replace github.com/metahub-registry/metahub-core/pkg/backends/neo=/go/metahub-api/ext/metalib/pkg/backends/neo
+# RUN go mod edit -replace github.com/metahub-registry/metahub-core=/go/metahub-api/ext/metahub-core \
+#  && go mod edit -replace github.com/metahub-registry/metahub-core/pkg/backends/minio=/go/metahub-api/ext/metahub-core/pkg/backends/minio \
+#  && go mod edit -replace github.com/metahub-registry/metahub-core/pkg/types=/go/metahub-api/ext/metahub-core/pkg/types \
+#  && go mod edit -replace github.com/metahub-registry/metahub-core/pkg/backends/sqlite=/go/metahub-api/ext/metahub-core/pkg/backends/sqlite \
+#  && go mod edit -replace github.com/metahub-registry/metahub-core/pkg/backends/neo=/go/metahub-api/ext/metahub-core/pkg/backends/neo
 # RUN go mod tidy
 ENV CGO_ENABLED=1 GOOS=linux
 ENV CFG_PATH=./misc/config/compose-config.yaml

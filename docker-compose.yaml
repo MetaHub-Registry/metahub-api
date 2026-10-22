@@ -9,13 +9,13 @@ services:
     #image: registry.github.com/metahub-registry/metahub-api:2023-03-01-arm64-dev
     environment:
       - SQLITE_FILE=./misc/sqlite/metahub_20251209.db
-      - PATH=/go/metahub-api:/go/metalib/misc/bin:/go/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      - PATH=/go/metahub-api:/go/metahub-core/misc/bin:/go/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     ports:
       - 8080:80
     volumes:
       - goMod:/go/pkg/mod
       - ../community-edition:/community-edition
-      - ../metahub-core:/go/metalib
+      - ../metahub-core:/go/metahub-core
       - ../metahub-admin:/go/metahub-admin
       - ./:/go/metahub-api
     networks:
@@ -30,12 +30,12 @@ services:
     volumes:
       - .:/go/metahub
       - ./misc/docker/dind/daemon.json:/etc/docker/daemon.json:ro
-      - ../metahub-core:/go/metalib
+      - ../metahub-core:/go/metahub-core
     networks:
      - api-internal
      - mh-data
     environment:
-      PATH: /go/metalib/misc/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      PATH: /go/metahub-core/misc/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       DEV_URL: dev:80
       CE_URL: ce:80
       PS1: 'dind > '
