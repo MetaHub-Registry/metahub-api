@@ -1,4 +1,4 @@
-FROM golang:1.18 AS mt-v1
+FROM mirror.gcr.io/library/golang:1.18 AS mt-v1
 WORKDIR /go/src/github.com/estesp/manifest-tool
 RUN wget -qO - https://github.com/estesp/manifest-tool/releases/download/v1.0.3/manifest-tool-1.0.3.tar.gz|tar xfz - --strip-components=1 
 RUN go mod init github.com/estesp/manifest-tool \
@@ -8,7 +8,7 @@ RUN go mod init github.com/estesp/manifest-tool \
 # && go mod edit -replace github.com/estesp/manifest-tool=github.com/estesp/manifest-tool@v1.0.3 \
 # && go mod tidy \
 
-FROM golang:1.18 AS mt-v2
+FROM mirror.gcr.io/library/golang:1.18 AS mt-v2
 ARG MT_VER=2.0.3
 WORKDIR /go/src/github.com/estesp/manifest-tool
 RUN wget -qO - https://github.com/estesp/manifest-tool/archive/refs/tags/v${MT_VER}.tar.gz|tar xfz - --strip-components=1 
@@ -17,7 +17,7 @@ RUN go mod tidy \
  && cd cmd/manifest-tool \
  && go build -o /usr/bin/manifest-tool
 
-FROM golang:1.18 AS regclient
+FROM mirror.gcr.io/library/golang:1.18 AS regclient
 ARG RC_VER=0.4.3
 WORKDIR /go/src/github.com/regclient/regclient
 RUN wget -qO - https://github.com/regclient/regclient/archive/refs/tags/v${RC_VER}.tar.gz|tar xfz - --strip-components=1 \
@@ -30,7 +30,7 @@ WORKDIR /go/src/github.com/regclient/regclient/cmd/regsync
 RUN go build -o /usr/bin/regsync
 
 
-FROM docker:20.10.14-dind
+FROM mirror.gcr.io/library/docker:20.10.14-dind
 ENV MH_URL=dev:80
 RUN apk add --no-cache bash curl jq screen skopeo vim \
  && wget -qO- https://github.com/oras-project/oras/releases/download/v1.3.0/oras_1.3.0_linux_arm64.tar.gz | tar xfz - -C /usr/local/bin \

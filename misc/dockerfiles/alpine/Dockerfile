@@ -1,1 +1,1 @@
-FROM alpine:3.22
+FROM mirror.gcr.io/library/alpine:3.22

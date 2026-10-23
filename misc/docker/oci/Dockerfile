@@ -1,4 +1,4 @@
-FROM alpine:3.22
+FROM mirror.gcr.io/library/alpine:3.22
 
 RUN apk --no-cache add bash ca-certificates git go
 WORKDIR /usr/local/src
