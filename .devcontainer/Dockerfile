@@ -1,4 +1,4 @@
-FROM sonarsource/sonar-scanner-cli:12.0.0.3214_8.0.1 AS sonar
+FROM mirror.gcr.io/sonarsource/sonar-scanner-cli:12.0.0.3214_8.0.1 AS sonar
 
 FROM mcr.microsoft.com/devcontainers/go:1.25-bookworm
 ARG TARGETPLATFORM

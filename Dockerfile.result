@@ -43,13 +43,13 @@ RUN --mount=type=cache,target=/go/pkg/mod case "${TARGETARCH}" in \
     go build -a -ldflags '-extldflags "-static"' .
 
 # --- gonja-cli: fetched for the TARGET arch (fetch runs natively) ----------
-FROM --platform=$BUILDPLATFORM alpine:3.21 AS gonja
+FROM --platform=$BUILDPLATFORM mirror.gcr.io/library/alpine:3.21 AS gonja
 ARG TARGETARCH
 RUN apk add --no-cache wget \
  && wget -qO- https://gitlab.com/qnib-golang/gonja-cli/-/releases/v0.0.2/downloads/gonja-cli_0.0.2_linux_${TARGETARCH}.tar.gz |tar xfz - -C /usr/local/bin
 
 # --- runtime (per-arch) ----------------------------------------------------
-FROM alpine:3.21
+FROM mirror.gcr.io/library/alpine:3.21
 ENV METAHUB_API_PORT=80 \
     METAHUB_DB=/var/lib/metahub/metahub.db \
     CFG_FILE=/etc/metahub/api.yaml \
