@@ -17,6 +17,10 @@ must address a resource by its natural key:
 | `POST /api/v1/collection` | request `collection_id`, `tag_id` | `repo_name` + `tag_name` |
 | `GET /api/v1/profiles/{label}` | `id` on the profile, rules and manipulations | `label`, the rule tuple, the manipulation `label` |
 | `GET /api/v1/oras/artifact` | `?id=` and the response `id` | `repo` + `artifact_type` (or `digest`) |
+| `GET /api/v1/protected/user` | `id` (SQLite) | `username` |
+| `GET /api/v1/protected/user/secret` | `id` (SQLite) | `name` |
+| `DELETE /api/v1/protected/user/secret/{id}` | numeric ID | `{name}` |
+| `/api/v1/protected/users/{id}` routes | numeric ID path | removed; use `/user` |
 
 There is no dual-format window: the project is pre-1.0 and the repositories
 have no public clients yet.

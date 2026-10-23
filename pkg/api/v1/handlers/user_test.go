@@ -3,17 +3,16 @@ package handlers
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"github.com/metahub-registry/metahub-core/pkg/backends/sqlite"
 	"github.com/metahub-registry/metahub-core/pkg/types"
 	"github.com/metahub-registry/metahub-core/pkg/utils"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // ---------------------------------------------------------------------------
@@ -71,8 +70,8 @@ func TestUserPutSecret_NoClaims(t *testing.T) {
 
 func TestUserDelSecret_NoClaims(t *testing.T) {
 	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("id", "1")
-	req := httptest.NewRequest("DELETE", "/api/v1/protected/user/secret/1", nil)
+	rctx.URLParams.Add("name", "secret1")
+	req := httptest.NewRequest("DELETE", "/api/v1/protected/user/secret/secret1", nil)
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 	rr := httptest.NewRecorder()
 	h.UserDelSecret(rr, req)
@@ -227,7 +226,7 @@ func TestUserSecrets(t *testing.T) {
 		r.Use(oidcMiddlewareInject(claims))
 		r.Get("/api/v1/protected/session", h.UserGetSession)
 		r.Put("/api/v1/protected/user/secret", h.UserPutSecret)
-		r.Delete("/api/v1/protected/user/secret/{id}", h.UserDelSecret)
+		r.Delete("/api/v1/protected/user/secret/{name}", h.UserDelSecret)
 		r.Get("/api/v1/protected/user", h.UserGetOne)
 	})
 	ts := httptest.NewServer(r)
@@ -263,18 +262,8 @@ func TestUserSecrets(t *testing.T) {
 			t.Fatal("Expected 2 secrets")
 		}
 	}
-	usrSects, err := h.mag.UserManagement.GetSecrets(ctx, adminID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, s := range usrSects {
-		if s.Name == s1.Name {
-			s1.SqlID = s.SqlID
-		}
-	}
-	// Delete by ID
-	assert.Greater(t, s1.SqlID, int64(0))
-	url := fmt.Sprintf("/api/v1/protected/user/secret/%d", s1.SqlID)
+	// Delete by name
+	url := "/api/v1/protected/user/secret/" + s1.Name
 	if status, resp := testRequest(t, ts, http.MethodDelete, url, http.Header{}, nil); status != 200 {
 		t.Log(status)
 		t.Fatalf("%s", resp)

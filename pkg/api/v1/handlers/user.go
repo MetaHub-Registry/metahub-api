@@ -7,7 +7,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/metahub-registry/metahub-core/pkg/backends/sqlite"
@@ -157,11 +156,11 @@ func (h Handlers) UserPutSecret(w http.ResponseWriter, r *http.Request) {
 
 func (h Handlers) UserDelSecret(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	secretID := chi.URLParam(r, "id")
+	secretName := chi.URLParam(r, "name")
 	l, ctx, span := utils.InitLogging(ctx, tracer, map[string]any{
 		"package": pkgNameUser,
 		"func":    "UserDelSecret",
-		"id":      secretID,
+		"name":    secretName,
 	})
 	defer span.End()
 	_ = ctx
@@ -173,18 +172,8 @@ func (h Handlers) UserDelSecret(w http.ResponseWriter, r *http.Request) {
 		// error was already written
 		return
 	}
-	_, err = strconv.Atoi(secretID)
-	if err == nil {
-		utils.Debug(l, span, "Deleting secret by ID '%s'", secretID)
-		if err := h.mag.UserManagement.DelSecret(ctx, sqlUsr.ID, secretID); err != nil {
-			utils.ErrorHandlerPlainWWW(w, l, span, err, "INTERNAL_ERROR", "failed to delete secret")
-			return
-		}
-		h.writeJSON(w, http.StatusOK, envelope{"message": "deleted secret by ID, please transition to secret name"})
-		return
-	}
-	utils.Debug(l, span, "Deleting secret by name '%s'", secretID)
-	if err := h.mag.UserManagement.DelSecretByName(ctx, sqlUsr.ID, secretID); err != nil {
+	utils.Debug(l, span, "Deleting secret by name '%s'", secretName)
+	if err := h.mag.UserManagement.DelSecretByName(ctx, sqlUsr.ID, secretName); err != nil {
 		utils.ErrorHandlerPlainWWW(w, l, span, err, "INTERNAL_ERROR", "failed to delete secret")
 		return
 	}
