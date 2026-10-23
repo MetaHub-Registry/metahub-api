@@ -22,6 +22,14 @@ const (
 	genericProfile = "generic"
 )
 
+// isModelServingRepo reports whether the repo may carry the model-serving stack
+// under a profile: model artifacts (models/...) and app/runtime repos (apps/...).
+// Plain collections (e.g. qnib/ftest) stay on the generic index, which is the
+// gate the e2e checks.
+func isModelServingRepo(repo string) bool {
+	return strings.HasPrefix(repo, "models/") || strings.HasPrefix(repo, "apps/")
+}
+
 // persistedIndexDigests remembers the manipulated-index digests this process has
 // already stored in object storage, so a repeat profile-scoped pull skips the
 // remote (~100-250ms against eu-west-1 S3) ManifestsPutObj on the GET path — the
@@ -48,7 +56,7 @@ func (h Handlers) handleIndex(ctx context.Context, w http.ResponseWriter, req ty
 	// Model-serving profiles apply only to model-centric (models/...) pulls.
 	// Collection pulls must stay on the static/generic index; otherwise the
 	// precomputed profile index leaks model layers into collection pulls.
-	if req.Profile == "" || !strings.HasPrefix(req.Repo, "models/") {
+	if req.Profile == "" || !isModelServingRepo(req.Repo) {
 		req.Profile = genericProfile
 	}
 	ml, found, err := h.mag.IndexGetByRequest(ctx, req)
