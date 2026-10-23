@@ -59,7 +59,7 @@ parse, so the licence check ignores it explicitly.
 | `github.com/klauspost/cpuid/v2` | MIT | <https://github.com/klauspost/cpuid/blob/v2.1.0/LICENSE> |
 | `github.com/magiconair/properties` | BSD-2-Clause | <https://github.com/magiconair/properties/blob/v1.8.7/LICENSE.md> |
 | `github.com/mattn/go-sqlite3` | MIT | <https://github.com/mattn/go-sqlite3/blob/v1.14.22/LICENSE> |
-| `github.com/metahub-registry/metahub-core/pkg` | Apache-2.0 | <https://github.com/metahub-registry/metahub-core/blob/725938dd0b1e/LICENSE> |
+| `github.com/metahub-registry/metahub-core/pkg` | Apache-2.0 | <https://github.com/metahub-registry/metahub-core/blob/93d6c2390f39/LICENSE> |
 | `github.com/mgudov/logic-expression-parser` | MIT | <https://github.com/mgudov/logic-expression-parser/blob/v0.1.2/LICENSE> |
 | `github.com/minio/md5-simd` | Apache-2.0 | <https://github.com/minio/md5-simd/blob/v1.1.2/LICENSE> |
 | `github.com/minio/minio-go/pkg/set` | Apache-2.0 | <https://github.com/minio/minio-go/blob/v6.0.14/LICENSE> |
