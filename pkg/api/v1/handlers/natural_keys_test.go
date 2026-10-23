@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"testing"
 
 	"github.com/metahub-registry/metahub-core/pkg/types"
@@ -125,6 +126,22 @@ func TestNaturalKeyRoundTripAcrossHandlerRestart(t *testing.T) {
 	restarted := NewHandlers("test", h.mag, nil, nil)
 	second := fetch(restarted)
 
-	assert.JSONEq(t, string(first["collection"]), string(second["collection"]),
+	// The collection's manifests are backed by a map, so the array order is
+	// not stable. Compare the logical content by sorting on the digest.
+	normalise := func(raw json.RawMessage) map[string]any {
+		t.Helper()
+		var col map[string]any
+		require.NoError(t, json.Unmarshal(raw, &col))
+		if manis, ok := col["manifests"].([]any); ok {
+			sort.Slice(manis, func(i, j int) bool {
+				di, _ := manis[i].(map[string]any)["digest"].(string)
+				dj, _ := manis[j].(map[string]any)["digest"].(string)
+				return di < dj
+			})
+			col["manifests"] = manis
+		}
+		return col
+	}
+	assert.Equal(t, normalise(first["collection"]), normalise(second["collection"]),
 		"the resource must be identical when re-resolved by its natural key")
 }
