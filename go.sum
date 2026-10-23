@@ -280,6 +280,8 @@ github.com/metahub-registry/metahub-core v0.3.11-0.20261023073118-725938dd0b1e h
 github.com/metahub-registry/metahub-core v0.3.11-0.20261023073118-725938dd0b1e/go.mod h1:15GzqtZJrT2h3P9Dk8pdWnyZQPaPucIC5FYvFDzaMA4=
 github.com/metahub-registry/metahub-core v0.3.11-0.20261023111609-93d6c2390f39 h1:EQM5Ok4MzmPZnkZAg4GA3Qy4XyoZmj5Sqft8q2X4fCQ=
 github.com/metahub-registry/metahub-core v0.3.11-0.20261023111609-93d6c2390f39/go.mod h1:15GzqtZJrT2h3P9Dk8pdWnyZQPaPucIC5FYvFDzaMA4=
+github.com/metahub-registry/metahub-core v0.3.11-0.20261023114610-b904bf383772 h1:QZM3px1ozKlxlRlLlZoH9EgUgFd2b/if7n1K2QwuWGI=
+github.com/metahub-registry/metahub-core v0.3.11-0.20261023114610-b904bf383772/go.mod h1:15GzqtZJrT2h3P9Dk8pdWnyZQPaPucIC5FYvFDzaMA4=
 github.com/mgudov/logic-expression-parser v0.1.2 h1:VNPAHUTVm3zHzLn77YKJFYS4M8bmPLVSNnPCorjYcTI=
 github.com/mgudov/logic-expression-parser v0.1.2/go.mod h1:XQJyAlRrbqsKd3NrlBQr1YmMvTyXId+rZDv8qXQArB4=
 github.com/miekg/pkcs11 v1.1.1/go.mod h1:XsNlhZGX73bx86s2hdc/FuaLm2CPZJemRLMA+WTFxgs=
