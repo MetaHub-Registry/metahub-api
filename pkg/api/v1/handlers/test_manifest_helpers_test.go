@@ -15,6 +15,7 @@ import (
 )
 
 var (
+	//nolint:unused // fixture retained for the temporarily disabled manifest tests
 	testManifestBytes = []byte(`{
 		"schemaVersion": 2,
 		"config": {
@@ -47,6 +48,7 @@ var (
 		}`)
 )
 
+//nolint:unused // referenced by a temporarily disabled test
 func getHttpTestManifestDeleteByDigest(ctx context.Context, br *utils.BootstrapResult) (w *httptest.ResponseRecorder, r *http.Request, err error) {
 	var testRepo, maniDigest, testImage string
 	if testRepo, err = br.Get("repo"); err != nil {
@@ -112,6 +114,7 @@ func getHttpTestManifestUploadPutOnlyHandlerWithoutLayers(br *utils.BootstrapRes
 }
 
 // Populate registry with test manifest (with single put)
+//nolint:unused // referenced by a temporarily disabled test
 func getHttpTestManifestUploadPutOnlyHandler(br *utils.BootstrapResult) (w *httptest.ResponseRecorder, r *http.Request, err error) {
 	var testRepo, testProfile, testImage, testTag, testMediaType string
 	if testRepo, err = br.Get("repo"); err != nil {
@@ -149,6 +152,7 @@ func getHttpTestManifestUploadPutOnlyHandler(br *utils.BootstrapResult) (w *http
 	return w, r, nil
 }
 
+//nolint:unused // referenced by a temporarily disabled test
 func getHttpTestManifestByDigest(br *utils.BootstrapResult) (w *httptest.ResponseRecorder, r *http.Request, err error) {
 	var testRepo, testProfile, testImage, testRef, testMethod string
 	if testRepo, err = br.Get("repo"); err != nil {

@@ -47,12 +47,7 @@ func TestCollectionGetOne_IncludesConfigAndLayers(t *testing.T) {
 	require.NoError(t, err)
 	defer TeardownTest(bs, br)
 
-	colID, err := br.GetInt64("collection:ft#id")
-	require.NoError(t, err)
-	colTagID, err := br.GetInt64("tag:generic#id")
-	require.NoError(t, err)
-
-	reqBody := ReqPayload{ColID: colID, TagID: colTagID}
+	reqBody := ReqPayload{RepoName: "qnib/featuretest", TagName: "generic"}
 	wGet := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/collection", bytes.NewBuffer(reqBody.ToByte()))
 	req.Header.Set("Content-Type", "application/json")

@@ -38,7 +38,6 @@ var (
 	invalidRequest oauthError = "invalid_request"
 	invalidToken   oauthError = "invalid_token"
 	userReg                   = regexp.MustCompile(`(?P<user>[\w\-\.\_\@]+)(\/(?P<profile>[\/\w\-\.\_#]+))?`)
-	debugUser                 = map[string]int{"oci": 4}
 	FailGetToken              = fmt.Errorf("failed to get token")
 )
 

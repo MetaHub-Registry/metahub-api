@@ -13,7 +13,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/context v1.1.1
-	github.com/metahub-registry/metahub-core v0.3.10
+	github.com/metahub-registry/metahub-core v0.3.11-0.20261023111609-93d6c2390f39
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/neo4j/neo4j-go-driver/v4 v4.4.4
 	github.com/opencontainers/go-digest v1.0.0

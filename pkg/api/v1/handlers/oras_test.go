@@ -8,9 +8,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/metahub-registry/metahub-core/pkg/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/metahub-registry/metahub-core/pkg/utils"
 )
 
 // OrasListResponse mirrors the JSON envelope returned by OrasGetAll.
@@ -209,36 +209,9 @@ func TestOrasGetOne_ByName(t *testing.T) {
 	assert.NotNil(t, resp.Artifact, "expected artifact in response")
 }
 
-// TestOrasGetOne_ByID checks that a known manifest data ID returns 200 with the artifact.
-func TestOrasGetOne_ByID(t *testing.T) {
-	ctx := context.Background()
-	bs := orasBootstrap()
-	br, err := SetupTest(ctx, bs)
-	require.NoError(t, err)
-	defer TeardownTest(bs, br)
-
-	token, err := br.Get("user:test#bearer")
-	require.NoError(t, err)
-
-	maniDataID, err := br.GetInt64("manifestdata:ft_oras_cyclonedx#id")
-	require.NoError(t, err, "expected manifestdata:ft_oras_cyclonedx#id in bootstrap result")
-
-	w := httptest.NewRecorder()
-	_, r := utils.CreateNewHTTPTest(ctx, http.MethodGet, map[string]string{}, map[string]string{},
-		map[string]string{"Authorization": fmt.Sprintf("Bearer %s", token)},
-		"/api/v1/oras/artifact", nil)
-	r.URL.RawQuery = fmt.Sprintf("id=%d", maniDataID)
-	h.OrasGetOne(w, r)
-	assert.Equal(t, http.StatusOK, w.Code)
-
-	var resp OrasArtifactResponse
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
-	assert.Empty(t, resp.Error, "expected no error in response")
-	assert.NotNil(t, resp.Artifact, "expected artifact in response")
-}
-
-// TestOrasGetOne_ByID_NotFound checks that an invalid ID returns 404.
-func TestOrasGetOne_ByID_NotFound(t *testing.T) {
+// TestOrasGetOne_StorageIDRejected verifies that the removed ?id= path is
+// not part of the public API: artifacts are addressed by repo + artifact_type.
+func TestOrasGetOne_StorageIDRejected(t *testing.T) {
 	ctx := context.Background()
 	bs := orasBootstrap()
 	br, err := SetupTest(ctx, bs)
@@ -252,9 +225,9 @@ func TestOrasGetOne_ByID_NotFound(t *testing.T) {
 	_, r := utils.CreateNewHTTPTest(ctx, http.MethodGet, map[string]string{}, map[string]string{},
 		map[string]string{"Authorization": fmt.Sprintf("Bearer %s", token)},
 		"/api/v1/oras/artifact", nil)
-	r.URL.RawQuery = "id=-999999"
+	r.URL.RawQuery = "id=42"
 	h.OrasGetOne(w, r)
-	assert.Equal(t, http.StatusNotFound, w.Code)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
 // TestOrasGetAll_ImageOnlyRepoAbsent verifies that a graph containing only container-image
@@ -353,36 +326,4 @@ func TestOrasGetOne_ByName_HasBreadcrumbs(t *testing.T) {
 	assert.Equal(t, "featuretest", crumbs[1].Crumb)
 	assert.Equal(t, 0, crumbs[1].Active, "last breadcrumb must have active == 0")
 	assert.Equal(t, "qnib/featuretest", crumbs[1].Link)
-}
-
-// TestOrasGetOne_ByID_HasBreadcrumbs verifies that OrasGetOne by ID also returns breadcrumbs.
-func TestOrasGetOne_ByID_HasBreadcrumbs(t *testing.T) {
-	ctx := context.Background()
-	bs := orasBootstrap()
-	br, err := SetupTest(ctx, bs)
-	require.NoError(t, err)
-	defer TeardownTest(bs, br)
-
-	token, err := br.Get("user:test#bearer")
-	require.NoError(t, err)
-
-	maniDataID, err := br.GetInt64("manifestdata:ft_oras_cyclonedx#id")
-	require.NoError(t, err)
-
-	w := httptest.NewRecorder()
-	_, r := utils.CreateNewHTTPTest(ctx, http.MethodGet, map[string]string{}, map[string]string{},
-		map[string]string{"Authorization": fmt.Sprintf("Bearer %s", token)},
-		"/api/v1/oras/artifact", nil)
-	r.URL.RawQuery = fmt.Sprintf("id=%d", maniDataID)
-	h.OrasGetOne(w, r)
-	require.Equal(t, http.StatusOK, w.Code)
-
-	var raw map[string]json.RawMessage
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &raw))
-	_, hasBreadCrumbs := raw["bread_crumbs"]
-	assert.True(t, hasBreadCrumbs, "OrasGetOne by ID response must include 'bread_crumbs' key")
-
-	var crumbs []json.RawMessage
-	require.NoError(t, json.Unmarshal(raw["bread_crumbs"], &crumbs))
-	assert.NotEmpty(t, crumbs, "breadcrumbs must not be empty when artifact has a repo")
 }

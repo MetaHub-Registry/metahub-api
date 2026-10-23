@@ -30,7 +30,6 @@ func TestToUIManipulation_LegacyFlatLayers(t *testing.T) {
 		},
 	}
 	ui := toUIManipulation(mp)
-	assert.Equal(t, int64(42), ui.ID)
 	assert.Equal(t, "legacy#1", ui.Label)
 	assert.Nil(t, ui.Default, "legacy manipulation has no default block")
 	assert.Empty(t, ui.Variants, "legacy manipulation has no variants")

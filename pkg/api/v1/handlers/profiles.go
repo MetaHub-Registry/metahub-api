@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/sirupsen/logrus"
 	"github.com/metahub-registry/metahub-core/pkg/types"
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -72,16 +72,15 @@ func (h Handlers) ProfileGetOne(w http.ResponseWriter, r *http.Request) {
 
 	// Hydrate linked manipulations. Non-fatal: a failure here logs but
 	// does not block the rest of the response.
-	mps, mpErr := h.mag.Database.ManipulationsWithConfigByProfileID(ctx, ps.ID)
+	mps, mpErr := h.mag.Database.ManipulationsWithConfigByProfileLabel(ctx, ps.Label)
 	if mpErr != nil {
-		l.Warnf("ManipulationsWithConfigByProfileID failed (non-fatal): %v", mpErr)
+		l.Warnf("ManipulationsWithConfigByProfileLabel failed (non-fatal): %v", mpErr)
 	}
 
 	rules := toProfileRuleResps(ps.Rules)
 	resp := ProfileDetailResponse{
-		ID:              ps.ID,
-		Name:            ps.Name,
-		Tag:             ps.Tag,
+		Name: ps.Name,
+		Tag:  ps.Tag,
 		// Return the canonical public label (e.g. "arch#zen4#latest"), which is
 		// the form the API/UI use to reference a profile, not the stored form
 		// (e.g. "arch/zen4#latest") that keeps slashes in the name segment.
@@ -134,7 +133,6 @@ func toProfileRuleResps(rules []types.ProfileRule) []ProfileRuleResp {
 	resps := make([]ProfileRuleResp, 0, len(rules))
 	for _, r := range rules {
 		resps = append(resps, ProfileRuleResp{
-			ID:    r.ID,
 			Type:  r.Type,
 			Op:    r.Op,
 			Key:   r.Key,

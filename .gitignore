@@ -28,6 +28,5 @@ junit.xml
 sonar.log
 test.log
 metahub.db
-openspec/changes/
 agent.compose.yaml
 agent.compose.lock

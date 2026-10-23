@@ -1,0 +1,40 @@
+name: Integration
+
+# Container-backed tests gate releases, not pull requests. They need a Docker
+# daemon (testcontainers starts Neo4j, MinIO and Jaeger) and are slower than
+# the fast lane.
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: integration-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  GO_VERSION: "1.26.x"
+  # metahub-core is private until the visibility flip.
+  GOPRIVATE: "github.com/metahub-registry/*"
+
+jobs:
+  full-test-suite:
+    name: full-test-suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - name: Configure private module access
+        env:
+          METAHUB_CORE_RO_TOKEN: ${{ secrets.METAHUB_CORE_RO_TOKEN }}
+        run: |
+          git config --global url."https://x-access-token:${METAHUB_CORE_RO_TOKEN}@github.com/".insteadOf "https://github.com/"
+      - name: Run the full test suite
+        run: go test -timeout 900s -count=1 ./...

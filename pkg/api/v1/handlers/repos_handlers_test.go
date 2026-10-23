@@ -7,25 +7,25 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"github.com/metahub-registry/metahub-core/pkg/backends/magazine"
 	"github.com/metahub-registry/metahub-core/pkg/types"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // fakeReposDB implements the Database read methods RepoGetAll / RepoGetOne use.
 type fakeReposDB struct {
 	magazine.Database
-	cols       []types.CollectionListing
-	colsErr    error
-	byName     types.CollectionListing
-	byNameErr  error
-	byID       types.CollectionListing
-	byIDErr    error
-	labels     map[string][]string
-	labelsErr  error
-	layers     []types.Layer
-	layersErr  error
+	cols      []types.CollectionListing
+	colsErr   error
+	byName    types.CollectionListing
+	byNameErr error
+	byID      types.CollectionListing
+	byIDErr   error
+	labels    map[string][]string
+	labelsErr error
+	layers    []types.Layer
+	layersErr error
 }
 
 func (f *fakeReposDB) CollectionListingGetByRepoLikeForProfile(context.Context, string, string) ([]types.CollectionListing, error) {
@@ -90,13 +90,11 @@ func TestRepoGetOne(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.Contains(t, w.Body.String(), "collection")
 
-	// by id -> 200
-	h = Handlers{mag: magazine.Magazine{Database: &fakeReposDB{
-		byID: types.CollectionListing{ID: 5, Repo: "acme/api", Tag: "v2", Manifests: map[string]types.Manifest{}},
-	}}}
+	// storage IDs only -> 400 (the API addresses collections by repo + tag)
+	h = Handlers{mag: magazine.Magazine{Database: &fakeReposDB{}}}
 	w = httptest.NewRecorder()
 	h.RepoGetOne(w, reposReq(`{"collection_id":5,"tag_id":9}`))
-	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 
 	// resolve error -> 500
 	h = Handlers{mag: magazine.Magazine{Database: &fakeReposDB{byNameErr: context.DeadlineExceeded}}}

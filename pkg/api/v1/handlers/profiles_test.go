@@ -94,7 +94,6 @@ func TestProfileGetOne_ExistingProfile(t *testing.T) {
 	var resp ProfileDetailResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 
-	assert.GreaterOrEqual(t, resp.ID, int64(0), "profile id should be a valid neo4j id")
 	assert.Equal(t, "cpu#zen3", resp.Label)
 	// Profile name mirrors the YAML `name:` field; assert label (derived
 	// from name#tag) for a stable identifier.
@@ -145,9 +144,6 @@ func TestProfileGetOne_URLEncodedLabel(t *testing.T) {
 	bs.SetEmptyAll()
 	bs.SetYAMLPrefix("../../../../misc/yaml")
 	bs.AddBootstrap("users")
-	// Bootstrap a Platform node before the profile so the profile is not the
-	// first node in a freshly-emptied graph (neo4j assigns id 0 to the first
-	// node, which would defeat the NotZero(resp.ID) assertion below).
 	bs.AddBootstrap("platforms:generic")
 	bs.AddBootstrap("profile:profiles/arch/zen4/latest.yaml")
 
@@ -169,7 +165,6 @@ func TestProfileGetOne_URLEncodedLabel(t *testing.T) {
 	var resp ProfileDetailResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 
-	assert.NotZero(t, resp.ID, "profile id should be non-zero")
 	assert.Equal(t, "arch#zen4#latest", resp.Label)
 }
 
@@ -181,9 +176,6 @@ func TestProfileGetOne_SlashInLabel(t *testing.T) {
 	bs.SetEmptyAll()
 	bs.SetYAMLPrefix("../../../../misc/yaml")
 	bs.AddBootstrap("users")
-	// Bootstrap a Platform node before the profile so the profile is not the
-	// first node in a freshly-emptied graph (neo4j assigns id 0 to the first
-	// node, which would defeat the NotZero(resp.ID) assertion below).
 	bs.AddBootstrap("platforms:generic")
 	bs.AddBootstrap("profile:profiles/aws/zen3/latest.yaml")
 
@@ -203,7 +195,6 @@ func TestProfileGetOne_SlashInLabel(t *testing.T) {
 	var resp ProfileDetailResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 
-	assert.NotZero(t, resp.ID)
 	assert.Equal(t, "aws#zen3#latest", resp.Label)
 }
 

@@ -1,0 +1,12 @@
+# SPDX licence names accepted for dependencies. Adding one is a review decision.
+0BSD
+Apache-2.0
+BSD-2-Clause
+BSD-3-Clause
+CC0-1.0
+GNU-All-permissive-Copying-License
+ISC
+MIT
+MPL-2.0
+Python-2.0
+Unlicense

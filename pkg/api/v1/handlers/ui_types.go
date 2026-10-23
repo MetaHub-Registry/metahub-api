@@ -90,7 +90,6 @@ type UIManipuVariant struct {
 // `Layers` is populated for legacy-form manipulations that predate the
 // extended schema.
 type UIManipulation struct {
-	ID       int64             `json:"id"`
 	Label    string            `json:"label"`
 	Default  *UIManipuConfig   `json:"default,omitempty"`
 	Variants []UIManipuVariant `json:"variants,omitempty"`
@@ -99,7 +98,6 @@ type UIManipulation struct {
 
 // ProfileDetailResponse is the response DTO for GET /api/v1/profiles/{label}.
 type ProfileDetailResponse struct {
-	ID              int64             `json:"id"`
 	Name            string            `json:"name"`
 	Tag             string            `json:"tag"`
 	Label           string            `json:"label"`
@@ -111,7 +109,6 @@ type ProfileDetailResponse struct {
 
 // ProfileRuleResp is the response DTO for a single profile rule.
 type ProfileRuleResp struct {
-	ID    int64  `json:"id"`
 	Type  string `json:"type"`
 	Op    string `json:"op"`
 	Key   string `json:"key"`

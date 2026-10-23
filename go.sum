@@ -276,6 +276,10 @@ github.com/mattn/go-sqlite3 v1.14.22 h1:2gZY6PC6kBnID23Tichd1K+Z0oS6nE/XwU+Vz/5o
 github.com/mattn/go-sqlite3 v1.14.22/go.mod h1:Uh1q+B4BYcTPb+yiD3kU8Ct7aC0hY9fxUwlHK0RXw+Y=
 github.com/metahub-registry/metahub-core v0.3.10 h1:LTGR2Kw2VD5o1j8u5Ikj6krH/KuR9h9H7S7khUxsrJs=
 github.com/metahub-registry/metahub-core v0.3.10/go.mod h1:15GzqtZJrT2h3P9Dk8pdWnyZQPaPucIC5FYvFDzaMA4=
+github.com/metahub-registry/metahub-core v0.3.11-0.20261023073118-725938dd0b1e h1:Av5SGKO847DmahibgMB6G0BJM6jgK/cq3+0B1y9y8qA=
+github.com/metahub-registry/metahub-core v0.3.11-0.20261023073118-725938dd0b1e/go.mod h1:15GzqtZJrT2h3P9Dk8pdWnyZQPaPucIC5FYvFDzaMA4=
+github.com/metahub-registry/metahub-core v0.3.11-0.20261023111609-93d6c2390f39 h1:EQM5Ok4MzmPZnkZAg4GA3Qy4XyoZmj5Sqft8q2X4fCQ=
+github.com/metahub-registry/metahub-core v0.3.11-0.20261023111609-93d6c2390f39/go.mod h1:15GzqtZJrT2h3P9Dk8pdWnyZQPaPucIC5FYvFDzaMA4=
 github.com/mgudov/logic-expression-parser v0.1.2 h1:VNPAHUTVm3zHzLn77YKJFYS4M8bmPLVSNnPCorjYcTI=
 github.com/mgudov/logic-expression-parser v0.1.2/go.mod h1:XQJyAlRrbqsKd3NrlBQr1YmMvTyXId+rZDv8qXQArB4=
 github.com/miekg/pkcs11 v1.1.1/go.mod h1:XsNlhZGX73bx86s2hdc/FuaLm2CPZJemRLMA+WTFxgs=

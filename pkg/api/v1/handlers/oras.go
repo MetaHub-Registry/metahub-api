@@ -2,14 +2,13 @@ package handlers
 
 import (
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/StudioSol/set"
-	"github.com/sirupsen/logrus"
 	"github.com/metahub-registry/metahub-api/internal/utils"
 	mlibTypes "github.com/metahub-registry/metahub-core/pkg/types"
 	mlibUtils "github.com/metahub-registry/metahub-core/pkg/utils"
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -138,7 +137,8 @@ func orasBreadCrumbs(repo string) []utils.BreadCrumb {
 }
 
 // OrasGetOne handles GET /api/v1/oras/artifact
-// It accepts ?repo=&artifact_type= or ?id= query parameters.
+// It accepts ?repo=&artifact_type= query parameters. Artifacts are addressed
+// publicly by their natural key; storage element IDs are not part of the API.
 func (h Handlers) OrasGetOne(w http.ResponseWriter, r *http.Request) {
 	l, ctx, span := mlibUtils.InitLogging(r.Context(), tracer, map[string]any{
 		"package": pkgNameOras,
@@ -147,29 +147,11 @@ func (h Handlers) OrasGetOne(w http.ResponseWriter, r *http.Request) {
 	defer span.End()
 
 	q := r.URL.Query()
-	idStr := q.Get("id")
 	repo := q.Get("repo")
 	artifactType := q.Get("artifact_type")
 
-	if idStr != "" {
-		id, err := strconv.ParseInt(idStr, 10, 64)
-		if err != nil {
-			h.writeJSON(w, http.StatusBadRequest, envelope{"error": "invalid id parameter"})
-			return
-		}
-		artifact, err := h.mag.Database.OrasArtifactGetByID(ctx, id)
-		if err != nil {
-			mlibUtils.ErrorHandler(l, span, err, "OrasArtifactGetByID failed")
-			h.writeJSON(w, http.StatusNotFound, envelope{"error": "artifact not found"})
-			return
-		}
-		breadCrumbs := orasBreadCrumbs(artifact.Repo)
-		_ = h.writeJSON(w, http.StatusOK, envelope{"artifact": artifact, "bread_crumbs": breadCrumbs})
-		return
-	}
-
 	if repo == "" || artifactType == "" {
-		h.writeJSON(w, http.StatusBadRequest, envelope{"error": "repo and artifact_type, or id, are required"})
+		h.writeJSON(w, http.StatusBadRequest, envelope{"error": "repo and artifact_type are required"})
 		return
 	}
 

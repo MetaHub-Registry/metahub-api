@@ -8,13 +8,13 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/go-chi/render"
-	"github.com/riandyrn/otelchi"
-	"github.com/sirupsen/logrus"
 	"github.com/metahub-registry/metahub-api/pkg/api/v1/handlers"
 	"github.com/metahub-registry/metahub-api/pkg/config"
 	"github.com/metahub-registry/metahub-api/pkg/metrics"
 	"github.com/metahub-registry/metahub-api/pkg/pullthrough"
 	"github.com/metahub-registry/metahub-core/pkg/backends/magazine"
+	"github.com/riandyrn/otelchi"
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -132,10 +132,8 @@ func Initialize(mag magazine.Magazine, oidcProvider *handlers.OIDCProvider, godm
 		r.Put("/projects/{team}/{project}/visibility", h.ProjectSetVisibilityHandler)
 		r.Delete("/projects/{team}/{project}", h.ProjectDeleteHandler)
 		r.Get("/user", h.UserGetOne)
-		r.Get("/users/{id}", h.UserGetOne)
-		r.Put("/users/{id}/secrets", h.UserPutSecret)
 		r.Put("/user/secret", h.UserPutSecret)
-		r.Delete("/user/secret/{id}", h.UserDelSecret)
+		r.Delete("/user/secret/{name}", h.UserDelSecret)
 	})
 	router.Get("/auth", h.AuthHandler)
 	/////// Subroute with AuthMiddleware to trigger login

@@ -38,8 +38,8 @@ func (rr ReqRepo) ToByte() []byte {
 }
 
 type ReqPayload struct {
-	ColID   int64  `json:"collection_id"`
-	TagID   int64  `json:"tag_id"`
+	RepoName string `json:"repo_name"`
+	TagName  string `json:"tag_name"`
 	// No omitempty: tests need to send `"profile":""` explicitly to
 	// verify the handler normalises an empty string to "no filter".
 	Profile string `json:"profile"`
@@ -87,19 +87,11 @@ func TestCollectionGetOne(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	colID, err := br.GetInt64("collection:ft#id")
-	if err != nil {
-		t.Fatal(err)
-	}
-	colTagID, err := br.GetInt64("tag:arm64#id")
-	if err != nil {
-		t.Fatal(err)
-	}
 	// Tests
 	testProfile := "generic"
 	reqBody := ReqPayload{
-		ColID: colID,
-		TagID: colTagID,
+		RepoName: "qnib/featuretest",
+		TagName:  "arm64",
 	}
 	wGet := httptest.NewRecorder()
 	_, rGet := utils.CreateNewHTTPTest(ctx, http.MethodGet, map[string]string{
@@ -272,16 +264,7 @@ func TestCollectionGetOneBreadcrumbs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	colID, err := br.GetInt64("collection:ft#id")
-	if err != nil {
-		t.Fatal(err)
-	}
-	colTagID, err := br.GetInt64("tag:arm64#id")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	reqBody := ReqPayload{ColID: colID, TagID: colTagID}
+	reqBody := ReqPayload{RepoName: "qnib/featuretest", TagName: "arm64"}
 	wGet := httptest.NewRecorder()
 	_, rGet := utils.CreateNewHTTPTest(ctx, http.MethodGet, map[string]string{
 		"repo":  "qnib",
@@ -382,12 +365,7 @@ func TestCollectionGetOne_UIResponseShape(t *testing.T) {
 	}
 	defer TeardownTest(bs, br)
 
-	colID, err := br.GetInt64("collection:ft#id")
-	require.NoError(t, err)
-	colTagID, err := br.GetInt64("tag:generic#id")
-	require.NoError(t, err)
-
-	reqBody := ReqPayload{ColID: colID, TagID: colTagID}
+	reqBody := ReqPayload{RepoName: "qnib/featuretest", TagName: "generic"}
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/collection",
 		bytes.NewBuffer(reqBody.ToByte()))
@@ -479,12 +457,7 @@ func TestCollectionGetOne_ManifestMediaTypeField(t *testing.T) {
 	}
 	defer TeardownTest(bs, br)
 
-	colID, err := br.GetInt64("collection:ft#id")
-	require.NoError(t, err)
-	colTagID, err := br.GetInt64("tag:generic#id")
-	require.NoError(t, err)
-
-	reqBody := ReqPayload{ColID: colID, TagID: colTagID}
+	reqBody := ReqPayload{RepoName: "qnib/featuretest", TagName: "generic"}
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/collection",
 		bytes.NewBuffer(reqBody.ToByte()))

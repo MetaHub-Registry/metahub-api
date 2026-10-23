@@ -82,7 +82,7 @@ func (p MagazinePolicies) PolicyFor(registry string) (RegistryPolicy, bool) {
 func (p MagazinePolicies) MaxWorkers() int {
 	max := 0
 	for _, reg := range p.Mag.Config.Registries {
-		if !(reg.AllowAnon && reg.PullThrough.Enabled) {
+		if !reg.AllowAnon || !reg.PullThrough.Enabled {
 			continue
 		}
 		if reg.PullThrough.Workers > max {
