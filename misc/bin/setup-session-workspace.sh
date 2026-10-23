@@ -108,20 +108,24 @@ if [ -n "${ENV_MISSING}" ]; then
 fi
 
 # --- .opencode/.gitignore ---
-cat > "${S}/.opencode/.gitignore" <<'EOF'
+# Only when a harness was composed. A public clone has no agent.compose.yaml,
+# so the block above skips composition and there is no .opencode to write into.
+if [ -d "${S}/.opencode" ]; then
+  cat > "${S}/.opencode/.gitignore" <<'EOF'
 node_modules
 package-lock.json
 bun.lock
 EOF
 
-# --- Install plugin deps ---
-cd "${S}/.opencode"
-if command -v bun >/dev/null 2>&1; then
-  bun install --silent 2>/dev/null || true
-elif command -v npm >/dev/null 2>&1; then
-  npm install --silent 2>/dev/null || true
+  # --- Install plugin deps ---
+  cd "${S}/.opencode"
+  if command -v bun >/dev/null 2>&1; then
+    bun install --silent 2>/dev/null || true
+  elif command -v npm >/dev/null 2>&1; then
+    npm install --silent 2>/dev/null || true
+  fi
+  cd "${S}"
 fi
-cd "${S}"
 
 # --- .opencodeignore — copy from metahub-api if it exists ---
 if [ -f "${API_ROOT}/.opencodeignore" ] && [ ! -f "${S}/.opencodeignore" ]; then
@@ -195,7 +199,9 @@ fi
 # agent.compose.lock with dest "."); mode bits travel through the build, so the
 # 0755 exec bit needs no chmod. Assert rather than generate: a missing or
 # non-executable wrapper means the manifest/lock drifted from the scaffold.
-if [ ! -x "${S}/opencode.sh" ]; then
+# Skipped when there is no manifest: composition never ran, so no wrapper is
+# expected. The session is still usable with a stock opencode binary.
+if [ -f "${API_ROOT}/agent.compose.yaml" ] && [ ! -x "${S}/opencode.sh" ]; then
   echo "ERROR: ${S}/opencode.sh missing or not executable after outfitter build." >&2
   echo "       Check the 'scaffold' component in ${API_ROOT}/agent.compose.yaml." >&2
   exit 2
@@ -511,5 +517,9 @@ VL_AGENT="claude-opus-4-6" ${REL_API_ROOT}/misc/bin/vl-event.sh <event_type> <ph
 EOF
 
 echo "[workspace] AGENTS.md generated"
-echo "[workspace] opencode.sh composed by outfitter"
+if [ -x "${S}/opencode.sh" ]; then
+  echo "[workspace] opencode.sh composed by outfitter"
+else
+  echo "[workspace] No harness — start opencode directly, not via ./opencode.sh"
+fi
 echo "[workspace] Taskfile.yml generated"
