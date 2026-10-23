@@ -9,15 +9,15 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/opencontainers/go-digest"
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"github.com/metahub-registry/metahub-api/pkg/lib/helper"
 	"github.com/metahub-registry/metahub-api/pkg/metrics"
 	"github.com/metahub-registry/metahub-api/pkg/pullthrough"
 	"github.com/metahub-registry/metahub-core/pkg/types"
 	"github.com/metahub-registry/metahub-core/pkg/upstream"
 	"github.com/metahub-registry/metahub-core/pkg/utils"
+	"github.com/opencontainers/go-digest"
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -216,7 +216,7 @@ func (h Handlers) handleIndexAsManifest(ctx context.Context, w http.ResponseWrit
 // error (an infeasible model quant → reject); other manipulation errors are
 // non-fatal (serve the original).
 func (h Handlers) manipulateSingleIndex(ctx context.Context, w http.ResponseWriter, req types.Request, ml *types.Index) bool {
-	if req.Profile == "" {
+	if req.Profile == "" || req.Profile == genericProfile || !strings.HasPrefix(req.Repo, "models/") {
 		return false
 	}
 	prf, prfFound, prfErr := h.mag.Database.ProfileGetByLabel(ctx, req.Profile)
