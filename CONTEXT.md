@@ -426,3 +426,32 @@ this repo at session close (both validated with `openspec validate`):
   portable compose/Taskfile, removed absolute paths and committed binaries).
 - Open-source prep: history rewritten (removed `.env` and the AWS demo config,
   normalised author emails), README rewritten, community files added.
+
+## 2026-10-23 — open-source-metahub
+
+### What changed
+
+- Public CI: `.github/workflows/ci.yml` (fast lane) + `integration.yml`,
+  `fast` aggregator, gitleaks/DCO/licences/vuln/telemetry, Dependabot.
+  Module-dependent jobs run only on same-repo PRs and use the read-only
+  `METAHUB_CORE_RO_TOKEN`.
+- Natural-key identifiers: collections by `repo`+`tag`, profiles by `label`,
+  ORAS by `repo`+`digest`; SQL secrets by `name`, users by `username`;
+  `/users/{id}` routes removed. Response-shape and restart round-trip tests.
+- `metahub-core` pinned at `v0.3.11-0.20261023073118-725938dd0b1e`; layer
+  hydration and profile manipulations use the core's natural-key methods.
+
+### Key files
+
+- `pkg/api/v1/handlers/{repos,profiles,oras,user}.go`, `pkg/router/router.go`
+- `pkg/api/v1/handlers/natural_keys_test.go`
+- `.github/workflows/ci.yml`, `.github/scripts/{third-party-notices.sh,dco.sh,check_outbound.py}`
+- OpenSpec: `openspec/changes/{add-public-ci,natural-key-identifiers}/`
+
+### Gotchas
+
+- The pinned pseudo-version is replaced by the release tag; do not drop the pin
+  before the tag exists.
+- `GOWORK=off` is required to test against the pinned module; the session
+  `go.work` is local-only and never committed.
+- `task push` can abort on a detached `flux/metahub`; push per repo if so.
