@@ -177,7 +177,7 @@ func (h Handlers) RepoGetOne(w http.ResponseWriter, r *http.Request) {
 	// failures leave that manifest's layers empty and continue. Runs
 	// AFTER the profile filter so dropped manifests don't trigger a
 	// (wasted) Neo4j round-trip.
-	h.hydrateManifestLayers(ctx, col, uiDetail.Manifests)
+	h.hydrateManifestLayers(ctx, uiDetail.Manifests)
 	// Ensure all manifests have a non-nil Profiles slice for JSON serialization.
 	for i := range uiDetail.Manifests {
 		if uiDetail.Manifests[i].Profiles == nil {
@@ -268,27 +268,19 @@ func countDigestsWithProfile(digests []string, profileMap map[string][]string, p
 // layer blob descriptors for the corresponding metalib `Manifest`. The
 // lookup is by digest so the UI slice order is preserved. Failures log
 // debug-level and continue; no manifest is dropped.
-func (h Handlers) hydrateManifestLayers(ctx context.Context, col types.CollectionListing, uiManis []UIManifest) {
+func (h Handlers) hydrateManifestLayers(ctx context.Context, uiManis []UIManifest) {
 	l := logrus.WithFields(logrus.Fields{
 		"package": pkgNameCol,
 		"func":    "hydrateManifestLayers",
 	})
-	// Build digest -> metalib Manifest.ID map for a single pass lookup. The ID
-	// never leaves this process; the public payload carries only the digest.
-	byDigest := make(map[string]int64, len(col.Manifests))
-	for _, m := range col.Manifests {
-		if m.Digest != "" {
-			byDigest[m.Digest] = m.ID
-		}
-	}
 	for i := range uiManis {
-		id, ok := byDigest[uiManis[i].Digest]
-		if !ok || id == 0 {
+		digest := uiManis[i].Digest
+		if digest == "" {
 			continue
 		}
-		layers, err := h.mag.Database.GetLayersForManifestID(ctx, id)
+		layers, err := h.mag.Database.GetLayersForManifestDigest(ctx, digest)
 		if err != nil {
-			l.Debugf("GetLayersForManifestID(%d) failed (non-fatal): %v", id, err)
+			l.Debugf("GetLayersForManifestDigest(%s) failed (non-fatal): %v", mlibUtils.ShortenDigest(digest), err)
 			continue
 		}
 		if len(layers) == 0 {

@@ -72,9 +72,9 @@ func (h Handlers) ProfileGetOne(w http.ResponseWriter, r *http.Request) {
 
 	// Hydrate linked manipulations. Non-fatal: a failure here logs but
 	// does not block the rest of the response.
-	mps, mpErr := h.mag.Database.ManipulationsWithConfigByProfileID(ctx, ps.ID)
+	mps, mpErr := h.mag.Database.ManipulationsWithConfigByProfileLabel(ctx, ps.Label)
 	if mpErr != nil {
-		l.Warnf("ManipulationsWithConfigByProfileID failed (non-fatal): %v", mpErr)
+		l.Warnf("ManipulationsWithConfigByProfileLabel failed (non-fatal): %v", mpErr)
 	}
 
 	rules := toProfileRuleResps(ps.Rules)
