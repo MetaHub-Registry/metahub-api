@@ -163,3 +163,4 @@ licence grants no trademark rights.
 MetaHub uses Neo4j Community Edition (GPLv3) as an external metadata store,
 reached over the Bolt protocol. It is a separate service, not linked into
 MetaHub's source; see the operations documentation for the licensing details.
+
