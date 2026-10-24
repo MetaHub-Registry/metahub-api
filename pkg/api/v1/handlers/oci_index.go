@@ -7,16 +7,28 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/opencontainers/go-digest"
-	"github.com/sirupsen/logrus"
 	"github.com/metahub-registry/metahub-core/pkg/types"
 	"github.com/metahub-registry/metahub-core/pkg/utils"
+	"github.com/opencontainers/go-digest"
+	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel/trace"
 )
 
 const (
 	pkgNameOciIndex = "api/handler/oci_index.go"
+	// genericProfile is the slot key for the un-manipulated/generic index. The
+	// core slot code uses the same sentinel because an empty triple component
+	// is rejected.
+	genericProfile = "generic"
 )
+
+// isModelServingRepo reports whether the repo may carry the model-serving stack
+// under a profile: model artifacts (models/...) and app/runtime repos (apps/...).
+// Plain collections (e.g. qnib/ftest) stay on the generic index, which is the
+// gate the e2e checks.
+func isModelServingRepo(repo string) bool {
+	return strings.HasPrefix(repo, "models/") || strings.HasPrefix(repo, "apps/")
+}
 
 // persistedIndexDigests remembers the manipulated-index digests this process has
 // already stored in object storage, so a repeat profile-scoped pull skips the
@@ -41,6 +53,12 @@ func (h Handlers) handleIndex(ctx context.Context, w http.ResponseWriter, req ty
 		"profile": req.Profile,
 	})
 	defer span.End()
+	// Model-serving profiles apply only to model-centric (models/...) pulls.
+	// Collection pulls must stay on the static/generic index; otherwise the
+	// precomputed profile index leaks model layers into collection pulls.
+	if req.Profile == "" || !isModelServingRepo(req.Repo) {
+		req.Profile = genericProfile
+	}
 	ml, found, err := h.mag.IndexGetByRequest(ctx, req)
 	if err != nil {
 		l.Errorf("failed to fetch Index: %v", err)
