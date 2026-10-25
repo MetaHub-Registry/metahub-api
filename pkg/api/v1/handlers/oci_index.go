@@ -30,6 +30,22 @@ func isModelServingRepo(repo string) bool {
 	return strings.HasPrefix(repo, "models/") || strings.HasPrefix(repo, "apps/")
 }
 
+// profileForIndex returns the profile an index pull is served under. The
+// ManifestHandler rewrites a model-centric pull (models/<name>:<tag>) to its
+// runtime repo before dispatching, so keying only on req.Repo would demote
+// every model-centric index pull to generic. The requested-model context is
+// set by that rewrite and is the reliable model-centric signal; the original
+// model/app repo check covers paths that did not need a rewrite.
+func profileForIndex(ctx context.Context, req types.Request) string {
+	if req.Profile == "" {
+		return genericProfile
+	}
+	if types.RequestedModelFromContext(ctx) == "" && !isModelServingRepo(req.Repo) {
+		return genericProfile
+	}
+	return req.Profile
+}
+
 // persistedIndexDigests remembers the manipulated-index digests this process has
 // already stored in object storage, so a repeat profile-scoped pull skips the
 // remote (~100-250ms against eu-west-1 S3) ManifestsPutObj on the GET path — the
@@ -53,12 +69,12 @@ func (h Handlers) handleIndex(ctx context.Context, w http.ResponseWriter, req ty
 		"profile": req.Profile,
 	})
 	defer span.End()
-	// Model-serving profiles apply only to model-centric (models/...) pulls.
-	// Collection pulls must stay on the static/generic index; otherwise the
-	// precomputed profile index leaks model layers into collection pulls.
-	if req.Profile == "" || !isModelServingRepo(req.Repo) {
-		req.Profile = genericProfile
-	}
+	// Model-serving profiles apply only to model-centric pulls. Collection
+	// pulls must stay on the static/generic index; otherwise the precomputed
+	// profile index leaks model layers into collection pulls. profileForIndex
+	// keeps the profile for a model-centric pull even though ManifestHandler
+	// has already rewritten its repo to the runtime collection.
+	req.Profile = profileForIndex(ctx, req)
 	ml, found, err := h.mag.IndexGetByRequest(ctx, req)
 	if err != nil {
 		l.Errorf("failed to fetch Index: %v", err)

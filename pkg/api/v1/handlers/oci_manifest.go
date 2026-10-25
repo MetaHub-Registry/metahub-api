@@ -216,7 +216,7 @@ func (h Handlers) handleIndexAsManifest(ctx context.Context, w http.ResponseWrit
 // error (an infeasible model quant → reject); other manipulation errors are
 // non-fatal (serve the original).
 func (h Handlers) manipulateSingleIndex(ctx context.Context, w http.ResponseWriter, req types.Request, ml *types.Index) bool {
-	if req.Profile == "" || req.Profile == genericProfile || !isModelServingRepo(req.Repo) {
+	if req.Profile == "" || profileForIndex(ctx, req) == genericProfile {
 		return false
 	}
 	prf, prfFound, prfErr := h.mag.Database.ProfileGetByLabel(ctx, req.Profile)
