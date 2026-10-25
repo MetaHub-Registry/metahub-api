@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/metahub-registry/metahub-core/pkg/backends/magazine"
 	"github.com/metahub-registry/metahub-core/pkg/types"
 	"github.com/metahub-registry/metahub-core/pkg/utils"
 	"github.com/opencontainers/go-digest"
@@ -28,6 +29,69 @@ const (
 // gate the e2e checks.
 func isModelServingRepo(repo string) bool {
 	return strings.HasPrefix(repo, "models/") || strings.HasPrefix(repo, "apps/")
+}
+
+// profileForIndex returns the profile an index pull is served under. The
+// ManifestHandler rewrites a model-centric pull (models/<name>:<tag>) to its
+// runtime repo before dispatching, so keying only on req.Repo would demote
+// every model-centric index pull to generic. The requested-model context is
+// set by that rewrite and is the reliable model-centric signal.
+//
+// modelServing marks profiles that carry a hardware.gpu block. Only those are
+// gated: a collection pull under a model-serving profile falls back to generic
+// (so model/config layers never leak), while a collection under an ordinary
+// profile keeps it (e.g. the glow overlay).
+func profileForIndex(ctx context.Context, req types.Request, modelServing bool) string {
+	if req.Profile == "" {
+		return genericProfile
+	}
+	if modelServing && types.RequestedModelFromContext(ctx) == "" && !isModelServingRepo(req.Repo) {
+		return genericProfile
+	}
+	return req.Profile
+}
+
+// profileIsModelServing reports whether label names a stored model-serving
+// profile (a profile with a hardware.gpu block). Unknown labels, the generic
+// label and lookup errors are all treated as ordinary profiles.
+func profileIsModelServing(ctx context.Context, db magazine.Database, label string) bool {
+	if label == "" || label == genericProfile {
+		return false
+	}
+	prf, found, err := db.ProfileGetByLabel(ctx, label)
+	if err != nil || !found {
+		return false
+	}
+	return prf.Hardware.IsModelServing()
+}
+
+// storedProfileOrGeneric maps a token profile that is not seeded (e.g. an
+// ephemeral agent profile such as oci/e2e/26) onto the generic profile, so
+// ManifestExists does not fail a plain HEAD-by-tag with a 500.
+func storedProfileOrGeneric(ctx context.Context, db magazine.Database, label string) string {
+	if label == "" || label == genericProfile {
+		return label
+	}
+	if _, found, err := db.ProfileGetByLabel(ctx, label); err != nil || !found {
+		return genericProfile
+	}
+	return label
+}
+
+// shouldApplySingleIndex reports whether a single-descriptor index may carry
+// the profile's manipulations. Only model-serving profiles are restricted to
+// model-centric pulls; ordinary profiles (glow and friends) apply on
+// collections too.
+func shouldApplySingleIndex(ctx context.Context, req types.Request, prf types.Profile) bool {
+	if req.Profile == "" || req.Profile == genericProfile {
+		return false
+	}
+	if prf.Hardware.IsModelServing() &&
+		types.RequestedModelFromContext(ctx) == "" &&
+		!isModelServingRepo(req.Repo) {
+		return false
+	}
+	return true
 }
 
 // persistedIndexDigests remembers the manipulated-index digests this process has
@@ -53,12 +117,12 @@ func (h Handlers) handleIndex(ctx context.Context, w http.ResponseWriter, req ty
 		"profile": req.Profile,
 	})
 	defer span.End()
-	// Model-serving profiles apply only to model-centric (models/...) pulls.
-	// Collection pulls must stay on the static/generic index; otherwise the
-	// precomputed profile index leaks model layers into collection pulls.
-	if req.Profile == "" || !isModelServingRepo(req.Repo) {
-		req.Profile = genericProfile
-	}
+	// Model-serving profiles apply only to model-centric pulls. Collection
+	// pulls under such a profile must stay on the generic index; ordinary
+	// profiles (e.g. glow) keep their non-model manipulation. profileForIndex
+	// keeps the profile for a model-centric pull even though ManifestHandler
+	// has already rewritten its repo to the runtime collection.
+	req.Profile = profileForIndex(ctx, req, profileIsModelServing(ctx, h.mag.Database, req.Profile))
 	ml, found, err := h.mag.IndexGetByRequest(ctx, req)
 	if err != nil {
 		l.Errorf("failed to fetch Index: %v", err)
