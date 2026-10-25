@@ -226,7 +226,7 @@ func (h Handlers) manipulateSingleIndex(ctx context.Context, w http.ResponseWrit
 	// A model-serving profile only composes on model-centric pulls (the
 	// ManifestHandler rewrite is signalled by the requested-model context).
 	// Ordinary profiles keep their non-model manipulation on collections too.
-	if prf.Hardware.IsModelServing() && types.RequestedModelFromContext(ctx) == "" && !isModelServingRepo(req.Repo) {
+	if !shouldApplySingleIndex(ctx, req, prf) {
 		return false
 	}
 	manipulated, manipErr := h.mag.ApplyManipulationsToManifests(ctx, prf, ml.Manifests)
@@ -433,12 +433,10 @@ func (h Handlers) ManifestHandler(ctx context.Context, w http.ResponseWriter, r 
 	// A token profile that is not a seeded profile (e.g. an ephemeral agent
 	// profile such as oci/e2e/26) must not make ManifestExists fail with a
 	// 500; serve it under the generic profile instead.
-	if req.Profile != "" && req.Profile != genericProfile {
-		if _, found, prfErr := h.mag.Database.ProfileGetByLabel(ctx, req.Profile); prfErr != nil || !found {
-			l.Warnf("profile %q is not a stored profile; falling back to %s", req.Profile, genericProfile)
-			req.Profile = genericProfile
-			up.Profile = genericProfile
-		}
+	if resolved := storedProfileOrGeneric(ctx, h.mag.Database, req.Profile); resolved != req.Profile {
+		l.Warnf("profile %q is not a stored profile; falling back to %s", req.Profile, resolved)
+		req.Profile = resolved
+		up.Profile = resolved
 	}
 
 	// Model-centric pull: models/<org>/<name>:<tag> under a model-serving profile is

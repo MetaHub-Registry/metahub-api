@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/metahub-registry/metahub-core/pkg/backends/magazine"
 	"github.com/metahub-registry/metahub-core/pkg/types"
 	"github.com/metahub-registry/metahub-core/pkg/utils"
 	"github.com/opencontainers/go-digest"
@@ -50,6 +51,49 @@ func profileForIndex(ctx context.Context, req types.Request, modelServing bool) 
 	return req.Profile
 }
 
+// profileIsModelServing reports whether label names a stored model-serving
+// profile (a profile with a hardware.gpu block). Unknown labels, the generic
+// label and lookup errors are all treated as ordinary profiles.
+func profileIsModelServing(ctx context.Context, db magazine.Database, label string) bool {
+	if label == "" || label == genericProfile {
+		return false
+	}
+	prf, found, err := db.ProfileGetByLabel(ctx, label)
+	if err != nil || !found {
+		return false
+	}
+	return prf.Hardware.IsModelServing()
+}
+
+// storedProfileOrGeneric maps a token profile that is not seeded (e.g. an
+// ephemeral agent profile such as oci/e2e/26) onto the generic profile, so
+// ManifestExists does not fail a plain HEAD-by-tag with a 500.
+func storedProfileOrGeneric(ctx context.Context, db magazine.Database, label string) string {
+	if label == "" || label == genericProfile {
+		return label
+	}
+	if _, found, err := db.ProfileGetByLabel(ctx, label); err != nil || !found {
+		return genericProfile
+	}
+	return label
+}
+
+// shouldApplySingleIndex reports whether a single-descriptor index may carry
+// the profile's manipulations. Only model-serving profiles are restricted to
+// model-centric pulls; ordinary profiles (glow and friends) apply on
+// collections too.
+func shouldApplySingleIndex(ctx context.Context, req types.Request, prf types.Profile) bool {
+	if req.Profile == "" || req.Profile == genericProfile {
+		return false
+	}
+	if prf.Hardware.IsModelServing() &&
+		types.RequestedModelFromContext(ctx) == "" &&
+		!isModelServingRepo(req.Repo) {
+		return false
+	}
+	return true
+}
+
 // persistedIndexDigests remembers the manipulated-index digests this process has
 // already stored in object storage, so a repeat profile-scoped pull skips the
 // remote (~100-250ms against eu-west-1 S3) ManifestsPutObj on the GET path — the
@@ -78,13 +122,7 @@ func (h Handlers) handleIndex(ctx context.Context, w http.ResponseWriter, req ty
 	// profiles (e.g. glow) keep their non-model manipulation. profileForIndex
 	// keeps the profile for a model-centric pull even though ManifestHandler
 	// has already rewritten its repo to the runtime collection.
-	modelServing := false
-	if req.Profile != "" && req.Profile != genericProfile {
-		if prf, found, prfErr := h.mag.Database.ProfileGetByLabel(ctx, req.Profile); prfErr == nil && found {
-			modelServing = prf.Hardware.IsModelServing()
-		}
-	}
-	req.Profile = profileForIndex(ctx, req, modelServing)
+	req.Profile = profileForIndex(ctx, req, profileIsModelServing(ctx, h.mag.Database, req.Profile))
 	ml, found, err := h.mag.IndexGetByRequest(ctx, req)
 	if err != nil {
 		l.Errorf("failed to fetch Index: %v", err)
