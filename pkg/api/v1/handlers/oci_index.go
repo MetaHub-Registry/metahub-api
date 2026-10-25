@@ -34,13 +34,17 @@ func isModelServingRepo(repo string) bool {
 // ManifestHandler rewrites a model-centric pull (models/<name>:<tag>) to its
 // runtime repo before dispatching, so keying only on req.Repo would demote
 // every model-centric index pull to generic. The requested-model context is
-// set by that rewrite and is the reliable model-centric signal; the original
-// model/app repo check covers paths that did not need a rewrite.
-func profileForIndex(ctx context.Context, req types.Request) string {
+// set by that rewrite and is the reliable model-centric signal.
+//
+// modelServing marks profiles that carry a hardware.gpu block. Only those are
+// gated: a collection pull under a model-serving profile falls back to generic
+// (so model/config layers never leak), while a collection under an ordinary
+// profile keeps it (e.g. the glow overlay).
+func profileForIndex(ctx context.Context, req types.Request, modelServing bool) string {
 	if req.Profile == "" {
 		return genericProfile
 	}
-	if types.RequestedModelFromContext(ctx) == "" && !isModelServingRepo(req.Repo) {
+	if modelServing && types.RequestedModelFromContext(ctx) == "" && !isModelServingRepo(req.Repo) {
 		return genericProfile
 	}
 	return req.Profile
@@ -70,11 +74,17 @@ func (h Handlers) handleIndex(ctx context.Context, w http.ResponseWriter, req ty
 	})
 	defer span.End()
 	// Model-serving profiles apply only to model-centric pulls. Collection
-	// pulls must stay on the static/generic index; otherwise the precomputed
-	// profile index leaks model layers into collection pulls. profileForIndex
+	// pulls under such a profile must stay on the generic index; ordinary
+	// profiles (e.g. glow) keep their non-model manipulation. profileForIndex
 	// keeps the profile for a model-centric pull even though ManifestHandler
 	// has already rewritten its repo to the runtime collection.
-	req.Profile = profileForIndex(ctx, req)
+	modelServing := false
+	if req.Profile != "" && req.Profile != genericProfile {
+		if prf, found, prfErr := h.mag.Database.ProfileGetByLabel(ctx, req.Profile); prfErr == nil && found {
+			modelServing = prf.Hardware.IsModelServing()
+		}
+	}
+	req.Profile = profileForIndex(ctx, req, modelServing)
 	ml, found, err := h.mag.IndexGetByRequest(ctx, req)
 	if err != nil {
 		l.Errorf("failed to fetch Index: %v", err)
