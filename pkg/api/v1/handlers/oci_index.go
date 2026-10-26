@@ -65,17 +65,26 @@ func profileIsModelServing(ctx context.Context, db magazine.Database, label stri
 	return prf.Hardware.IsModelServing()
 }
 
-// storedProfileOrGeneric maps a token profile that is not seeded (e.g. an
-// ephemeral agent profile such as oci/e2e/26) onto the generic profile, so
-// ManifestExists does not fail a plain HEAD-by-tag with a 500.
+// storedProfileOrGeneric maps a token profile onto a stored profile: unknown
+// labels (e.g. an ephemeral agent profile such as oci/e2e/26) and deleted
+// run-scoped profiles fall back to generic, and a bare tag (docker login may
+// send only the tag portion) resolves to its label. This keeps HEAD/pull and
+// push on the same profile instead of failing on a stale inventory entry.
 func storedProfileOrGeneric(ctx context.Context, db magazine.Database, label string) string {
 	if label == "" || label == genericProfile {
 		return label
 	}
-	if _, found, err := db.ProfileGetByLabel(ctx, label); err != nil || !found {
-		return genericProfile
+	if _, found, err := db.ProfileGetByLabel(ctx, label); err == nil && found {
+		return label
 	}
-	return label
+	if prfs, err := db.ProfileGetAll(ctx); err == nil {
+		for _, candidate := range prfs {
+			if candidate.Tag == label {
+				return candidate.Label
+			}
+		}
+	}
+	return genericProfile
 }
 
 // shouldApplySingleIndex reports whether a single-descriptor index may carry
