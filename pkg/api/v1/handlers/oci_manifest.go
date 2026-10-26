@@ -600,6 +600,9 @@ func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	// Store and compute under the resolved canonical label (tag-resolved or the
+	// generic fallback), so push and pull agree on the slot profile.
+	req.Profile = prf.Label
 	// Logical per-project storage-quota guard (add-registry-project-quotas):
 	// reject the push (413) when it would take the project's usage above its quota.
 	if h.rejectManifestOverQuota(ctx, w, req, buf) {
@@ -646,6 +649,13 @@ func (h Handlers) resolvePushProfile(ctx context.Context, w http.ResponseWriter,
 		}
 	}
 	if !found {
+		// The token's profile can be stale: the inventory association may point
+		// at a run-scoped profile that a graph reset removed. Fail open to the
+		// generic profile (matching the pull path) instead of a 500.
+		if generic, gFound, gErr := h.mag.Database.ProfileGetByLabel(ctx, genericProfile); gErr == nil && gFound {
+			l.Warnf("push profile %q is not a stored profile; falling back to %s", req.Profile, genericProfile)
+			return generic, true
+		}
 		e := fmt.Errorf("profile '%s' not found", req.Profile)
 		utils.ErrorHandlerWithWWW(w, l, span, req.Repo, "push", e, "INTERNAL_ERROR", "")
 		return types.Profile{}, false
