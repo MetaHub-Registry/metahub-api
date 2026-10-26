@@ -600,9 +600,12 @@ func (h Handlers) ManifestPutHandler(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	// Store and compute under the resolved canonical label (tag-resolved or the
-	// generic fallback), so push and pull agree on the slot profile.
-	req.Profile = prf.Label
+	// Only re-key when the profile lookup fell back to generic (the stale
+	// inventory case). An exact label - or a profile resolved by its tag -
+	// keeps the pre-existing store key, so pull and push stay aligned.
+	if prf.Label == genericProfile && req.Profile != genericProfile {
+		req.Profile = genericProfile
+	}
 	// Logical per-project storage-quota guard (add-registry-project-quotas):
 	// reject the push (413) when it would take the project's usage above its quota.
 	if h.rejectManifestOverQuota(ctx, w, req, buf) {
