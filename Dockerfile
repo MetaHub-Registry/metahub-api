@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.4
-FROM mirror.gcr.io/library/golang:1.24-alpine3.21 AS go
+FROM mirror.gcr.io/library/golang:1.26-alpine AS go
 RUN apk add --no-cache gcc git musl-dev openssh-client
 RUN mkdir -p -m 0700 ~/.ssh && ssh-keyscan gitlab.com >> ~/.ssh/known_hosts
 WORKDIR /go/metahub-api
@@ -27,7 +27,7 @@ RUN apk add --no-cache wget \
  && wget -qO- https://gitlab.com/qnib-golang/gonja-cli/-/releases/v0.0.2/downloads/gonja-cli_0.0.2_linux_amd64.tar.gz |tar xfz - -C /usr/local/bin
 
 
-FROM mirror.gcr.io/library/golang:1.24-alpine3.21  AS dev
+FROM mirror.gcr.io/library/golang:1.26-alpine  AS dev
 RUN apk add --no-cache bash curl gcc git musl-dev openssh-client vim wget supervisor
 COPY ./misc/docker/dev/supervisor.conf /etc/supervisord.conf
 COPY ./misc/docker/dev/start.sh /usr/local/bin/start.sh
