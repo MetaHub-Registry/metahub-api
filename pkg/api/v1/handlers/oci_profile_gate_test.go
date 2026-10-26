@@ -163,7 +163,7 @@ func TestStoredProfileOrGeneric(t *testing.T) {
 			label: "bazzite",
 			want:  "bazzite",
 		},
-		{name: "tag resolves to label", db: fakeProfileDB{all: []types.Profile{glow}}, label: "1.5.0", want: "glow#1.5.0"},
+		{name: "tag does not rewrite on the pull hot path", db: fakeProfileDB{all: []types.Profile{glow}}, label: "1.5.0", want: genericProfile},
 		{name: "unknown profile", db: fakeProfileDB{}, label: "e2e/26", want: genericProfile},
 		{name: "lookup error", db: fakeProfileDB{err: context.Canceled}, label: "bazzite", want: genericProfile},
 		{name: "empty label", db: fakeProfileDB{}, label: "", want: ""},
