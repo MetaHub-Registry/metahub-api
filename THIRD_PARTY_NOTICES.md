@@ -40,8 +40,8 @@ parse, so the licence check ignores it explicitly.
 | `github.com/go-chi/chi/v5` | MIT | <https://github.com/go-chi/chi/blob/v5.0.8/LICENSE> |
 | `github.com/go-chi/cors` | MIT | <https://github.com/go-chi/cors/blob/v1.2.1/LICENSE> |
 | `github.com/go-chi/render` | MIT | <https://github.com/go-chi/render/blob/v1.0.2/LICENSE> |
-| `github.com/go-jose/go-jose/v4` | Apache-2.0 | <https://github.com/go-jose/go-jose/blob/v4.1.4/LICENSE> |
-| `github.com/go-jose/go-jose/v4/json` | BSD-3-Clause | <https://github.com/go-jose/go-jose/blob/v4.1.4/json/LICENSE> |
+| `github.com/go-jose/go-jose/v4` | Apache-2.0 | <https://github.com/go-jose/go-jose/blob/v4.1.6/LICENSE> |
+| `github.com/go-jose/go-jose/v4/json` | BSD-3-Clause | <https://github.com/go-jose/go-jose/blob/v4.1.6/json/LICENSE> |
 | `github.com/go-logr/logr` | Apache-2.0 | <https://github.com/go-logr/logr/blob/v1.4.4/LICENSE> |
 | `github.com/go-logr/stdr` | Apache-2.0 | <https://github.com/go-logr/stdr/blob/v1.2.2/LICENSE> |
 | `github.com/gogo/protobuf/proto` | BSD-3-Clause | <https://github.com/gogo/protobuf/blob/v1.3.2/LICENSE> |
