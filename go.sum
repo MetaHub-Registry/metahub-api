@@ -277,8 +277,8 @@ github.com/magiconair/properties v1.8.7/go.mod h1:Dhd985XPs7jluiymwWYZ0G4Z61jb3v
 github.com/mattn/go-runewidth v0.0.10/go.mod h1:RAqKPSqVFrSLVXbA8x7dzmKdmGzieGRCM46jaSJTDAk=
 github.com/mattn/go-sqlite3 v1.14.52 h1:wVbm2Qnf4OXkqhBTSPuCRZDRnxfbVrrmiCEroVdog8U=
 github.com/mattn/go-sqlite3 v1.14.52/go.mod h1:6JTjA44L93a0QCyJef5YvlPoKXntQPjzWv5gtm9sB6w=
-github.com/metahub-registry/metahub-core v0.3.12-0.20261027190128-c7feadc827cd h1:e+n9NnWHNVFEG16kof+oXymwdGuFARzh/6C1ueZSQ6A=
-github.com/metahub-registry/metahub-core v0.3.12-0.20261027190128-c7feadc827cd/go.mod h1:UgcCPh7U2vBYlMyrBsWkwiPvXpNgwFb3aSFtbh7uvGw=
+github.com/metahub-registry/metahub-core v0.3.12-0.20261027191418-48c134ebea11 h1:6CJazDsdStnxsnjRZRGVfdhOQjeQH8NpO9uUugpjzuE=
+github.com/metahub-registry/metahub-core v0.3.12-0.20261027191418-48c134ebea11/go.mod h1:UgcCPh7U2vBYlMyrBsWkwiPvXpNgwFb3aSFtbh7uvGw=
 github.com/mgudov/logic-expression-parser v0.1.2 h1:VNPAHUTVm3zHzLn77YKJFYS4M8bmPLVSNnPCorjYcTI=
 github.com/mgudov/logic-expression-parser v0.1.2/go.mod h1:XQJyAlRrbqsKd3NrlBQr1YmMvTyXId+rZDv8qXQArB4=
 github.com/minio/md5-simd v1.1.2 h1:Gdi1DZK69+ZVMoNHRXJyNcxrMA4dSxoYHZSQbirFg34=

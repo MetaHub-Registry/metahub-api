@@ -5,7 +5,7 @@ Repository: `metahub-api`. Session provenance: `open-source-metahub`,
 
 ## 1. Bumps
 
-- [x] 1.0 Re-pin `metahub-core` -> `v0.3.12-0.20261027190128-c7feadc827cd`
+- [x] 1.0 Re-pin `metahub-core` -> `v0.3.12-0.20261027191418-48c134ebea11`
       (the core remediation commit). This forced the `go` directive to 1.26.0
       and closed `x/crypto`, `otel/sdk` and `grpc` transitively.
 - [x] 1.1 `github.com/containerd/containerd` -> `1.7.33` (closes 2 findings: high; 1.7.29 was the lower floor)
