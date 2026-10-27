@@ -471,3 +471,61 @@ Two changes now sit in `openspec/changes/`:
 
 Note the API default: `dependabot/alerts` returns 30 entries unless
 `--paginate` is used, which is why the first count read 30 instead of 59.
+
+## 2026-10-27 — Remediation: core re-pin + root-module bumps
+
+The API now consumes core
+`v0.3.12-0.20261027191418-48c134ebea11` (the `dependabot-backlog` core commit).
+The re-pin alone closed the `x/crypto` (→ 0.58.0), `otel/sdk` (→ 1.47.0) and
+`grpc` (→ 1.83.2) families. The remaining bumps were applied directly:
+
+| module | was | now | advisory |
+| --- | --- | --- | --- |
+| `containerd/containerd` | 1.7.12 | **1.7.33** | GHSA-pwhc-rpq9-4c8w, GHSA-xhf5-7wjv-pqxp |
+| `containers/image/v5` | 5.23.0 | **5.29.3** | GHSA-6wvf-f2vw-3425 |
+| `docker/distribution` | 2.8.1+incompatible | **2.8.3+incompatible** | GHSA-hqxw-f8mx-cpmw |
+| `docker/docker` | 25.0.2+incompatible | **25.0.6+incompatible** | GHSA-v23v-6jw2-98fq (critical) |
+| `go-jose/go-jose/v4` | 4.1.3 | **4.1.4** | GHSA-78h2-9frx-2jm8 |
+| `klauspost/compress` | 1.17.9 | **1.18.7** | GHSA-259r-337f-4rfw |
+
+The core re-pin forced the module floor to **Go 1.26.0** (core's `go`
+directive); the API `go` directive moved from 1.24.0 and the toolchain switches
+to go1.26.x automatically. `GOWORK=off go build ./...` and `go vet ./...` are
+clean on it.
+
+### Accepted advisories with no upstream fix (revisit 2027-01-27)
+
+`github.com/distribution/distribution v2.8.1+incompatible` is imported **only by
+`pkg/api/v1/handlers/test_manifest_helpers_test.go`** (`manifest/schema2`
+types). Both advisories are registry-**server** code paths, not the manifest
+types:
+
+| advisory | severity | affected | why it is not reachable |
+| --- | --- | --- | --- |
+| GHSA-3p65-76g6-3w7r | high | `distribution/distribution <= 2.8.3` | pull-through-cache `WWW-Authenticate` bearer-realm credential exfiltration in the registry server; the API does not run a distribution registry |
+| GHSA-f2g3-hh2r-cwgc | high | `distribution/distribution <= 2.8.3` | stale blob resurrection via the registry's repo-scoped Redis descriptor cache; no such cache/server code is linked |
+
+`github.com/docker/docker v25.0.6+incompatible` is linked through
+`metahub-core/pkg/backends/sqlite/test_container.go` → `testcontainers-go`
+(client-side archive helpers). The two remaining highs are daemon-side:
+
+| advisory | severity | affected | why it is not reachable |
+| --- | --- | --- | --- |
+| GHSA-rg2x-37c3-w2rh | high | `docker/docker <= 28.5.2` | race in the daemon's `docker cp` bind-mount setup; the API is a Docker client only and runs no daemon |
+| GHSA-x86f-5xw2-fm2r | high | `docker/docker <= 28.5.2` | the daemon resolves decompression binaries on `PUT /containers/{id}/archive`; that endpoint is served by Docker Engine, not by this service |
+
+The Docker Engine on dev/CI hosts that run testcontainers is the actual
+mitigation surface for the two daemon advisories; there is no patched Go module
+version to pin.
+
+### Follow-up (not done in this change)
+
+The design's open question stands: `distribution/distribution` is now test-only
+(`manifest/schema2`). Replacing those two helper types with
+`opencontainers/image-spec` structs would remove the module and both
+acceptances. Deferred to keep this change to dependency versions only.
+
+Verification on the branch: `GOWORK=off go build ./...`, `go vet ./...` and the
+short suite pass; `./test.sh` and the GoCD dev pipeline results are recorded in
+the session DevDiary. Alert closure is only observable on `main` after merge —
+the Dependabot alerts API reports the default branch.
