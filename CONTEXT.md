@@ -455,3 +455,19 @@ this repo at session close (both validated with `openspec validate`):
 - `GOWORK=off` is required to test against the pinned module; the session
   `go.work` is local-only and never committed.
 - `task push` can abort on a detached `flux/metahub`; push per repo if so.
+
+## 2026-10-27 — Dependabot alerts enabled, backlog decomposed
+
+Alerting had been off for the whole open-source session. Enabling it returned
+59 open alerts here — 10 critical, 17 high, 28 medium, 4 low — over ten module
+families, of which `golang.org/x/crypto` alone accounts for eleven findings.
+
+Two changes now sit in `openspec/changes/`:
+- `dependabot-security-alert-remediation` — outstanding work. Order matters:
+  bump `metahub-core` first, re-pin it here, then handle only what survives
+  (`x/crypto`, `grpc`, `otel/sdk`, `go-jose/v4`, `klauspost/compress`).
+- `refresh-go-dependencies-and-toolchain` — **already implemented**; the durable
+  record of the `go-toolchain-policy` capability.
+
+Note the API default: `dependabot/alerts` returns 30 entries unless
+`--paginate` is used, which is why the first count read 30 instead of 59.
