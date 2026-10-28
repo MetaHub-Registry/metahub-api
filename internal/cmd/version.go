@@ -14,7 +14,7 @@ import (
 	mlver "github.com/metahub-registry/metahub-core/pkg/version"
 )
 
-var version = "3.11.0-dev1"
+var version = "3.11.1"
 var jsonFlag bool
 
 type Version struct {
