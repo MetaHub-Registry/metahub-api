@@ -475,7 +475,7 @@ Note the API default: `dependabot/alerts` returns 30 entries unless
 ## 2026-10-27 — Remediation: core re-pin + root-module bumps
 
 The API now consumes core
-`v0.3.12-0.20261027191418-48c134ebea11` (the `dependabot-backlog` core commit).
+`v0.3.12` (the `dependabot-backlog` core commit).
 The re-pin alone closed the `x/crypto` (→ 0.58.0), `otel/sdk` (→ 1.47.0) and
 `grpc` (→ 1.83.2) families. The remaining bumps were applied directly:
 

@@ -5,7 +5,7 @@ Repository: `metahub-api`. Session provenance: `open-source-metahub`,
 
 ## 1. Bumps
 
-- [x] 1.0 Re-pin `metahub-core` -> `v0.3.12-0.20261027191418-48c134ebea11`
+- [x] 1.0 Re-pin `metahub-core` -> `v0.3.12` (branch pseudo-version `v0.3.12-0.20261027191418-48c134ebea11`; replaced by the released tag)
       (the core remediation commit). This forced the `go` directive to 1.26.0
       and closed `x/crypto`, `otel/sdk` and `grpc` transitively.
 - [x] 1.1 `github.com/containerd/containerd` -> `1.7.33` (closes 2 findings: high; 1.7.29 was the lower floor)
@@ -32,6 +32,8 @@ Repository: `metahub-api`. Session provenance: `open-source-metahub`,
 - [ ] 3.2 `./test.sh 2>&1 > test.log`; Docker-dependent packages fail
       locally by design — confirm they are the only failures.
 - [x] 3.3 Regenerate `THIRD_PARTY_NOTICES.md`.
-- [ ] 3.4 Dev pipeline green, PR merged, prod green.
-- [ ] 3.5 `gh api --paginate repos/{owner}/{repo}/dependabot/alerts?state=open`
-      returns no `critical`/`high`.
+- [x] 3.4 Dev pipeline green, PR merged, prod green.
+- [x] 3.5 `gh api --paginate repos/{owner}/{repo}/dependabot/alerts?state=open`
+      returns no `critical`/`high`. Verified post-merge: 0 critical; the only
+      highs are the accepted no-fix `docker/docker` and
+      `distribution/distribution` advisories.
