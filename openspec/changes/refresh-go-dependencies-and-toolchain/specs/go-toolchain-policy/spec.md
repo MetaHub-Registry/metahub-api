@@ -63,7 +63,7 @@ take that pin only after the branch is final.
 
 #### Scenario: Pin taken after the branch is final
 
-- **WHEN** the `metalib` branch is final
+- **WHEN** the `metahub-core` branch is final
 - **THEN** the consumers' pseudo-version resolves to its head commit
 
 #### Scenario: Pin taken too early

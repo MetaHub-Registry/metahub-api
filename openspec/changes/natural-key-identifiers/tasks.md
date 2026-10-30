@@ -26,6 +26,7 @@
 
 - [x] 4.1 Pin `metahub-core` at the session commit
       (`v0.3.11-0.20261023073118-725938dd0b1e`) in `go.mod`/`go.sum`.
+      Replaced by the released tag `v0.3.12` (current `go.mod`).
 - [x] 4.2 Switch `hydrateManifestLayers` to
       `GetLayersForManifestDigest(ctx, digest)`.
 - [x] 4.3 Switch the profile detail hop to the label lookup.
