@@ -6,6 +6,11 @@
 #
 #   *_test.go                 fixture tokens and passwords; none is live
 #   Taskfile*.yml             `curl -u user:pass` examples against localhost
+#
+# Historical only: these files were removed from the tree on 2026-11-03, but
+# their previous contents are still reachable in git history. Each match was
+# triaged on import as a fixture or a documented placeholder, not a live
+# credential, and the file no longer exists at the tip.
 [extend]
 useDefault = true
 
@@ -18,6 +23,10 @@ paths = [
   '''^pkg/pullthrough/[a-z_]+_test\.go$''',
   '''^Taskfile\.yml$''',
   '''^Taskfile_compose\.yaml$''',
+  '''^misc/bin/setup-session-workspace\.sh$''',
+  '''^misc/compose/garage/config\.toml$''',
+  '''^misc/compose/grafana/grafana\.ini$''',
+  '''^misc/gocd/bin/run-pipeline\.sh$''',
   '''^oauth\.go$''',
   '''^api/v1/handlers/auth\.go$''',
 ]
