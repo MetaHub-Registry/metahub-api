@@ -18,6 +18,7 @@ env:
   # metahub-core is private until the visibility flip; the job must bypass
   # the public proxy and use the read-only token below.
   GOPRIVATE: "github.com/metahub-registry/*"
+  # TRANSITIONAL(private-core): remove after metahub-core is public
 
 jobs:
   build:
@@ -182,12 +183,41 @@ jobs:
       - name: Outbound hosts
         run: python3 .github/scripts/check_outbound.py
 
+  hygiene:
+    name: workflow hygiene
+    runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Pull-request workflows must not read secrets
+        run: ./misc/bin/check-workflow-secrets.sh
+
   fast:
     name: fast
     if: always()
-    needs: [build, vet, lint, test, gitleaks, dco, licenses, vuln, telemetry]
+    needs: [build, vet, lint, test, gitleaks, hygiene, dco, licenses, vuln, telemetry]
     runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
     steps:
       - name: Fail when any fast job failed
         if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
         run: exit 1
+      - name: Fail when a required job did not run
+        env:
+          REQUIRED: >-
+            build=${{ needs.build.result }}
+            vet=${{ needs.vet.result }}
+            lint=${{ needs.lint.result }}
+            test=${{ needs.test.result }}
+            gitleaks=${{ needs.gitleaks.result }}
+            hygiene=${{ needs.hygiene.result }}
+            licenses=${{ needs.licenses.result }}
+            vuln=${{ needs.vuln.result }}
+            telemetry=${{ needs.telemetry.result }}
+        run: |
+          for pair in $REQUIRED; do
+            name="${pair%%=*}"
+            result="${pair#*=}"
+            if [ "$result" != "success" ]; then
+              echo "::error::required job '${name}' did not succeed (result: ${result})"
+              exit 1
+            fi
+          done
