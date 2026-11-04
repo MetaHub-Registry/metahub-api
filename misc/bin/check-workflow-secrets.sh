@@ -30,7 +30,7 @@ for wf in "$workflow_dir"/*.yml "$workflow_dir"/*.yaml; do
   [ -f "$wf" ] || continue
   name="$(basename "$wf")"
 
-  if grep -qE '^\s*pull_request_target\s*:' "$wf"; then
+  if grep -qE '^[[:space:]]*pull_request_target[[:space:]]*:' "$wf"; then
     echo "FAIL: ${name} uses pull_request_target" >&2
     status=1
     continue

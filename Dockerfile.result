@@ -61,7 +61,7 @@ COPY --from=gonja /usr/local/bin/gonja-cli /usr/local/bin/gonja-cli
 # && apk add --no-cache bash jq py3-pip \
 # && pip3 install --break-system-packages wildq==1.0.6
 COPY --from=go /go/metahub-api/metahub-api /usr/bin/metahub-api
-COPY ./misc/config/metahub-api.yaml ./misc/config/metahub-api.yaml.tpl /opt/metahub-api/
+COPY ./misc/config/metahub-api.yaml.tpl /opt/metahub-api/
 COPY ./metahub.db /var/lib/metahub/metahub.db
 VOLUME /var/lib/metahub
 VOLUME /etc/metahub/

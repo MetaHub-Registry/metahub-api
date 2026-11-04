@@ -27,6 +27,14 @@ patterns=(
   '(^|/)docker-compose-sonarcube\.yaml$'
   '(^|/)sonar-project\.properties$'
   '(^|/)misc/bin/(opencode|setup-session-workspace|vl-event|sonar)\.sh$'
+  '(^|/)\.gocd-(run|setup)\.sh$'
+  '(^|/)misc/gitlab-ci[^/]*$'
+  '(^|/)misc/gitlabci\.yaml$'
+  '(^|/)PROD_PUSH\.md$'
+  '(^|/)misc/bin/(build-prod|copy)\.sh$'
+  '(^|/)misc/docker/mh-api/'
+  '(^|/)docs/session-artifacts/'
+  '(^|/)\.scannerwork/'
   '(^|/)\.scannerwork/'
   '(^|/)(report\.json|pre_test\.log|test\.log|sonar\.log|coverage\.txt|coverage\.xml)$'
 )
@@ -49,4 +57,19 @@ if [ -n "$hits" ]; then
   exit 1
 fi
 
-echo "ok: $target publishes no excluded paths"
+# Content-level leaks the path rules cannot see: a private AWS account, an
+# internal domain, an absolute maintainer path. Test fixtures use different
+# internal names and are handled by the launch-readiness scrub, not here.
+content_hits=$(git -C "$target" grep -nE \
+  '[0-9]{12}\.dkr\.ecr|metahub(-dev)?\.hvk|~/src/gitlab\.com' \
+  -- ':!*.gitleaks.toml' ':!misc/bin/check-public-tree.sh' 2>/dev/null || true)
+
+if [ -n "$content_hits" ]; then
+  echo "FAIL: $target tracks content that names internal infrastructure:" >&2
+  printf '%s\n' "$content_hits" | while IFS= read -r line; do
+    printf '  %s\n' "$line" >&2
+  done
+  exit 1
+fi
+
+echo "ok: $target publishes no excluded paths or internal identifiers"

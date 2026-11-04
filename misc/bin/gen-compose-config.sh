@@ -61,17 +61,21 @@ USER_PASSWORD="${USER_PASSWORD:-$(rand 12)}"
 GODMODE_SIGNING_KEY="${GODMODE_SIGNING_KEY:-$(rand 24)}"
 
 # Substitute only the documented tokens; leave every other line untouched.
+# Escape sed replacement metacharacters so env-supplied values stay literal.
+esc() { printf '%s' "$1" | sed 's/[\\&|]/\\&/g'; }
+
 tmp="$(mktemp "${config}.XXXXXX")"
 trap 'rm -f "$tmp"' EXIT
 sed \
-  -e "s|__MINIO_ROOT_USER__|${MINIO_ROOT_USER}|g" \
-  -e "s|__MINIO_ROOT_PASSWORD__|${MINIO_ROOT_PASSWORD}|g" \
-  -e "s|__NEO4J_PASSWORD__|${NEO4J_PASSWORD}|g" \
-  -e "s|__ADMIN_USERNAME__|${ADMIN_USERNAME}|g" \
-  -e "s|__ADMIN_PASSWORD__|${ADMIN_PASSWORD}|g" \
-  -e "s|__USER_USERNAME__|${USER_USERNAME}|g" \
-  -e "s|__USER_PASSWORD__|${USER_PASSWORD}|g" \
-  -e "s|__GODMODE_SIGNING_KEY__|${GODMODE_SIGNING_KEY}|g" \
+  -e "s|__MINIO_ROOT_USER__|$(esc "$MINIO_ROOT_USER")|g" \
+  -e "s|__MINIO_ROOT_PASSWORD__|$(esc "$MINIO_ROOT_PASSWORD")|g" \
+  -e "s|__NEO4J_USER__|$(esc "$NEO4J_USER")|g" \
+  -e "s|__NEO4J_PASSWORD__|$(esc "$NEO4J_PASSWORD")|g" \
+  -e "s|__ADMIN_USERNAME__|$(esc "$ADMIN_USERNAME")|g" \
+  -e "s|__ADMIN_PASSWORD__|$(esc "$ADMIN_PASSWORD")|g" \
+  -e "s|__USER_USERNAME__|$(esc "$USER_USERNAME")|g" \
+  -e "s|__USER_PASSWORD__|$(esc "$USER_PASSWORD")|g" \
+  -e "s|__GODMODE_SIGNING_KEY__|$(esc "$GODMODE_SIGNING_KEY")|g" \
   "$example" > "$tmp"
 mv "$tmp" "$config"
 trap - EXIT

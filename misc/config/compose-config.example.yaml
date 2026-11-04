@@ -20,7 +20,7 @@ minio:
     redirect: false
 neo4j:
   dbname: neo4j
-  user: neo4j
+  user: __NEO4J_USER__
   password: __NEO4J_PASSWORD__
   url: bolt://neo4j:7687
 frontend:

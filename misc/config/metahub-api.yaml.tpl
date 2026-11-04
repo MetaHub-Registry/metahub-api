@@ -38,5 +38,5 @@ logging:
   signing_key: "{{ GODMODE_SIGNING_KEY }}"
   users:
     - username: {{ GODMODE_USER }}
-      password: {{ GODMODE_PASS |default(GODMODE_USER) }}
+      password: {{ GODMODE_PASS }}
       role: {{ GODMODE_ROLE |default("admin") }}{% endif %}
