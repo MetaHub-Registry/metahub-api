@@ -5,10 +5,6 @@ dotenv: ['.env']
 includes:
   dev:
     taskfile: ./Taskfile_dev.yml
-  session:
-    taskfile: ./Taskfile_session.yml
-  e2e:
-    taskfile: ./Taskfile_e2e_dev.yml
   compose:
     taskfile: ./Taskfile_compose.yaml
   mh-ui:

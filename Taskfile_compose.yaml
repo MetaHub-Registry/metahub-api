@@ -13,7 +13,6 @@ includes:
 vars:
   DC_DATA: docker compose -f docker-compose-data.yaml
   DC_ALL: docker compose -f docker-compose-data.yaml -f docker-compose.yaml
-  DC_MON: docker compose -f docker-compose-monitoring.yaml
   ADMIN_DIR: /go/metahub-admin
   ADMIN_EXEC: '{{.DC_ALL}} exec -T -w {{.ADMIN_DIR}} dev'
   ADMIN_CMD: go run main.go
@@ -40,16 +39,10 @@ tasks:
       - docker volume create ce-registry || true
       - '{{.DC_DATA}} up -d --wait'
 
-  up:monitoring:
-    desc: Start monitoring services
-    cmds:
-      - '{{.DC_MON}} up -d --wait'
-
   down:
     desc: Stop and remove all compose services
     cmds:
       - docker compose stop
-      - '{{.DC_MON}} down -v'
       - '{{.DC_DATA}} down -v'
 
   # ===== API control =====
