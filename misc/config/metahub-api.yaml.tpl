@@ -2,7 +2,7 @@ minio:
   url: {{ MINIO_URL |default("minio:9000") }}
   region: {{ MINIO_REGION |default("us-east-1") }}
   user: {{ MINIO_USER |default("minio") }}
-  password: {{ MINIO_PASSWD |default("miniominio") }}
+  password: {{ MINIO_PASSWD }}
   redirect: {{ MINIO_REDIRECT |default("false") }}
   ssl: {{ MINIO_SSL |default("false") }}
   manifests:
@@ -15,7 +15,7 @@ minio:
 {% endif %}neo4j:
   dbname: {{ NEO4J_DB_NAME |default("neo4j") }}
   user: {{ NEO4J_USER |default("neo4j") }}
-  password: {{ NEO4J_PASSWD |default("neo4j123") }}
+  password: {{ NEO4J_PASSWD }}
   url: bolt://{{ NEO4J_HOST |default("neo4j") }}:{{ NEO_BOLT_PORT |default("7687") }}
 frontend:
   redirect: {{ FRONTEND_REDIRECT | default("https://frontend.metahub-registry.org") }}
@@ -33,9 +33,9 @@ logging:
 {% if OAUTH_CLIENTID %}oauth:
   clientid: {{ OAUTH_CLIENTID }}
   secret: {{ OAUTH_SECRET }}
-  state: {{ OAUTH_STATE |default("supersecretsalt") }}{% endif %}
+  state: {{ OAUTH_STATE }}{% endif %}
 {% if GODMODE_USER %}godmode:
-  signing_key: "a-random-secret-key-at-least-32-characters"
+  signing_key: "{{ GODMODE_SIGNING_KEY }}"
   users:
     - username: {{ GODMODE_USER }}
       password: {{ GODMODE_PASS |default(GODMODE_USER) }}

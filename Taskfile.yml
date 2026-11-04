@@ -1,6 +1,8 @@
 version: '3'
 
-dotenv: ['.env']
+dotenv:
+  - .env
+  - misc/config/compose.env
 
 includes:
   dev:
@@ -14,4 +16,6 @@ includes:
 tasks:
   localConfig:
     cmds:
+     - ': "${MINIO_PASSWD:?set MINIO_PASSWD}"'
+     - ': "${NEO4J_PASSWD:?set NEO4J_PASSWD}"'
      - gonja-cli misc/config/metahub-api.yaml.tpl misc/config/local-config.yaml

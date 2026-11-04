@@ -21,6 +21,8 @@ misc/compose/sonarqube/**
 misc/sqlite/*
 results/*
 misc/config/local-config.yaml
+misc/config/compose-config.yaml
+misc/config/compose.env
 metahub
 sessions/*
 test.log

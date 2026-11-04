@@ -44,6 +44,20 @@ deliberate and documented in [GOVERNANCE.md](GOVERNANCE.md).
 6. Open the pull request using the template, with the problem and the approach
    described.
 
+### Development stack
+
+The compose stack needs a local configuration with generated credentials; it is
+not committed.
+
+```bash
+./misc/bin/gen-compose-config.sh   # or: task compose:config
+task compose:up
+```
+
+The generator writes `misc/config/compose-config.yaml` (read by the API) and
+`misc/config/compose.env` (read by compose), prints the registry accounts it
+created, and refuses to overwrite an existing pair without `--force`.
+
 ### Commit messages
 
 Use Conventional Commits, matching the existing history:

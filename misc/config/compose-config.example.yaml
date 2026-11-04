@@ -1,8 +1,16 @@
+# Development configuration for the compose stack.
+#
+# DO NOT EDIT: this is the template. `misc/bin/gen-compose-config.sh` copies it
+# to `compose-config.yaml` and replaces the __TOKENS__ with unique values.
+#
+#   ./misc/bin/gen-compose-config.sh
+#
+# The generated file and `compose.env` are ignored by Git.
 minio:
   url: minio:9000
   region: us-east-1
-  user: minio 
-  password: miniominio
+  user: __MINIO_ROOT_USER__
+  password: __MINIO_ROOT_PASSWORD__
   redirect: false
   ssl: false
   manifests:
@@ -13,7 +21,7 @@ minio:
 neo4j:
   dbname: neo4j
   user: neo4j
-  password: neo4j123
+  password: __NEO4J_PASSWORD__
   url: bolt://neo4j:7687
 frontend:
   redirect: http://localhost:8082
@@ -27,17 +35,17 @@ cors:
   enabled: true
 
 godmode:
-  signing_key: "a-random-secret-key-at-least-32-characters"
+  signing_key: "__GODMODE_SIGNING_KEY__"
   # Multiple accounts with per-account roles. Only the "admin" role may push
   # or delete; "user" accounts are pull-only (enforced by OCIWriteAuthMiddleware).
   users:
-    # CI / conformance service account — full read+write.
-    - username: oci
-      password: oci
+    # Conformance / service account — full read+write.
+    - username: __ADMIN_USERNAME__
+      password: __ADMIN_PASSWORD__
       role: admin
-    # Public demo account — pull-only.
-    - username: meta
-      password: hub
+    # Demo account — pull-only.
+    - username: __USER_USERNAME__
+      password: __USER_PASSWORD__
       role: user
 
 # Upstream registries available for pullthrough.
@@ -71,5 +79,3 @@ registries:
       enabled: true
       client_redirect: false
       cache: async
-    
-
