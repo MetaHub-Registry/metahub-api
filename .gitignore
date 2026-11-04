@@ -30,3 +30,11 @@ test.log
 metahub.db
 agent.compose.yaml
 agent.compose.lock
+
+# Internal working material — excluded from the published tree (see the
+# MetaHub-Registry/openspec record). Ignored so a later session cannot re-add it.
+AGENTS.md
+CONTEXT.md
+openspec/
+sessions/
+.branches
