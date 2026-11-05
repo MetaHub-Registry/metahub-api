@@ -5,13 +5,6 @@
 # skipped (or fails). Either the job moves to the integration lane or the secret
 # goes away. This check makes that rule enforceable instead of a review habit.
 #
-# Transitional exception: a workflow that contains the exact marker
-#
-#   # TRANSITIONAL(private-core): remove after metahub-core is public
-#
-#   may reference secrets.METAHUB_CORE_RO_TOKEN until metahub-core is public.
-#   Any other secret in that file still fails. The marker is deleted with the
-#   carve-out, so the exception cannot outlive its reason.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -22,8 +15,6 @@ if [ ! -d "$workflow_dir" ]; then
   exit 2
 fi
 
-marker='# TRANSITIONAL(private-core): remove after metahub-core is public'
-allowed_secret='METAHUB_CORE_RO_TOKEN'
 status=0
 
 for wf in "$workflow_dir"/*.yml "$workflow_dir"/*.yaml; do
@@ -52,9 +43,6 @@ for wf in "$workflow_dir"/*.yml "$workflow_dir"/*.yaml; do
   while IFS= read -r line; do
     [ -z "$line" ] && continue
     secret="$(printf '%s\n' "$line" | sed -E 's/.*secrets\.([A-Za-z_][A-Za-z0-9_]*).*/\1/' | head -1)"
-    if grep -qF "$marker" "$wf" && [ "$secret" = "$allowed_secret" ]; then
-      continue
-    fi
     echo "FAIL: ${name} is pull-request triggered and references secrets.${secret}" >&2
     echo "      ${line}" >&2
     status=1

@@ -15,64 +15,39 @@ concurrency:
 
 env:
   GO_VERSION: "1.26.x"
-  # metahub-core is private until the visibility flip; the job must bypass
-  # the public proxy and use the read-only token below.
-  GOPRIVATE: "github.com/metahub-registry/*"
-  # TRANSITIONAL(private-core): remove after metahub-core is public
 
 jobs:
   build:
     name: build
     runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
-      - name: Configure private module access
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-        env:
-          METAHUB_CORE_RO_TOKEN: ${{ secrets.METAHUB_CORE_RO_TOKEN }}
-        run: |
-          git config --global url."https://x-access-token:${METAHUB_CORE_RO_TOKEN}@github.com/".insteadOf "https://github.com/"
       - run: go build ./...
 
   vet:
     name: vet
     runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
-      - name: Configure private module access
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-        env:
-          METAHUB_CORE_RO_TOKEN: ${{ secrets.METAHUB_CORE_RO_TOKEN }}
-        run: |
-          git config --global url."https://x-access-token:${METAHUB_CORE_RO_TOKEN}@github.com/".insteadOf "https://github.com/"
       - run: go vet ./...
 
   lint:
     name: lint
     runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
-      - name: Configure private module access
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-        env:
-          METAHUB_CORE_RO_TOKEN: ${{ secrets.METAHUB_CORE_RO_TOKEN }}
-        run: |
-          git config --global url."https://x-access-token:${METAHUB_CORE_RO_TOKEN}@github.com/".insteadOf "https://github.com/"
       - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: v2.15.0
@@ -81,19 +56,12 @@ jobs:
   test:
     name: test
     runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
-      - name: Configure private module access
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-        env:
-          METAHUB_CORE_RO_TOKEN: ${{ secrets.METAHUB_CORE_RO_TOKEN }}
-        run: |
-          git config --global url."https://x-access-token:${METAHUB_CORE_RO_TOKEN}@github.com/".insteadOf "https://github.com/"
       - name: Unit tests (no containers)
         run: go test -short -timeout 300s ./...
 
@@ -129,19 +97,12 @@ jobs:
   licenses:
     name: licenses
     runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
-      - name: Configure private module access
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-        env:
-          METAHUB_CORE_RO_TOKEN: ${{ secrets.METAHUB_CORE_RO_TOKEN }}
-        run: |
-          git config --global url."https://x-access-token:${METAHUB_CORE_RO_TOKEN}@github.com/".insteadOf "https://github.com/"
       - name: Check licences
         run: |
           allow="$(grep -vE '^\s*(#|$)' .github/license-allowlist.txt | paste -sd, -)"
@@ -156,19 +117,12 @@ jobs:
   vuln:
     name: vuln
     runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
-      - name: Configure private module access
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-        env:
-          METAHUB_CORE_RO_TOKEN: ${{ secrets.METAHUB_CORE_RO_TOKEN }}
-        run: |
-          git config --global url."https://x-access-token:${METAHUB_CORE_RO_TOKEN}@github.com/".insteadOf "https://github.com/"
       # Advisory until the dependency refresh lands (see the per-repo change):
       # the current module graph has known advisories in containerd, docker and
       # the OpenTelemetry SDK. The job must not be the reason a PR is red while
