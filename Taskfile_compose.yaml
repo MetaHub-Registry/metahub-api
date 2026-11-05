@@ -11,22 +11,30 @@ includes:
     dir: ../metahub-ui/
     optional: true
 vars:
-  DC_DATA: docker compose -f docker-compose-data.yaml
-  DC_ALL: docker compose -f docker-compose-data.yaml -f docker-compose.yaml
-  DC_MON: docker compose -f docker-compose-monitoring.yaml
+  DC_ENV: docker compose --env-file misc/config/compose.env
+  DC_DATA: '{{.DC_ENV}} -f docker-compose-data.yaml'
+  DC_ALL: '{{.DC_ENV}} -f docker-compose-data.yaml -f docker-compose.yaml'
   ADMIN_DIR: /go/metahub-admin
   ADMIN_EXEC: '{{.DC_ALL}} exec -T -w {{.ADMIN_DIR}} dev'
   ADMIN_CMD: go run main.go
   DIND_EXEC: '{{.DC_ALL}} exec -T dind'
-  NEO4J_PASS: neo4j123
+  NEO4J_PASS: '{{.NEO4J_PASSWORD}}'
   CYPHER: '{{.DC_ALL}} exec -T neo4j cypher-shell -u neo4j -p {{.NEO4J_PASS}}'
 
 tasks:
   # ===== Lifecycle =====
 
+  config:
+    desc: Generate the local compose configuration with unique credentials
+    status:
+      - test -f misc/config/compose-config.yaml -a -f misc/config/compose.env
+    cmds:
+      - ./misc/bin/gen-compose-config.sh --force
+
   up:
     desc: Start the full compose stack (data + monitoring + api)
     cmds:
+      - task: config
       - docker network create mh-data || true
       - docker volume create ce-registry || true
       - '{{.DC_DATA}} up -d --wait'
@@ -35,21 +43,16 @@ tasks:
 
   up:data:
     desc: Start data services only (neo4j, minio, registry)
+    deps: [config]
     cmds:
       - docker network create mh-data || true
       - docker volume create ce-registry || true
       - '{{.DC_DATA}} up -d --wait'
 
-  up:monitoring:
-    desc: Start monitoring services
-    cmds:
-      - '{{.DC_MON}} up -d --wait'
-
   down:
     desc: Stop and remove all compose services
     cmds:
       - docker compose stop
-      - '{{.DC_MON}} down -v'
       - '{{.DC_DATA}} down -v'
 
   # ===== API control =====
@@ -218,7 +221,7 @@ tasks:
   minio:setup:
     desc: Set up mc alias for local MinIO
     cmds:
-      - mc alias set dev http://localhost:9000 minio miniominio
+      - mc alias set dev http://localhost:9000 "${MINIO_ROOT_USER}" "${MINIO_ROOT_PASSWORD}"
 
   minio:clean:
     desc: Remove all blobs and manifests from MinIO

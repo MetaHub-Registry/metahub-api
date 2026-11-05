@@ -12,7 +12,3 @@ tasks:
     dotenv: ['.env']
     cmds:
       - ./test.sh
-  sonar:
-    dotenv: ['.env']
-    cmds:
-      - ./misc/bin/sonar.sh {{.CLI_ARGS}}

@@ -5,12 +5,12 @@
 # the scan. Re-review when a listed file gains new secrets.
 #
 #   *_test.go                 fixture tokens and passwords; none is live
-#   compose-config.yaml       dev-compose defaults (Postgres/Neo4j/MinIO)
-#   garage/config.toml        dev-compse S3 fixture rpc_secret
-#   grafana.ini               Grafana's documented upstream default secret_key
-#   run-pipeline.sh           `aws ecr get-login` command text, not a credential
-#   setup-session-workspace.sh  documented placeholder in a maintainer script
 #   Taskfile*.yml             `curl -u user:pass` examples against localhost
+#
+# Historical only: these files were removed from the tree on 2026-11-03, but
+# their previous contents are still reachable in git history. Each match was
+# triaged on import as a fixture or a documented placeholder, not a live
+# credential, and the file no longer exists at the tip.
 [extend]
 useDefault = true
 
@@ -21,13 +21,12 @@ paths = [
   '''^pkg/api/v1/handlers/[a-z_]+_test\.go$''',
   '''^pkg/api/v1/router/router_test\.go$''',
   '''^pkg/pullthrough/[a-z_]+_test\.go$''',
-  '''^misc/config/compose-config\.yaml$''',
+  '''^Taskfile\.yml$''',
+  '''^Taskfile_compose\.yaml$''',
+  '''^misc/bin/setup-session-workspace\.sh$''',
   '''^misc/compose/garage/config\.toml$''',
   '''^misc/compose/grafana/grafana\.ini$''',
   '''^misc/gocd/bin/run-pipeline\.sh$''',
-  '''^misc/bin/setup-session-workspace\.sh$''',
-  '''^Taskfile\.yml$''',
-  '''^Taskfile_compose\.yaml$''',
   '''^oauth\.go$''',
   '''^api/v1/handlers/auth\.go$''',
 ]

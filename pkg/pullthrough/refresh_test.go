@@ -87,5 +87,8 @@ func TestRefresh_UpstreamDown_ReleasesClaim(t *testing.T) {
 	require.True(t, c.EnqueueRefresh(refreshJob()))
 	require.Eventually(t, func() bool { return len(r.called()) == 1 }, 2*time.Second, 10*time.Millisecond)
 	// Claim released after the failed run → the next access can re-enqueue.
-	assert.True(t, c.EnqueueRefresh(refreshJob()), "claim must be released after a failed refresh")
+	// The refresher records the call before the worker sees the error and
+	// releases the claim, so poll instead of asserting immediately.
+	require.Eventually(t, func() bool { return c.EnqueueRefresh(refreshJob()) },
+		2*time.Second, 10*time.Millisecond, "claim must be released after a failed refresh")
 }

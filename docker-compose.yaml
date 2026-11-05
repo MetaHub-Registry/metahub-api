@@ -58,8 +58,8 @@ services:
       OCI_ROOT_URL: "http://dev:80"
       OCI_NAMESPACE: "oci/conformance"
       OCI_CROSSMOUNT_NAMESPACE: "oci/conformance"
-      OCI_USERNAME: "oci"
-      OCI_PASSWORD:  "oci"
+      OCI_USERNAME: "${OCONF_USERNAME:?run misc/bin/gen-compose-config.sh}"
+      OCI_PASSWORD: "${OCONF_PASSWORD:?run misc/bin/gen-compose-config.sh}"
       OCI_TEST_PULL: 1
       OCI_TEST_PUSH: 0
       OCI_TEST_CONTENT_DISCOVERY: 0

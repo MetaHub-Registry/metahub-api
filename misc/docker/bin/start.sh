@@ -13,6 +13,12 @@ if [[ -z "${CFG_FILE}" ]]; then
 	exit 1
 fi
 if [[ ! -f ${CFG_FILE} ]];then
+	: "${MINIO_PASSWD:?set MINIO_PASSWD when rendering the config}"
+	: "${NEO4J_PASSWD:?set NEO4J_PASSWD when rendering the config}"
+	if [[ -n "${GODMODE_USER:-}" ]]; then
+		: "${GODMODE_PASS:?set GODMODE_PASS when GODMODE_USER is set}"
+		: "${GODMODE_SIGNING_KEY:?set GODMODE_SIGNING_KEY when GODMODE_USER is set}"
+	fi
 	gonja-cli /opt/metahub-api/metahub-api.yaml.tpl ${CFG_FILE}
 fi
   

@@ -15,63 +15,39 @@ concurrency:
 
 env:
   GO_VERSION: "1.26.x"
-  # metahub-core is private until the visibility flip; the job must bypass
-  # the public proxy and use the read-only token below.
-  GOPRIVATE: "github.com/metahub-registry/*"
 
 jobs:
   build:
     name: build
     runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
-      - name: Configure private module access
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-        env:
-          METAHUB_CORE_RO_TOKEN: ${{ secrets.METAHUB_CORE_RO_TOKEN }}
-        run: |
-          git config --global url."https://x-access-token:${METAHUB_CORE_RO_TOKEN}@github.com/".insteadOf "https://github.com/"
       - run: go build ./...
 
   vet:
     name: vet
     runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
-      - name: Configure private module access
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-        env:
-          METAHUB_CORE_RO_TOKEN: ${{ secrets.METAHUB_CORE_RO_TOKEN }}
-        run: |
-          git config --global url."https://x-access-token:${METAHUB_CORE_RO_TOKEN}@github.com/".insteadOf "https://github.com/"
       - run: go vet ./...
 
   lint:
     name: lint
     runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
-      - name: Configure private module access
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-        env:
-          METAHUB_CORE_RO_TOKEN: ${{ secrets.METAHUB_CORE_RO_TOKEN }}
-        run: |
-          git config --global url."https://x-access-token:${METAHUB_CORE_RO_TOKEN}@github.com/".insteadOf "https://github.com/"
       - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: v2.15.0
@@ -80,19 +56,12 @@ jobs:
   test:
     name: test
     runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
-      - name: Configure private module access
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-        env:
-          METAHUB_CORE_RO_TOKEN: ${{ secrets.METAHUB_CORE_RO_TOKEN }}
-        run: |
-          git config --global url."https://x-access-token:${METAHUB_CORE_RO_TOKEN}@github.com/".insteadOf "https://github.com/"
       - name: Unit tests (no containers)
         run: go test -short -timeout 300s ./...
 
@@ -101,12 +70,14 @@ jobs:
     runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
       - name: Install gitleaks
         run: |
           curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz \
             | tar -xz -C "$RUNNER_TEMP" gitleaks
       - name: Scan
-        run: '"$RUNNER_TEMP/gitleaks" dir . --config .gitleaks.toml --redact --verbose'
+        run: '"$RUNNER_TEMP/gitleaks" git . --config .gitleaks.toml --redact --verbose'
 
   dco:
     name: dco
@@ -126,19 +97,12 @@ jobs:
   licenses:
     name: licenses
     runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
-      - name: Configure private module access
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-        env:
-          METAHUB_CORE_RO_TOKEN: ${{ secrets.METAHUB_CORE_RO_TOKEN }}
-        run: |
-          git config --global url."https://x-access-token:${METAHUB_CORE_RO_TOKEN}@github.com/".insteadOf "https://github.com/"
       - name: Check licences
         run: |
           allow="$(grep -vE '^\s*(#|$)' .github/license-allowlist.txt | paste -sd, -)"
@@ -153,19 +117,12 @@ jobs:
   vuln:
     name: vuln
     runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
-      - name: Configure private module access
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-        env:
-          METAHUB_CORE_RO_TOKEN: ${{ secrets.METAHUB_CORE_RO_TOKEN }}
-        run: |
-          git config --global url."https://x-access-token:${METAHUB_CORE_RO_TOKEN}@github.com/".insteadOf "https://github.com/"
       # Advisory until the dependency refresh lands (see the per-repo change):
       # the current module graph has known advisories in containerd, docker and
       # the OpenTelemetry SDK. The job must not be the reason a PR is red while
@@ -182,12 +139,35 @@ jobs:
       - name: Outbound hosts
         run: python3 .github/scripts/check_outbound.py
 
+  hygiene:
+    name: workflow hygiene
+    runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Pull-request workflows must not read secrets
+        run: ./misc/bin/check-workflow-secrets.sh
+
   fast:
     name: fast
     if: always()
-    needs: [build, vet, lint, test, gitleaks, dco, licenses, vuln, telemetry]
+    needs: [build, vet, lint, test, gitleaks, hygiene, dco, licenses, vuln, telemetry]
     runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Fail when any fast job failed
         if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
         run: exit 1
+      - name: Fail when a required job did not run
+        env:
+          ALLOW_SKIPPED: ${{ github.event_name != 'pull_request' && 'dco' || '' }}
+          REQUIRED: >-
+            build=${{ needs.build.result }}
+            vet=${{ needs.vet.result }}
+            lint=${{ needs.lint.result }}
+            test=${{ needs.test.result }}
+            gitleaks=${{ needs.gitleaks.result }}
+            hygiene=${{ needs.hygiene.result }}
+            licenses=${{ needs.licenses.result }}
+            vuln=${{ needs.vuln.result }}
+            telemetry=${{ needs.telemetry.result }}
+        run: ./misc/bin/check-required-jobs.sh $REQUIRED

@@ -30,8 +30,8 @@ services:
       #- ${PWD}/misc/minio:/minio
       - /minio
     environment:
-      MINIO_ROOT_USER: "minio"
-      MINIO_ROOT_PASSWORD: "miniominio"
+      MINIO_ROOT_USER: "${MINIO_ROOT_USER:?run misc/bin/gen-compose-config.sh}"
+      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD:?run misc/bin/gen-compose-config.sh}"
     command: ["server", "/minio", "--console-address=0.0.0.0:9001"]
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "http://localhost:9000/minio/health/live"]
@@ -53,12 +53,12 @@ services:
     networks:
       - mh-data
     environment:
-      NEO4J_AUTH: neo4j/neo4j123
+      NEO4J_AUTH: "${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:?run misc/bin/gen-compose-config.sh}"
       NEO4J_PLUGINS: '["graph-data-science","apoc"]'
     volumes:
      - neo4j:/var/lib/neo4j/data
     healthcheck:
-      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "neo4j123", "RETURN 1"]
+      test: ["CMD", "cypher-shell", "-u", "${NEO4J_USER:-neo4j}", "-p", "${NEO4J_PASSWORD:?run misc/bin/gen-compose-config.sh}", "RETURN 1"]
       interval: 5s
       timeout: 10s
       retries: 12

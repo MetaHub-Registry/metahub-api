@@ -1,21 +1,22 @@
 version: '3'
 
-dotenv: ['.env']
+dotenv:
+  - .env
+  - misc/config/compose.env
 
 includes:
   dev:
     taskfile: ./Taskfile_dev.yml
-  session:
-    taskfile: ./Taskfile_session.yml
-  e2e:
-    taskfile: ./Taskfile_e2e_dev.yml
   compose:
     taskfile: ./Taskfile_compose.yaml
   mh-ui:
-    taskfile: ~/src/gitlab.com/qnib-frontend/metahub-ui/Taskfile.yaml
-    dir: ~/src/gitlab.com/qnib-frontend/metahub-ui/
+    taskfile: ../metahub-ui/Taskfile.yaml
+    dir: ../metahub-ui/
     optional: true
 tasks:
   localConfig:
     cmds:
+     - ': "${MINIO_PASSWD:?set MINIO_PASSWD}"'
+     - ': "${NEO4J_PASSWD:?set NEO4J_PASSWD}"'
+     - 'if [ -n "${GODMODE_USER:-}" ]; then : "${GODMODE_PASS:?set GODMODE_PASS}"; : "${GODMODE_SIGNING_KEY:?set GODMODE_SIGNING_KEY}"; fi'
      - gonja-cli misc/config/metahub-api.yaml.tpl misc/config/local-config.yaml
