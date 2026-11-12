@@ -6,7 +6,7 @@ require (
 	github.com/StudioSol/set v1.0.0
 	github.com/chi-middleware/logrus-logger v0.2.0
 	github.com/coreos/go-oidc/v3 v3.17.0
-	github.com/distribution/distribution v2.8.1+incompatible
+	github.com/distribution/distribution v2.8.3+incompatible
 	github.com/go-chi/chi/v5 v5.0.8
 	github.com/go-chi/cors v1.2.1
 	github.com/go-chi/render v1.0.2
