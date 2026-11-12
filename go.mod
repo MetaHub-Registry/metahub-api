@@ -30,7 +30,7 @@ require (
 	go.opentelemetry.io/otel/exporters/jaeger v1.14.0
 	go.opentelemetry.io/otel/sdk v1.47.0
 	go.opentelemetry.io/otel/trace v1.47.0
-	golang.org/x/oauth2 v0.36.0
+	golang.org/x/oauth2 v0.38.0
 	gopkg.in/go-jose/go-jose.v2 v2.6.3
 	gotest.tools/v3 v3.5.0
 )
