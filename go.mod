@@ -6,9 +6,9 @@ require (
 	github.com/StudioSol/set v1.0.0
 	github.com/chi-middleware/logrus-logger v0.2.0
 	github.com/coreos/go-oidc/v3 v3.17.0
-	github.com/distribution/distribution v2.8.1+incompatible
-	github.com/go-chi/chi/v5 v5.0.8
-	github.com/go-chi/cors v1.2.1
+	github.com/distribution/distribution v2.8.3+incompatible
+	github.com/go-chi/chi/v5 v5.5.0
+	github.com/go-chi/cors v1.2.2
 	github.com/go-chi/render v1.0.2
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
@@ -30,9 +30,9 @@ require (
 	go.opentelemetry.io/otel/exporters/jaeger v1.14.0
 	go.opentelemetry.io/otel/sdk v1.47.0
 	go.opentelemetry.io/otel/trace v1.47.0
-	golang.org/x/oauth2 v0.36.0
+	golang.org/x/oauth2 v0.38.0
 	gopkg.in/go-jose/go-jose.v2 v2.6.3
-	gotest.tools/v3 v3.5.0
+	gotest.tools/v3 v3.5.2
 )
 
 require (

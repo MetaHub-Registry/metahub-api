@@ -37,8 +37,8 @@ parse, so the licence check ignores it explicitly.
 | `github.com/felixge/httpsnoop` | MIT | <https://github.com/felixge/httpsnoop/blob/v1.1.0/LICENSE.txt> |
 | `github.com/fsnotify/fsnotify` | BSD-3-Clause | <https://github.com/fsnotify/fsnotify/blob/v1.6.0/LICENSE> |
 | `github.com/gemnasium/logrus-graylog-hook/v3` | MIT | <https://github.com/gemnasium/logrus-graylog-hook/blob/v3.1.0/LICENSE> |
-| `github.com/go-chi/chi/v5` | MIT | <https://github.com/go-chi/chi/blob/v5.0.8/LICENSE> |
-| `github.com/go-chi/cors` | MIT | <https://github.com/go-chi/cors/blob/v1.2.1/LICENSE> |
+| `github.com/go-chi/chi/v5` | MIT | <https://github.com/go-chi/chi/blob/v5.5.0/LICENSE> |
+| `github.com/go-chi/cors` | MIT | <https://github.com/go-chi/cors/blob/v1.2.2/LICENSE> |
 | `github.com/go-chi/render` | MIT | <https://github.com/go-chi/render/blob/v1.0.2/LICENSE> |
 | `github.com/go-jose/go-jose/v4` | Apache-2.0 | <https://github.com/go-jose/go-jose/blob/v4.1.6/LICENSE> |
 | `github.com/go-jose/go-jose/v4/json` | BSD-3-Clause | <https://github.com/go-jose/go-jose/blob/v4.1.6/json/LICENSE> |
@@ -133,7 +133,7 @@ parse, so the licence check ignores it explicitly.
 | `golang.org/x/crypto` | BSD-3-Clause | <https://cs.opensource.google/go/x/crypto/+/v0.58.0:LICENSE> |
 | `golang.org/x/exp` | BSD-3-Clause | <https://cs.opensource.google/go/x/exp/+/7918f672:LICENSE> |
 | `golang.org/x/net` | BSD-3-Clause | <https://cs.opensource.google/go/x/net/+/v0.61.0:LICENSE> |
-| `golang.org/x/oauth2` | BSD-3-Clause | <https://cs.opensource.google/go/x/oauth2/+/v0.36.0:LICENSE> |
+| `golang.org/x/oauth2` | BSD-3-Clause | <https://cs.opensource.google/go/x/oauth2/+/v0.38.0:LICENSE> |
 | `golang.org/x/sys` | BSD-3-Clause | <https://cs.opensource.google/go/x/sys/+/v0.49.0:LICENSE> |
 | `golang.org/x/text` | BSD-3-Clause | <https://cs.opensource.google/go/x/text/+/v0.43.0:LICENSE> |
 | `google.golang.org/genproto/googleapis/api/httpbody` | Apache-2.0 | <https://github.com/googleapis/go-genproto/blob/8a89bd6388cc/googleapis/api/LICENSE> |
