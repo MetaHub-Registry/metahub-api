@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/StudioSol/set v1.0.0
-	github.com/chi-middleware/logrus-logger v0.2.0
+	github.com/chi-middleware/logrus-logger v0.3.0
 	github.com/coreos/go-oidc/v3 v3.17.0
 	github.com/distribution/distribution v2.8.3+incompatible
 	github.com/go-chi/chi/v5 v5.5.0
