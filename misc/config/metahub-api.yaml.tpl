@@ -1,5 +1,5 @@
 minio:
-  url: {{ MINIO_URL |default("minio:9000") }}
+  url: {{ MINIO_URL |default("rustfs:9000") }}
   region: {{ MINIO_REGION |default("us-east-1") }}
   user: {{ MINIO_USER |default("minio") }}
   password: {{ MINIO_PASSWD }}

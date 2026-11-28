@@ -42,7 +42,7 @@ tasks:
       - docker compose -f docker-compose.yaml up -d --wait
 
   up:data:
-    desc: Start data services only (neo4j, minio, registry)
+    desc: Start data services only (neo4j, rustfs, registry)
     deps: [config]
     cmds:
       - docker network create mh-data || true
@@ -216,15 +216,15 @@ tasks:
     cmds:
       - '{{.CYPHER}} "MATCH (n) RETURN n LIMIT 25"'
 
-  # ===== MinIO =====
+  # ===== Object store (RustFS, S3-compatible) =====
 
   minio:setup:
-    desc: Set up mc alias for local MinIO
+    desc: Set up mc alias for the local object store
     cmds:
       - mc alias set dev http://localhost:9000 "${MINIO_ROOT_USER}" "${MINIO_ROOT_PASSWORD}"
 
   minio:clean:
-    desc: Remove all blobs and manifests from MinIO
+    desc: Remove all blobs and manifests from the local object store
     cmds:
       - mc rm --recursive --force dev/blobs
       - mc rm --recursive --force dev/manifests

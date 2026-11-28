@@ -19,31 +19,35 @@ services:
   #     - 3909:3909
   #   environment:
   #     API_BASE_URL: "http://garage:3903"
-  minio:
-    # MinIO stopped anonymous pulls from quay.io (the registry answers 401)
-    # and removed the minio/minio images from Docker Hub, so a fresh clone
-    # could no longer start the stack. pgsty/minio is a maintained build of
-    # upstream MinIO with the same entrypoint and the same /minio layout;
-    # pinned by digest so the quickstart does not move under a visitor.
-    image: pgsty/minio@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372
+  rustfs:
+    # Apache-2.0 object store, officially published and anonymously pullable.
+    # The MinIO images are no longer an option: quay.io answers 401 for
+    # anonymous pulls and the Docker Hub images were removed. Pinned by digest
+    # so the quickstart does not move under a visitor.
+    image: rustfs/rustfs@sha256:69bd3c4d8d79b74723bfd68c9fbd9085155d4d4b44a5a136d87502f3075cc68c
     ports:
       - 9000:9000
       - 9001:9001
     networks:
       - mh-data
     volumes:
-      #- ${PWD}/misc/minio:/minio
-      - /minio
+      - rustfs-data:/data
     environment:
-      MINIO_ROOT_USER: "${MINIO_ROOT_USER:?run misc/bin/gen-compose-config.sh}"
-      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD:?run misc/bin/gen-compose-config.sh}"
-    command: ["server", "/minio", "--console-address=0.0.0.0:9001"]
+      RUSTFS_ACCESS_KEY: "${MINIO_ROOT_USER:?run misc/bin/gen-compose-config.sh}"
+      RUSTFS_SECRET_KEY: "${MINIO_ROOT_PASSWORD:?run misc/bin/gen-compose-config.sh}"
+      RUSTFS_ADDRESS: ":9000"
+      RUSTFS_CONSOLE_ADDRESS: ":9001"
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_OBS_LOGGER_LEVEL: error
+      RUSTFS_OBS_LOG_DIRECTORY: /logs
+    command: ["/data"]
     healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:9000/minio/health/live"]
+      # RustFS serves /health, not MinIO's /minio/health/live.
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:9000/health"]
       interval: 5s
       timeout: 10s
       retries: 12
-      start_period: 60s
+      start_period: 30s
   #backup:
   #  image: alpine:3.16.2
   #  volumes:
@@ -82,6 +86,7 @@ services:
 
 volumes:
   neo4j:
+  rustfs-data:
   # ce-registry volume is external so that it sticks around after the stack is removed
   ce-registry:
     external: true
