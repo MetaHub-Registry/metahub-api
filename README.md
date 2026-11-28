@@ -65,7 +65,7 @@ receives.
             │                   └── provenance annotations
             │
             ├── Neo4j (metadata: collections, profiles, rules, manifests)
-            ├── MinIO / S3 (blobs)
+            ├── S3-compatible store (blobs) — RustFS in the demo
             └── pull-through ──► upstream registry (optional)
 ```
 
@@ -96,7 +96,7 @@ If you need reproducible, signed, profile-independent content, pin digests.
 ## Quickstart
 
 A self-contained, offline quickstart ships with the 1.0 release. It starts the
-registry, UI, Neo4j, and MinIO with one command, builds two tiny demo images
+registry, UI, Neo4j, and RustFS with one command, builds two tiny demo images
 locally, and pulls the same tag under two profiles to show different content.
 No internet, no identity provider, no credentials beyond generated defaults.
 
