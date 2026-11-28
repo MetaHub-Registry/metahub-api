@@ -55,7 +55,10 @@ jobs:
         run: ./misc/bin/check-compose-healthcheck.sh
 
       - name: Start the object store
-        run: docker compose --env-file misc/config/compose.env -f docker-compose-data.yaml up -d --wait rustfs
+        run: |
+          # the compose file expects the externally created network
+          docker network create mh-data || true
+          docker compose --env-file misc/config/compose.env -f docker-compose-data.yaml up -d --wait rustfs
 
       - name: Probe the S3 surface
         run: |
@@ -64,4 +67,4 @@ jobs:
 
       - name: Object store logs
         if: failure()
-        run: docker compose -f docker-compose-data.yaml logs rustfs
+        run: docker compose --env-file misc/config/compose.env -f docker-compose-data.yaml logs rustfs
