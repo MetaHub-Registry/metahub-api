@@ -20,7 +20,12 @@ services:
   #   environment:
   #     API_BASE_URL: "http://garage:3903"
   minio:
-    image: quay.io/minio/minio:RELEASE.2023-01-02T09-40-09Z
+    # MinIO stopped anonymous pulls from quay.io (the registry answers 401)
+    # and removed the minio/minio images from Docker Hub, so a fresh clone
+    # could no longer start the stack. pgsty/minio is a maintained build of
+    # upstream MinIO with the same entrypoint and the same /minio layout;
+    # pinned by digest so the quickstart does not move under a visitor.
+    image: pgsty/minio@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372
     ports:
       - 9000:9000
       - 9001:9001
