@@ -1,0 +1,70 @@
+# syntax=docker/dockerfile:1.7
+#
+# Release image for the quickstart — built from a public clone, no SSH, no
+# internal base image. The Go module github.com/metahub-registry/metahub-core is
+# public and resolved from the module proxy, so this builds on any machine with
+# a Docker daemon and network access.
+#
+# Multi-arch through buildx:
+#   * the build stage runs natively on the builder (--platform=$BUILDPLATFORM)
+#   * cgo (mattn/go-sqlite3) is cross-built with zig cc, so no QEMU for the
+#     compile either
+#   * the runtime stage is per-arch (alpine is multi-arch)
+#
+#   docker buildx build --platform linux/amd64,linux/arm64 \
+#     -f Dockerfile.ghcr -t ghcr.io/metahub-registry/metahub-api:dev --push .
+ARG BASE_REGISTRY=mirror.gcr.io
+
+# --- Go build: runs natively, cross-compiles to TARGETARCH -------------------
+FROM --platform=$BUILDPLATFORM ${BASE_REGISTRY}/library/golang:1.26-alpine AS build
+ARG TARGETOS TARGETARCH
+RUN apk add --no-cache zig git ca-certificates
+WORKDIR /src
+# dependencies first, so the layer survives source edits
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
+COPY . ./
+ENV CGO_ENABLED=1 GOOS=linux
+# -fno-sanitize=undefined: zig cc instruments C with UBSan by default but does
+# not link the ubsan runtime as a pure linker.
+ENV CGO_CFLAGS="-DSQLITE_DISABLE_PREAD -DSQLITE_DISABLE_MREAD -fno-sanitize=undefined"
+RUN --mount=type=cache,target=/go/pkg/mod \
+    case "${TARGETARCH}" in \
+      amd64) ZTARGET="x86_64-linux-musl" ;; \
+      arm64) ZTARGET="aarch64-linux-musl" ;; \
+      *) echo "unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac \
+ && CC="zig cc -target ${ZTARGET}" GOARCH="${TARGETARCH}" \
+    go build -a -ldflags '-extldflags "-static"' -o /out/metahub-api .
+
+# --- gonja-cli: template renderer, fetched for the TARGET arch --------------
+FROM --platform=$BUILDPLATFORM ${BASE_REGISTRY}/library/alpine:3.21 AS gonja
+ARG TARGETARCH
+RUN apk add --no-cache wget \
+ && wget -qO- https://gitlab.com/qnib-golang/gonja-cli/-/releases/v0.0.2/downloads/gonja-cli_0.0.2_linux_${TARGETARCH}.tar.gz | tar xfz - -C /usr/local/bin
+
+# --- runtime (per-arch) ----------------------------------------------------
+FROM ${BASE_REGISTRY}/library/alpine:3.21
+ENV METAHUB_API_PORT=80 \
+    CFG_FILE=/etc/metahub/api.yaml \
+    METAHUB_DB=/var/lib/metahub/metahub.db \
+    BLOB_BUCKET=blobs \
+    MANIFESTS_BUCKET=manifests
+
+RUN apk add --no-cache bash ca-certificates
+COPY --from=gonja /usr/local/bin/gonja-cli /usr/local/bin/gonja-cli
+COPY --from=build /out/metahub-api /usr/bin/metahub-api
+COPY ./misc/config/metahub-api.yaml.tpl /opt/metahub-api/
+COPY ./misc/docker/bin/start.sh /usr/local/bin/start.sh
+
+# run unprivileged; the config is rendered into /etc/metahub and the sqlite
+# database lives in /var/lib/metahub, both writable for this user
+RUN adduser -D -H -u 10001 metahub \
+ && mkdir -p /var/lib/metahub /var/metahub/run /etc/metahub \
+ && chown -R metahub:metahub /var/lib/metahub /var/metahub/run /etc/metahub \
+ && chmod +x /usr/local/bin/start.sh
+
+USER metahub
+VOLUME /var/lib/metahub
+EXPOSE 80
+CMD ["/usr/local/bin/start.sh"]

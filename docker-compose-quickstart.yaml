@@ -1,0 +1,110 @@
+# Quickstart stack — pulls published images, builds nothing, needs no sibling
+# checkouts. Start it with ./quickstart.sh (that generates credentials first).
+#
+#   ./quickstart.sh          start
+#   ./quickstart.sh stop     stop and keep the data volumes
+#   ./quickstart.sh clean    stop and remove the data volumes
+name: metahub-quickstart
+
+services:
+  rustfs:
+    image: rustfs/rustfs@sha256:69bd3c4d8d79b74723bfd68c9fbd9085155d4d4b44a5a136d87502f3075cc68c
+    environment:
+      RUSTFS_ACCESS_KEY: "${MINIO_ROOT_USER:?run ./quickstart.sh}"
+      RUSTFS_SECRET_KEY: "${MINIO_ROOT_PASSWORD:?run ./quickstart.sh}"
+      RUSTFS_ADDRESS: ":9000"
+      RUSTFS_CONSOLE_ADDRESS: ":9001"
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_OBS_LOGGER_LEVEL: error
+      RUSTFS_OBS_LOG_DIRECTORY: /logs
+    command: ["/data"]
+    ports:
+      - "9000:9000"   # S3
+      - "9001:9001"   # console
+    volumes:
+      - store:/data
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:9000/health"]
+      interval: 5s
+      timeout: 10s
+      retries: 12
+      start_period: 30s
+
+  neo4j:
+    image: neo4j:2026.03.1
+    environment:
+      NEO4J_AUTH: "${NEO4J_USER:?run ./quickstart.sh}/${NEO4J_PASSWORD:?run ./quickstart.sh}"
+      NEO4J_server_memory_heap_max__size: 1G
+    volumes:
+      - graph:/data
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 30s
+
+  seed:
+    image: neo4j:2026.03.1
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    entrypoint: ["cypher-shell", "-a", "bolt://neo4j:7687", "-u", "${NEO4J_USER}", "-p", "${NEO4J_PASSWORD}", "-f", "/seed/seed.cypher"]
+    volumes:
+      - ./misc/quickstart:/seed:ro
+    networks: [backend]
+    restart: "no"
+
+  api:
+    image: ghcr.io/metahub-registry/metahub-api:${METAHUB_VERSION:-latest}
+    environment:
+      MINIO_URL: rustfs:9000
+      MINIO_USER: "${MINIO_ROOT_USER:?run ./quickstart.sh}"
+      MINIO_PASSWD: "${MINIO_ROOT_PASSWORD:?run ./quickstart.sh}"
+      NEO4J_HOST: neo4j
+      NEO4J_USER: "${NEO4J_USER:?run ./quickstart.sh}"
+      NEO4J_PASSWD: "${NEO4J_PASSWORD:?run ./quickstart.sh}"
+      GODMODE_USER: "${GODMODE_USER:?run ./quickstart.sh}"
+      GODMODE_PASS: "${GODMODE_PASSWORD:?run ./quickstart.sh}"
+      GODMODE_SIGNING_KEY: "${GODMODE_SIGNING_KEY:?run ./quickstart.sh}"
+      FRONTEND_REDIRECT: "http://localhost:8082"
+      METRICS_ENABLED: "false"
+    depends_on:
+      rustfs:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+    ports:
+      - "8080:80"     # registry endpoint
+    volumes:
+      - api-db:/var/lib/metahub
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/health"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 30s
+
+  ui:
+    # its own image lives in metahub-ui; skipped when a runner cannot pull it
+    profiles: ["ui"]
+    image: ghcr.io/metahub-registry/metahub-ui:${METAHUB_VERSION:-latest}
+    environment:
+      METAHUB_API_URL: "http://localhost:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "8082:80"     # web UI
+    networks: [backend]
+
+networks:
+  backend:
+
+volumes:
+  store:
+  graph:
+  api-db:

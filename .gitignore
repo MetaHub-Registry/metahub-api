@@ -70,3 +70,6 @@ misc/docker/mh-api/
 .understand-anything/
 docs/session-artifacts/
 .scannerwork/
+
+# quickstart credentials
+.quickstart.env
