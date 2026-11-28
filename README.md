@@ -7,8 +7,8 @@
 A profile-aware OCI registry: the same tag can resolve to hardware-appropriate
 content, without changing the client.
 
-[Documentation](https://metahub-registry.org) ·
-[Profiles](https://metahub-registry.org/profiles) ·
+[Documentation](https://github.com/MetaHub-Registry/metahub-docs/blob/main/docs/index.md) ·
+[Profiles](https://github.com/MetaHub-Registry/metahub-docs/blob/main/docs/profile-resolution.md) ·
 [Roadmap](ROADMAP.md) ·
 [Contributing](CONTRIBUTING.md)
 
@@ -148,12 +148,12 @@ inventory, and identity providers you configure. There is no telemetry.
 
 ## Documentation
 
-- [Quickstart](https://metahub-registry.org/quickstart) — first run, offline
-- [Profiles and resolution](https://metahub-registry.org/profiles) — the model
-- [Manipulations](https://metahub-registry.org/manipulations) — layer composition
-- [Pull-through cache](https://metahub-registry.org/pull-through-cache)
-- [API reference](https://metahub-registry.org/api) — `/api/v1`
-- [Operations](https://metahub-registry.org/operations) — Neo4j, object store, upgrades
+- [Quickstart](https://github.com/MetaHub-Registry/metahub-docs/blob/main/docs/quickstart.md) — first run, no toolchain
+- [Profiles and resolution](https://github.com/MetaHub-Registry/metahub-docs/blob/main/docs/profile-resolution.md) — the model
+- [Manipulations](https://github.com/MetaHub-Registry/metahub-docs/blob/main/docs/manipulations.md) — layer composition
+- [Pull-through cache](https://github.com/MetaHub-Registry/metahub-docs/blob/main/docs/pull-through-cache.md)
+- [API reference](https://github.com/MetaHub-Registry/metahub-docs/blob/main/docs/api.md) — `/api/v1`
+- [Operations](https://github.com/MetaHub-Registry/metahub-docs/blob/main/docs/object-store.md) — Neo4j, object store, upgrades
 
 ## Contributing
 
