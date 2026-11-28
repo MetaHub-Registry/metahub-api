@@ -5,7 +5,7 @@
 //
 // These tests drive the live compose stack:
 //
-//   docker compose up -d dev neo4j minio registry
+//   docker compose up -d dev neo4j rustfs registry
 //   # seed rules + the glow manipulation via metahub-admin
 //   task compose:seed:graph
 //

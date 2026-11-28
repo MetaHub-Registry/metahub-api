@@ -47,7 +47,7 @@ func init() {
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
 	//rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
-	rootCmd.PersistentFlags().String("minio-url", "minio:9000", "URL to MinIO/S3")
+	rootCmd.PersistentFlags().String("minio-url", "rustfs:9000", "URL to the S3-compatible object store")
 	rootCmd.PersistentFlags().String("minio-user", "minio", "User/AccessKey for MinIO/S3")
 	rootCmd.PersistentFlags().String("minio-pass", "", "Password/SecretKey for MinIO/S3")
 	rootCmd.PersistentFlags().Bool("minio-insecure", false, "Disable SSL for MinIO/S3")
