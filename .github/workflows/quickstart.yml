@@ -1,0 +1,58 @@
+name: quickstart
+
+# Runs the quickstart the way a visitor does — generate credentials, start the
+# stack, push an image, pull it back — on a clean runner. The UI image lives in
+# metahub-ui and is skipped here.
+on:
+  pull_request:
+    paths:
+      - Dockerfile.ghcr
+      - docker-compose-quickstart.yaml
+      - quickstart.sh
+      - misc/quickstart/**
+      - .github/workflows/quickstart.yml
+  push:
+    branches: [main]
+    paths:
+      - Dockerfile.ghcr
+      - docker-compose-quickstart.yaml
+      - quickstart.sh
+      - misc/quickstart/**
+      - .github/workflows/quickstart.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quickstart-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  quickstart:
+    name: quickstart
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build the API image
+        # the published image does not exist for a pull request, so build the
+        # same Dockerfile and tag it the way the compose file expects
+        run: |
+          docker buildx build --platform linux/amd64 --load \
+            -f Dockerfile.ghcr -t ghcr.io/metahub-registry/metahub-api:latest .
+
+      - name: Start the quickstart
+        run: QUICKSTART_SKIP_UI=1 ./quickstart.sh
+
+      - name: Push and pull one image
+        run: ./misc/quickstart/smoke.sh
+
+      - name: Logs on failure
+        if: failure()
+        run: docker compose --env-file .quickstart.env -f docker-compose-quickstart.yaml logs --no-color
+
+      - name: Stop
+        if: always()
+        run: QUICKSTART_SKIP_UI=1 ./quickstart.sh clean || true

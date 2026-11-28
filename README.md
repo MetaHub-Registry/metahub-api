@@ -95,18 +95,30 @@ If you need reproducible, signed, profile-independent content, pin digests.
 
 ## Quickstart
 
-A self-contained, offline quickstart ships with the 1.0 release. It starts the
-registry, UI, Neo4j, and RustFS with one command, builds two tiny demo images
-locally, and pulls the same tag under two profiles to show different content.
-No internet, no identity provider, no credentials beyond generated defaults.
-
 ```bash
-# available with 1.0
-docker compose up
+git clone https://github.com/MetaHub-Registry/metahub-api
+cd metahub-api
+./quickstart.sh
 ```
 
-Until then, the development setup is described in
-[CONTRIBUTING.md](CONTRIBUTING.md).
+It pulls published images — registry API, web UI, Neo4j and RustFS — generates
+credentials into `.quickstart.env`, seeds the `generic` profile, and waits until
+the registry answers. Nothing is built and no toolchain is needed.
+
+| | |
+|---|---|
+| registry | <http://localhost:8080> |
+| web UI | <http://localhost:8082> |
+| S3 console | <http://localhost:9001> |
+
+The generated login is printed on start. `./quickstart.sh stop` stops the stack;
+`./quickstart.sh clean` also removes the data volumes.
+
+`./misc/quickstart/smoke.sh` pushes one image and pulls it back — the same check
+CI runs.
+
+The development setup (source builds, hot reload, sibling checkouts) is
+described in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Components
 
