@@ -1,0 +1,67 @@
+name: object store
+
+# The registry's storage contract is a set of S3 operations. This workflow holds
+# every backend to it: a probe of all nine calls against the compose stack, plus
+# the assertion that the healthcheck probes a path the image actually serves.
+#
+# It runs when the store, its configuration or the probe changes — not on every
+# pull request, because it pulls an image and starts a container.
+
+on:
+  pull_request:
+    paths:
+      - docker-compose-data.yaml
+      - misc/bin/check-compose-healthcheck.sh
+      - misc/config/compose-config.example.yaml
+      - misc/config/metahub-api.yaml.tpl
+      - misc/probe/**
+      - .github/workflows/objectstore.yml
+  push:
+    branches: [main]
+    paths:
+      - docker-compose-data.yaml
+      - misc/bin/check-compose-healthcheck.sh
+      - misc/config/compose-config.example.yaml
+      - misc/config/metahub-api.yaml.tpl
+      - misc/probe/**
+      - .github/workflows/objectstore.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: objectstore-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  GO_VERSION: "1.26.x"
+
+jobs:
+  probe:
+    name: probe
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Generate compose configuration
+        run: ./misc/bin/gen-compose-config.sh
+
+      - name: Healthcheck matches the backend
+        run: ./misc/bin/check-compose-healthcheck.sh
+
+      - name: Start the object store
+        run: docker compose --env-file misc/config/compose.env -f docker-compose-data.yaml up -d --wait rustfs
+
+      - name: Probe the S3 surface
+        run: |
+          set -a; . misc/config/compose.env; set +a
+          go run ./misc/probe/s3probe -endpoint localhost:9000
+
+      - name: Object store logs
+        if: failure()
+        run: docker compose -f docker-compose-data.yaml logs rustfs

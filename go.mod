@@ -14,6 +14,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/context v1.1.1
 	github.com/metahub-registry/metahub-core v0.3.12
+	github.com/minio/minio-go/v7 v7.0.42
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/neo4j/neo4j-go-driver/v4 v4.4.8
 	github.com/opencontainers/go-digest v1.0.0
@@ -85,7 +86,6 @@ require (
 	github.com/mgudov/logic-expression-parser v0.1.2 // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect
 	github.com/minio/minio-go v6.0.14+incompatible // indirect
-	github.com/minio/minio-go/v7 v7.0.42 // indirect
 	github.com/minio/sha256-simd v1.0.0 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/moby/patternmatcher v0.6.0 // indirect
